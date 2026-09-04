@@ -2,7 +2,7 @@ export const config = {
   maxDuration: 60,
 };
 
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec';
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzz_K4XfFkOgOe5Q1evz3nml6x7_4Jv_vV1iN35AfFTYjo4ZY8t0v29poh1No2_oaoc_Q/exec';
 
 // Fungsi helper untuk fetch dengan retry
 async function fetchWithRetry(url, options, maxRetries = 2) {
