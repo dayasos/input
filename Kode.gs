@@ -119,7 +119,7 @@ function doPost(e) {
 
     if (!ALLOWED[action]) {
       return ContentService
-        .createTextOutput(JSON.stringify({ sukses: false, pesan: "Aksi tidak diizinkan: " + action }))
+        .createTextOutput(JSON.stringify({ error: "Aksi tidak diizinkan: " + action, sukses: false, pesan: "Aksi tidak diizinkan: " + action }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -132,7 +132,7 @@ function doPost(e) {
 
   } catch (err) {
     return ContentService
-      .createTextOutput(JSON.stringify({ sukses: false, pesan: err.toString() }))
+      .createTextOutput(JSON.stringify({ error: err.toString(), sukses: false, pesan: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }

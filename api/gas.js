@@ -19,10 +19,19 @@ export default async function handler(req, res) {
       },
       body: typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
     });
-    
+
     // fetch automatically follows the 302 redirect that GAS uses to serve JSON
-    const data = await response.json();
-    return res.status(200).json(data);
+    const text = await response.text();
+    try {
+      const data = JSON.parse(text);
+      return res.status(200).json(data);
+    } catch (parseErr) {
+      console.error("GAS returned non-JSON response:", text);
+      return res.status(502).json({
+        error: "Google Apps Script tidak mengembalikan respon JSON valid. Pastikan Web App di-deploy dengan akses 'Anyone' (Siapa saja).",
+        details: text.slice(0, 500)
+      });
+    }
   } catch (err) {
     console.error("Vercel Proxy Error:", err);
     return res.status(500).json({ error: 'Internal Proxy Error', details: err.toString() });
