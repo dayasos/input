@@ -4,6 +4,25 @@ export const config = {
 
 const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec';
 
+// Fungsi helper untuk fetch dengan retry
+async function fetchWithRetry(url, options, maxRetries = 2) {
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const res = await fetch(url, options);
+      // Jika status 502, 503, 504 dari Google, kita retry. Selain itu langsung kembalikan.
+      if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        if (i === maxRetries) return res;
+        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff (1s, 2s)
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (i === maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+}
+
 export default async function handler(req, res) {
   // Hanya izinkan HTTP POST (menyamai proxy google.script.run)
   if (req.method !== 'POST') {
@@ -16,15 +35,30 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Missing GAS_API_URL in environment' });
   }
 
+  // Siapkan payload dengan menginjeksi Secret Token
+  // Jika req.body sudah berupa string, parse dulu agar bisa ditambah token.
+  let payloadObj;
+  try {
+    payloadObj = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+  } catch (e) {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+
+  // Injeksi token rahasia ke dalam payload
+  // Variabel ini harus disetel di Vercel Dashboard -> Environment Variables
+  const secretToken = process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET';
+  payloadObj._secret = secretToken;
+
   try {
     // Teruskan payload POST ke Google Apps Script via text/plain (bebas CORS preflight di GAS)
-    const response = await fetch(url, {
+    // Gunakan fungsi retry buatan kita
+    const response = await fetchWithRetry(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
       },
-      body: typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
-    });
+      body: JSON.stringify(payloadObj)
+    }, 2); // 2 kali percobaan tambahan jika gagal (total 3 kali)
 
     // fetch otomatis mengikuti 302 redirect dari Google Apps Script
     const text = await response.text();

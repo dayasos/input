@@ -2920,8 +2920,8 @@
 
         // Cek total ukuran GABUNGAN semua berkas terpilih SEBELUM proses baca/encode base64 yang lambat
         // dimulai, supaya user tahu lebih awal (bukan setelah menunggu lama di layar "MENGUNGGAH BERKAS...").
-        // Batas ini disamakan dengan MAKS_TOTAL_BYTE_BERKAS di Kode.gs (simpanDataKeSheet).
-        const MAKS_TOTAL_BYTE_GABUNGAN = 60 * 1024 * 1024; // 60 MB
+        // Batas diturunkan menjadi 3.5 MB agar aman dari batas 4.5 MB Vercel Serverless Function.
+        const MAKS_TOTAL_BYTE_GABUNGAN = 3.5 * 1024 * 1024; // 3.5 MB
         let totalByteTerpilih = 0;
         for (const nmCek of namaFileInput) {
           const elCek = fileEl(nmCek);
@@ -2929,7 +2929,7 @@
           if (elCek && !wrapperHiddenCek && elCek.files && elCek.files[0]) totalByteTerpilih += elCek.files[0].size;
         }
         if (totalByteTerpilih > MAKS_TOTAL_BYTE_GABUNGAN) {
-          throw new Error('Total ukuran seluruh berkas terlalu besar (' + (totalByteTerpilih / (1024 * 1024)).toFixed(1) + ' MB, maksimal 60 MB gabungan). Perkecil ukuran file lalu coba lagi.');
+          throw new Error('Total ukuran seluruh berkas melebihi batas aman upload Vercel (' + (totalByteTerpilih / (1024 * 1024)).toFixed(1) + ' MB, maksimal 3.5 MB gabungan). Aplikasi otomatis mengompres foto, namun untuk dokumen PDF mohon gunakan ukuran yang lebih kecil.');
         }
 
         const data = {

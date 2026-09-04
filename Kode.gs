@@ -60,6 +60,18 @@ function doPost(e) {
   try {
     var raw      = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
     var request  = JSON.parse(raw);
+    
+    // Verifikasi Keamanan (Shared Secret Token dari Vercel)
+    var EXPECTED_SECRET = "DJPM2027_DEFAULT_SECRET"; // Fallback rahasia default
+    var scriptProperties = PropertiesService.getScriptProperties();
+    var secret = scriptProperties.getProperty('GAS_SECRET_TOKEN') || EXPECTED_SECRET;
+    
+    if (request._secret !== secret) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ error: "Akses Ditolak: Kredensial API tidak sah", sukses: false, pesan: "Akses Ditolak" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    
     var action   = request.action;
     var args     = request.args || [];
 
