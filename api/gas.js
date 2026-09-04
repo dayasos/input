@@ -4,64 +4,133 @@ export const config = {
 
 const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbzz_K4XfFkOgOe5Q1evz3nml6x7_4Jv_vV1iN35AfFTYjo4ZY8t0v29poh1No2_oaoc_Q/exec';
 
-// Fungsi helper untuk fetch dengan retry
+// Fungsi helper untuk fetch dengan retry dan timeout
 async function fetchWithRetry(url, options, maxRetries = 2) {
+  let lastError = null;
   for (let i = 0; i <= maxRetries; i++) {
     try {
       const res = await fetch(url, options);
       // Jika status 502, 503, 504 dari Google, kita retry. Selain itu langsung kembalikan.
       if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504)) {
         if (i === maxRetries) return res;
-        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff (1s, 2s)
+        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // Exponential backoff
         continue;
       }
       return res;
     } catch (err) {
+      lastError = err;
       if (i === maxRetries) throw err;
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
   }
+  throw lastError;
 }
 
 export default async function handler(req, res) {
-  // Hanya izinkan HTTP POST (menyamai proxy google.script.run)
+  // 1. Endpoint Health-Check jika diakses via GET
+  if (req.method === 'GET') {
+    const rawEnv = process.env.GAS_API_URL || '';
+    const cleanEnv = rawEnv.trim().replace(/^["']|["']$/g, '');
+    let pingStatus = 'untested';
+
+    try {
+      const pingTarget = cleanEnv || DEFAULT_GAS_URL;
+      const testRes = await fetch(pingTarget, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*'
+        },
+        body: JSON.stringify({
+          action: 'ping',
+          _secret: process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET'
+        })
+      });
+      pingStatus = { status: testRes.status, ok: testRes.ok };
+    } catch (pingErr) {
+      pingStatus = {
+        error: pingErr.message,
+        cause: pingErr.cause ? (pingErr.cause.message || pingErr.cause.code || String(pingErr.cause)) : null
+      };
+    }
+
+    return res.status(200).json({
+      status: 'API Proxy Online',
+      envConfigured: Boolean(rawEnv),
+      activeBackendUrl: cleanEnv || DEFAULT_GAS_URL,
+      isUsingFallback: !cleanEnv,
+      pingTest: pingStatus
+    });
+  }
+
+  // 2. Hanya izinkan POST untuk pemanggilan fungsi backend
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // Ambil URL dari environment variable Vercel, dengan fallback ke DEFAULT_GAS_URL
-  const url = process.env.GAS_API_URL || DEFAULT_GAS_URL;
-  if (!url) {
-    return res.status(500).json({ error: 'Missing GAS_API_URL in environment' });
+  // 3. Sanitasi URL Backend
+  const rawEnvUrl = process.env.GAS_API_URL || '';
+  let targetUrl = rawEnvUrl.trim().replace(/^["']|["']$/g, '');
+
+  // Jika variabel env kosong atau bukan URL Google Script yang valid, gunakan DEFAULT_GAS_URL
+  if (!targetUrl || !targetUrl.startsWith('https://script.google.com/macros/s/')) {
+    targetUrl = DEFAULT_GAS_URL;
   }
 
-  // Siapkan payload dengan menginjeksi Secret Token
-  // Jika req.body sudah berupa string, parse dulu agar bisa ditambah token.
-  let payloadObj;
+  // 4. Siapkan payload dan injeksi Secret Token
+  let payloadObj = {};
   try {
-    payloadObj = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    if (req.body) {
+      payloadObj = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    }
   } catch (e) {
-    return res.status(400).json({ error: 'Invalid JSON payload' });
+    return res.status(400).json({ error: 'Format JSON payload tidak valid', details: e.message });
   }
 
-  // Injeksi token rahasia ke dalam payload
-  // Variabel ini harus disetel di Vercel Dashboard -> Environment Variables
   const secretToken = process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET';
   payloadObj._secret = secretToken;
 
-  try {
-    // Teruskan payload POST ke Google Apps Script via text/plain (bebas CORS preflight di GAS)
-    // Gunakan fungsi retry buatan kita
-    const response = await fetchWithRetry(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/plain;charset=utf-8',
-      },
-      body: JSON.stringify(payloadObj)
-    }, 2); // 2 kali percobaan tambahan jika gagal (total 3 kali)
+  const fetchOptions = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/plain;charset=utf-8',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json, text/plain, */*'
+    },
+    body: JSON.stringify(payloadObj),
+    redirect: 'follow'
+  };
 
-    // fetch otomatis mengikuti 302 redirect dari Google Apps Script
-    const text = await response.text();
+  // 5. Eksekusi fetch dengan otomatis fallback ke DEFAULT_GAS_URL jika target awal gagal (baik network error maupun HTML error)
+  let response = null;
+  let usedUrl = targetUrl;
+  let fallbackAttempted = false;
+
+  const executeFetch = async (endpoint) => {
+    return await fetchWithRetry(endpoint, fetchOptions, 2);
+  };
+
+  try {
+    let text = '';
+    try {
+      response = await executeFetch(targetUrl);
+      text = await response.text();
+      // Verifikasi apakah respon berupa JSON
+      JSON.parse(text);
+    } catch (initialErr) {
+      // Jika URL dari ENV gagal (network error atau respon bukan JSON), dan beda dari DEFAULT_GAS_URL
+      if (targetUrl !== DEFAULT_GAS_URL) {
+        console.warn(`Fetch ke targetUrl gagal (${initialErr.message}). Otomatis fallback ke DEFAULT_GAS_URL...`);
+        fallbackAttempted = true;
+        usedUrl = DEFAULT_GAS_URL;
+        response = await executeFetch(DEFAULT_GAS_URL);
+        text = await response.text();
+      } else {
+        throw initialErr;
+      }
+    }
+
     try {
       const data = JSON.parse(text);
       return res.status(200).json(data);
@@ -69,11 +138,21 @@ export default async function handler(req, res) {
       console.error("GAS returned non-JSON response:", text);
       return res.status(502).json({
         error: "Google Apps Script tidak mengembalikan respon JSON valid. Pastikan Web App di-deploy dengan akses 'Anyone' (Siapa saja).",
-        details: text.slice(0, 500)
+        details: text.slice(0, 500),
+        usedUrl,
+        fallbackAttempted
       });
     }
   } catch (err) {
     console.error("Vercel Proxy Error:", err);
-    return res.status(500).json({ error: 'Internal Proxy Error', details: err.toString() });
+    return res.status(500).json({
+      error: 'Terjadi kesalahan koneksi antara server Vercel dan Google Apps Script.',
+      details: err.toString(),
+      cause: err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : null,
+      usedUrl,
+      fallbackAttempted
+    });
   }
 }
+
+
