@@ -1,0 +1,74 @@
+<div id="modal-ri" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50"
+    onclick="if(event.target===this)closeModal()">
+    <div class="bg-white p-6 rounded-xl w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold uppercase">Pilih Data Rumah Ibadah</h2>
+            <button onclick="closeModal()"
+                class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4 bg-slate-50 p-3 rounded-lg border">
+            <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filter Kecamatan</label>
+                <select id="modal-ri-filter-kecamatan" onchange="updateOldModalKelurahan()"
+                    class="w-full p-2 border rounded text-xs bg-white font-medium">
+                    <option value="">-- SEMUA KECAMATAN --</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filter Kelurahan</label>
+                <select id="modal-ri-filter-kelurahan" onchange="filterTable()"
+                    class="w-full p-2 border rounded text-xs bg-white font-medium" disabled>
+                    <option value="">-- PILIH KELURAHAN --</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Cari Nama / Alamat</label>
+                <input type="text" id="search-ri" oninput="filterTable()" placeholder="Ketik nama atau alamat..."
+                    class="w-full p-2 border rounded text-xs bg-white">
+            </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-[45vh] overflow-y-auto border border-slate-200 rounded-lg">
+            <table class="w-full text-xs border-collapse">
+                <thead class="sticky top-0 bg-slate-100 z-10 shadow-[0_1px_0_0_rgba(226,232,240,1)]">
+                    <tr class="text-left text-slate-700 font-bold uppercase">
+                        <th class="p-2 border-b border-slate-200">NAMA</th>
+                        <th class="p-2 border-b border-slate-200">ALAMAT</th>
+                        <th class="p-2 border-b border-slate-200">KECAMATAN</th>
+                        <th class="p-2 border-b border-slate-200">KELURAHAN</th>
+                        <th class="p-2 border-b border-slate-200 text-center">AKSI</th>
+                    </tr>
+                </thead>
+                <tbody id="body-ri">
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button onclick="document.getElementById('modal-ri').classList.add('hidden')"
+                class="px-4 py-2 bg-slate-200 rounded-lg hover:bg-slate-300 transition">Tutup</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="modal-kemenag" class="hidden fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50"
+    onclick="if(event.target===this)document.getElementById('modal-kemenag').classList.add('hidden')">
+    <div class="bg-white p-6 rounded-xl w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h2 id="modal-title" class="text-lg font-bold uppercase">Pilih Data</h2>
+            <button onclick="document.getElementById('modal-kemenag').classList.add('hidden')"
+                class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+        </div>
+
+        <div id="modal-sub-pilihan" class="mb-4"></div>
+
+        <div id="modal-content-area"></div>
+
+        <div class="mt-6 flex justify-end">
+            <button onclick="document.getElementById('modal-kemenag').classList.add('hidden')"
+                class="px-4 py-2 bg-slate-200 rounded-lg hover:bg-slate-300 transition">Tutup</button>
+        </div>
+    </div>
+</div>
