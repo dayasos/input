@@ -38,7 +38,24 @@ class GoogleScriptRunProxy {
             },
             body: JSON.stringify(payload)
           })
-            .then(res => res.json())
+            .then(async res => {
+              const contentType = res.headers.get('content-type') || '';
+              if (!res.ok) {
+                if (res.status === 413) {
+                  throw new Error('Ukuran berkas melebihi batas upload Vercel (maks 4.5 MB). Mohon perkecil ukuran foto atau berkas yang diunggah.');
+                }
+                if (res.status === 504) {
+                  throw new Error('Permintaan ke Google Apps Script mengalami batas waktu (timeout). Silakan coba beberapa saat lagi.');
+                }
+                if (contentType.includes('application/json')) {
+                  const errJson = await res.json();
+                  throw new Error(errJson.error || errJson.pesan || `HTTP Error ${res.status}`);
+                }
+                const errText = await res.text();
+                throw new Error(errText || `Server Error (HTTP ${res.status})`);
+              }
+              return res.json();
+            })
             .then(data => {
               if (data && data.error) {
                 // Jika server mengembalikan error, jalankan failureHandler

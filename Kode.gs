@@ -58,7 +58,8 @@ function include(filename) {
 // =========================================================================
 function doPost(e) {
   try {
-    var request  = JSON.parse(e.postData.contents);
+    var raw      = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
+    var request  = JSON.parse(raw);
     var action   = request.action;
     var args     = request.args || [];
 
