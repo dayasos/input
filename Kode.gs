@@ -23,16 +23,20 @@ const FOLDER_ID_INDUK = "19rMR3gd6tQUh-l2JSdBim09EFzwePCg3";
 // =========================================================================
 // 1. FUNGSI ROUTING & HELPER
 // =========================================================================
+// CATATAN ARSITEKTUR: Frontend TIDAK lagi di-serve dari sini (sudah pindah native ke Vercel —
+// lihat index.html & api/gas.js di repo). Proyek Apps Script ini sekarang murni backend API
+// (satu-satunya file yang perlu ada di sini adalah Kode.gs), dipanggil lewat doPost() saja.
+// doGet() disisakan sekadar penanda "API ini hidup" kalau URL /exec dibuka langsung di browser —
+// TIDAK memuat file HTML apa pun, supaya tidak lagi bergantung pada file seperti "Index" yang
+// sudah tidak dikelola di proyek Apps Script ini.
 function doGet() {
-  return HtmlService.createTemplateFromFile('Index')
-      .evaluate()
-      .setTitle("Sistem Layanan Data Penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027")
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
-
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+  return ContentService
+    .createTextOutput(JSON.stringify({
+      status: "ok",
+      pesan: "API backend GAS untuk Sistem Layanan Data Penerima Dana Jasa Pelayanan Kota Medan 2027. " +
+        "Endpoint ini hanya melayani permintaan POST dari proxy Vercel; frontend web dilayani langsung oleh Vercel."
+    }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // =========================================================================
