@@ -561,6 +561,69 @@ function invalidateIndeksTerdaftar_() {
   CacheService.getScriptCache().removeAll(["INDEKS_NIK", "INDEKS_REK", "INDEKS_TEMPAT", "INDEKS_KUOTA"]);
 }
 
+// =========================================================================
+// SNAPSHOT RINGAN NAMA_SHEET_INPUT — dipakai bersama oleh fungsi Lihat Data & Dashboard
+// (ambilDataLihatDataHakAkses, getSemuaKuotaDenganPemakaian, getProgresKuota, getDashboardProgresVerifikasi)
+// supaya sheet transaksi (yang terus tumbuh sepanjang periode input) tidak dibaca ulang dari nol
+// oleh 4 fungsi berbeda tiap kali salah satu tab dibuka.
+// =========================================================================
+const KUNCI_CACHE_SNAPSHOT_INPUT = "SNAPSHOT_INPUT_V1";
+const TTL_CACHE_SNAPSHOT_INPUT_DETIK = 90; // pendek (bukan jam-jaman) karena data transaksi sering berubah
+
+// Setiap baris hasil: [NAMA, NIK, JENIS_KELAMIN, TEMPAT_LAHIR, TANGGAL_LAHIR(string dd-MM-yyyy),
+//   ALAMAT, LAYANAN, TEMPAT_TUGAS, ALAMAT_TUGAS, KECAMATAN, KELURAHAN, NAMA_REKENING, NOMOR_REKENING,
+//   KANTOR_CABANG, NO_KONTAK, STATUS_BPJS_TK, UMUR, STATUS_VERIFIKASI, TANGGAL_LAPOR_PERBAIKAN]
+// Sengaja TIDAK menyertakan kolom-kolom link berkas (S..AF, ~12 kolom URL Drive yang panjang) karena
+// tidak dipakai oleh satu pun konsumen snapshot ini — itulah yang membuat versi lama (getDataRange penuh)
+// jauh lebih berat daripada perlu.
+function getSnapshotSheetInput_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(KUNCI_CACHE_SNAPSHOT_INPUT);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
+  const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
+  const baris = [];
+
+  if (sheet && sheet.getLastRow() >= 2) {
+    const n = sheet.getLastRow() - 1;
+    const dataUtama = sheet.getRange(2, 2, n, 17).getValues();  // kolom B..R (NAMA..UMUR)
+    const dataStatus = sheet.getRange(2, 33, n, 1).getValues(); // kolom AG (STATUS VERIFIKASI)
+    const dataLapor = sheet.getRange(2, 39, n, 1).getValues();  // kolom AM (TANGGAL LAPOR PERBAIKAN)
+    for (let i = 0; i < n; i++) {
+      const r = dataUtama[i].slice();
+      // Ratakan TANGGAL LAHIR (indeks 4 di slice ini) jadi string SEKARANG, sebelum di-cache —
+      // Date object tidak selamat lewat JSON.stringify/parse (berubah jadi ISO string berbeda format).
+      if (r[4] instanceof Date) {
+        const d = ("0" + r[4].getDate()).slice(-2);
+        const m = ("0" + (r[4].getMonth() + 1)).slice(-2);
+        const y = r[4].getFullYear();
+        r[4] = d + "-" + m + "-" + y;
+      } else {
+        r[4] = r[4] ? r[4].toString().trim() : "";
+      }
+      r.push(dataStatus[i][0] || "");
+      r.push(dataLapor[i][0] || "");
+      baris.push(r);
+    }
+  }
+
+  try {
+    cache.put(KUNCI_CACHE_SNAPSHOT_INPUT, JSON.stringify(baris), TTL_CACHE_SNAPSHOT_INPUT_DETIK);
+  } catch (e) {} // payload melebihi batas 100KB CacheService -> lewati cache, tetap kembalikan data langsung (tidak pernah gagal ke user)
+
+  return baris;
+}
+
+// Invalidasi gabungan: dipanggil di semua titik yang mengubah NAMA_SHEET_INPUT,
+// supaya cache indeks validasi & snapshot listing/dashboard sama-sama langsung basi.
+function invalidateSemuaCacheData_() {
+  invalidateIndeksTerdaftar_();
+  CacheService.getScriptCache().remove(KUNCI_CACHE_SNAPSHOT_INPUT);
+}
+
 // Cek 3 hal berbasis NIK sekaligus secara real-time: Domisili Capil, Status Tahun Lalu, NIK Ganda.
 function cekNikRealtime(token, nik) {
   try { wajibSesi_(token); } catch (e) { return { blokir: false }; }
@@ -855,8 +918,8 @@ function simpanDataKeSheet(token, formObject) {
     ]);
 
     SpreadsheetApp.flush();
-    invalidateIndeksTerdaftar_(); // Bersihkan cache indeks agar data ter-refresh
-    
+    invalidateSemuaCacheData_(); // Bersihkan cache indeks & snapshot listing/dashboard agar data ter-refresh
+
     return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
   } catch (error) {
     return { sukses: false, pesan: "Gagal Sistem: " + error.toString() };
@@ -1033,25 +1096,25 @@ function ambilDataLihatDataHakAkses(token) {
       return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
     }
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-    if (!sheet) return JSON.stringify({ sukses: false, pesan: "Sheet tidak ditemukan" });
-    if (sheet.getLastRow() <= 1) return JSON.stringify({ sukses: true, rows: [] });
+    // Baca dari snapshot ringan bersama (lihat getSnapshotSheetInput_) alih-alih getDataRange() penuh —
+    // menghindari baca ulang ~40 kolom (termasuk belasan kolom link berkas yang panjang) tiap kali tab ini dibuka.
+    const baris = getSnapshotSheetInput_();
+    if (baris.length === 0) return JSON.stringify({ sukses: true, rows: [] });
 
-    const data = sheet.getDataRange().getValues();
     const resultRows = [];
-    const INDEKS_LAYANAN = 7;
-    const INDEKS_KECAMATAN = 10;
-    const INDEKS_KELURAHAN = 11;
+    // Indeks di dalam baris snapshot (lihat komentar getSnapshotSheetInput_ untuk peta lengkap kolom).
+    const INDEKS_LAYANAN = 6;
+    const INDEKS_KECAMATAN = 9;
+    const INDEKS_KELURAHAN = 10;
 
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (!row || row.length < 12) continue;
+    for (let i = 0; i < baris.length; i++) {
+      const row = baris[i];
+      if (!row[0] && !row[1]) continue; // lewati baris kosong/rusak (tanpa nama & NIK)
 
       const layananSheet = row[INDEKS_LAYANAN] ? row[INDEKS_LAYANAN].toString().trim().toUpperCase() : "";
       const kecamatanSheet = row[INDEKS_KECAMATAN] ? row[INDEKS_KECAMATAN].toString().trim().toUpperCase() : "";
       const kelurahanSheet = row[INDEKS_KELURAHAN] ? row[INDEKS_KELURAHAN].toString().trim().toUpperCase() : "";
-      const tempatTugasSheet = row[8] ? row[8].toString().trim().toUpperCase() : "";
+      const tempatTugasSheet = row[7] ? row[7].toString().trim().toUpperCase() : "";
 
       let lolosAkses = false;
       if (instansiPengguna === "KECAMATAN") {
@@ -1090,27 +1153,15 @@ function ambilDataLihatDataHakAkses(token) {
 
       if (lolosAkses) {
         resultRows.push([
-          i + 1,
-          row[1], row[2], row[3], row[4],
-          (function () {
-            if (!row[5]) return "";
-            if (row[5] instanceof Date) {
-              const d = ("0" + row[5].getDate()).slice(-2);
-              const m = ("0" + (row[5].getMonth() + 1)).slice(-2);
-              const y = row[5].getFullYear();
-              return d + "-" + m + "-" + y;
-            }
-            return row[5].toString().trim();
-          })(),
-          row[6], row[7], row[8], row[9], row[10], row[11],
-          row[12], row[13], row[14],
-          (function () {
-            if (!row[15]) return "";
-            return row[15].toString().replace(/^'+/, '').trim();
-          })(),
-          row[16], row[17],
-          row[32] || "Proses Verifikasi",
-          row[38] || ""
+          i + 2, // nomor baris asli di sheet (baris 1 = header, data dimulai baris 2)
+          row[0], row[1], row[2], row[3],
+          row[4], // TANGGAL LAHIR — sudah diratakan jadi string dd-MM-yyyy di getSnapshotSheetInput_
+          row[5], row[6], row[7], row[8], row[9], row[10],
+          row[11], row[12], row[13],
+          row[14] ? row[14].toString().replace(/^'+/, '').trim() : "",
+          row[15], row[16],
+          row[17] || "Proses Verifikasi",
+          row[18] || ""
         ]);
       }
     }
@@ -1441,21 +1492,15 @@ function getSemuaKuotaDenganPemakaian(token) {
     const listKuota = getSemuaKuota(token);
     if (listKuota.length === 0) return { kecamatanList: [], layananList: [], matriksData: {} };
 
-    const ssPenyimpanan = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ssPenyimpanan.getSheetByName(NAMA_SHEET_INPUT);
-
+    // Pakai snapshot ringan bersama (lihat getSnapshotSheetInput_) alih-alih baca sheet sendiri.
+    const barisSnapshot = getSnapshotSheetInput_();
     const pemakaian = {};
-    if (sheet && sheet.getLastRow() >= 2) {
-      const lastRow = sheet.getLastRow();
-      // Baca HANYA Kolom H(8) s/d K(11) — 4 kolom (Layanan s/d Kecamatan), alih-alih seluruh 40 kolom
-      const dataInput = sheet.getRange(2, 8, lastRow - 1, 4).getValues();
-      for (let i = 0; i < dataInput.length; i++) {
-        const lay = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : ""; // H
-        const kec = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : ""; // K
-        if (kec && lay) {
-          const key = lay + "||" + kec;
-          pemakaian[key] = (pemakaian[key] || 0) + 1;
-        }
+    for (let i = 0; i < barisSnapshot.length; i++) {
+      const lay = barisSnapshot[i][6] ? barisSnapshot[i][6].toString().trim().toUpperCase() : ""; // LAYANAN
+      const kec = barisSnapshot[i][9] ? barisSnapshot[i][9].toString().trim().toUpperCase() : ""; // KECAMATAN
+      if (kec && lay) {
+        const key = lay + "||" + kec;
+        pemakaian[key] = (pemakaian[key] || 0) + 1;
       }
     }
 
@@ -1528,21 +1573,15 @@ function getProgresKuota(token) {
       setLayananDenganKuota[item.layanan] = true;
     });
 
-    // Pemakaian (jumlah input) per layanan+kecamatan
-    const ssP = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheetP = ssP.getSheetByName(NAMA_SHEET_INPUT);
+    // Pemakaian (jumlah input) per layanan+kecamatan — dari snapshot ringan bersama (getSnapshotSheetInput_)
+    const barisSnapshot = getSnapshotSheetInput_();
     const pemakaian = {};
-    if (sheetP && sheetP.getLastRow() >= 2) {
-      const lastRow = sheetP.getLastRow();
-      // Baca HANYA Kolom H(8) s/d K(11) — 4 kolom (Layanan s/d Kecamatan), alih-alih seluruh 40 kolom
-      const dataInput = sheetP.getRange(2, 8, lastRow - 1, 4).getValues();
-      for (let i = 0; i < dataInput.length; i++) {
-        const lay = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : ""; // H
-        const kec = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : ""; // K
-        if (!lay || !kec) continue;
-        const key = lay + "||" + kec;
-        pemakaian[key] = (pemakaian[key] || 0) + 1;
-      }
+    for (let i = 0; i < barisSnapshot.length; i++) {
+      const lay = barisSnapshot[i][6] ? barisSnapshot[i][6].toString().trim().toUpperCase() : ""; // LAYANAN
+      const kec = barisSnapshot[i][9] ? barisSnapshot[i][9].toString().trim().toUpperCase() : ""; // KECAMATAN
+      if (!lay || !kec) continue;
+      const key = lay + "||" + kec;
+      pemakaian[key] = (pemakaian[key] || 0) + 1;
     }
 
     // Susun grup sesuai urutan layanan tetap; baris kecamatan juga urutan tetap.
@@ -1626,16 +1665,11 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
     // Kemenag TANPA kecamatan tetap -> pecah jadi 21 kartu (1 per kecamatan) untuk layanan itu.
     const modeKecamatanPisah = (role !== "UTAMA" && role !== "KECAMATAN" && !kecUser);
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-    if (!sheet || sheet.getLastRow() < 2) {
+    // Pakai snapshot ringan bersama (lihat getSnapshotSheetInput_) alih-alih baca sheet sendiri.
+    const barisSnapshot = getSnapshotSheetInput_();
+    if (barisSnapshot.length === 0) {
       return { sukses: true, kartu: [], bisaFilterKecamatan: (role === "UTAMA") };
     }
-
-    const lastRow = sheet.getLastRow();
-    // Baca rentang kolom 8 s/d 12 (5 kolom: Layanan, Tempat Tugas, Alamat Tugas, Kecamatan, Kelurahan) sekaligus
-    const dataWilayah = sheet.getRange(2, 8, lastRow - 1, 5).getValues();
-    const dataStatus = sheet.getRange(2, 33, lastRow - 1, 1).getValues();
 
     // Kalau USER_ID akun ini diawali "KELURAHAN ", batasi rekap cuma ke kelurahan itu.
     const userIdSesi = (sesi.userId || "").toString().toUpperCase().trim();
@@ -1662,11 +1696,12 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
       });
     }
 
-    for (let i = 0; i < dataWilayah.length; i++) {
-      const lay = (dataWilayah[i][0] || "").toString().trim().toUpperCase();
-      const kec = (dataWilayah[i][3] || "").toString().trim().toUpperCase();
-      const kel = (dataWilayah[i][4] || "").toString().trim().toUpperCase();
-      const tempatTugas = (dataWilayah[i][1] || "").toString().trim().toUpperCase();
+    for (let i = 0; i < barisSnapshot.length; i++) {
+      const r = barisSnapshot[i];
+      const lay = (r[6] || "").toString().trim().toUpperCase();   // LAYANAN
+      const kec = (r[9] || "").toString().trim().toUpperCase();   // KECAMATAN
+      const kel = (r[10] || "").toString().trim().toUpperCase();  // KELURAHAN
+      const tempatTugas = (r[7] || "").toString().trim().toUpperCase(); // TEMPAT TUGAS
       if (!lay) continue;
 
       if (role === "KECAMATAN" && kec !== kecUser) continue;
@@ -1679,7 +1714,7 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
       const kunci = kunciKartu(lay, kec);
       if (!rekap.hasOwnProperty(kunci)) continue;
 
-      const status = (dataStatus[i][0] || "Proses Verifikasi").toString().trim();
+      const status = (r[17] || "Proses Verifikasi").toString().trim(); // STATUS VERIFIKASI
       rekap[kunci].total++;
       if (status === "Memenuhi Syarat") rekap[kunci].memenuhiSyarat++;
       else if (status === "Tidak Memenuhi Syarat") rekap[kunci].tidakMemenuhiSyarat++;
@@ -2719,7 +2754,7 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
     }
 
     SpreadsheetApp.flush();
-    invalidateIndeksTerdaftar_(); // Invalidate cache agar indeks terdaftar langsung ter-refresh
+    invalidateSemuaCacheData_(); // Invalidate cache indeks & snapshot listing/dashboard agar langsung ter-refresh
 
     // ── Catat riwayat ke db_riwayat_edit ──
     if (riwayat.length > 0) {
@@ -2787,6 +2822,7 @@ function verifikasiSatuData(token, nomorBarisAsli, statusBaru, keterangan, batas
     sheet.getRange(baris, 33, 1, 5).setValues([[
       statusBaru, keteranganBersih, tglSekarang, namaVerifikator, batasWaktuBersih
     ]]);
+    invalidateSemuaCacheData_();
 
     return {
       sukses: true, pesan: "Status verifikasi berhasil disimpan.",
@@ -2850,6 +2886,7 @@ function laporkanPerbaikanBerkas(token, nomorBarisAsli) {
 
     // Kolom 39-40 = Tanggal Lapor Perbaikan, Dilapor Oleh
     sheet.getRange(baris, 39, 1, 2).setValues([[tglSekarang, namaPelapor]]);
+    invalidateSemuaCacheData_();
 
     return { sukses: true, tanggalLapor: tglSekarang, dilaporOleh: namaPelapor };
   } catch (e) {
@@ -2902,6 +2939,7 @@ function tandaiSudahDiperbaiki(token, nomorBarisAsli) {
     ]]);
     // Kolom 39-40: bersihkan juga penanda laporan perbaikan
     sheet.getRange(baris, 39, 1, 2).setValues([["", ""]]);
+    invalidateSemuaCacheData_();
 
     return { sukses: true, status: "Memenuhi Syarat", tanggal: tglSekarang, verifikator: namaVerifikator };
   } catch (e) {
@@ -2949,6 +2987,7 @@ function verifikasiMassalMemenuhiSyarat(token) {
     if (jumlahDiubah > 0) {
       sheet.getRange(2, KOL_STATUS, lastRow - 1, JUMLAH_KOLOM).setValues(data);
       SpreadsheetApp.flush();
+      invalidateSemuaCacheData_();
     }
 
     return { sukses: true, jumlah: jumlahDiubah };

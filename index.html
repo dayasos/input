@@ -755,6 +755,10 @@
         Google Drive.</p>
     </div>
 
+    <!-- Kontainer Toast/Notifikasi Ringan (lihat fungsi tampilkanToast di script utama) -->
+    <div id="toast-container"
+      class="fixed top-4 right-4 z-[500] flex flex-col gap-2 items-end pointer-events-none max-w-[90vw]"></div>
+
     <!-- Modal Pembaruan Sistem -->
     <div id="modal-update-sistem"
       class="hidden fixed inset-0 z-[400] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
@@ -1661,6 +1665,87 @@
       let panelAktif = "input"; // "input", "rekap"
       let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
 
+      // =========================================================================
+      // TOAST / NOTIFIKASI RINGAN (pengganti alert() untuk hasil aksi CRUD/download)
+      // =========================================================================
+      const KONFIG_TOAST = {
+        sukses: { bg: "bg-emerald-600", ikon: "✅" },
+        gagal: { bg: "bg-red-600", ikon: "❌" },
+        info: { bg: "bg-sky-600", ikon: "ℹ️" },
+        proses: { bg: "bg-slate-700", ikon: "⏳" }
+      };
+      let _toastCounter = 0;
+
+      // jenis: 'sukses' | 'gagal' | 'info' | 'proses'.
+      // opsi.durasi (ms) override lama tampil; opsi.tetap=true supaya tidak auto-hilang (mis. toast 'proses' selalu tetap sampai ditutup manual via tutupToast(id)).
+      // Mengembalikan id toast (dipakai untuk tutupToast(id) manual, mis. saat proses selesai).
+      function tampilkanToast(pesan, jenis, opsi) {
+        jenis = KONFIG_TOAST[jenis] ? jenis : "info";
+        opsi = opsi || {};
+        const cfg = KONFIG_TOAST[jenis];
+        const cont = document.getElementById("toast-container");
+        if (!cont) { console.log("[TOAST:" + jenis + "]", pesan); return null; }
+
+        const id = "toast-" + (++_toastCounter);
+        const el = document.createElement("div");
+        el.id = id;
+        el.className = cfg.bg + " text-white text-sm font-medium rounded-xl shadow-lg px-4 py-3 pr-8 flex items-start gap-2 max-w-sm w-max relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
+        el.innerHTML =
+          '<span class="text-base leading-none shrink-0">' + cfg.ikon + '</span>' +
+          '<span class="whitespace-pre-line leading-snug">' + (typeof esc === "function" ? esc(pesan) : String(pesan)) + '</span>' +
+          '<button type="button" aria-label="Tutup notifikasi" class="absolute top-1.5 right-2 text-white/70 hover:text-white text-base leading-none" onclick="tutupToast(\'' + id + '\')">&times;</button>';
+        cont.appendChild(el);
+
+        requestAnimationFrame(function () { el.classList.remove("opacity-0", "translate-x-4"); });
+
+        if (jenis !== "proses" && !opsi.tetap) {
+          setTimeout(function () { tutupToast(id); }, opsi.durasi || 3500);
+        }
+        return id;
+      }
+
+      function tutupToast(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add("opacity-0", "translate-x-4");
+        setTimeout(function () { el.remove(); }, 300);
+      }
+
+      // =========================================================================
+      // HELPER LOADING KONSISTEN (level tombol & level panel/tabel)
+      // =========================================================================
+      // Simpan teks/HTML asli tombol di dataset supaya bisa dipulihkan persis, dukung pemanggilan bertumpuk yang aman.
+      function setTombolMemuat(btn, teksMemuat) {
+        if (!btn) return;
+        if (btn.dataset.teksAsli === undefined) btn.dataset.teksAsli = btn.innerHTML;
+        btn.disabled = true;
+        btn.classList.add("opacity-70", "cursor-not-allowed");
+        btn.innerHTML = '<span class="inline-flex items-center gap-1.5">⏳ ' + (teksMemuat || "Memproses...") + '</span>';
+      }
+
+      function pulihkanTombol(btn) {
+        if (!btn) return;
+        btn.disabled = false;
+        btn.classList.remove("opacity-70", "cursor-not-allowed");
+        if (btn.dataset.teksAsli !== undefined) {
+          btn.innerHTML = btn.dataset.teksAsli;
+          delete btn.dataset.teksAsli;
+        }
+      }
+
+      // Skeleton ringan untuk isi tabel/panel yang sedang memuat data (dipakai lewat colspan pada <tr><td>).
+      function htmlSkeletonBaris(kolom, jumlahBaris) {
+        kolom = kolom || 5;
+        jumlahBaris = jumlahBaris || 3;
+        let baris = "";
+        for (let i = 0; i < jumlahBaris; i++) {
+          baris += '<tr><td colspan="' + kolom + '" class="p-3">' +
+            '<div class="h-3.5 rounded bg-slate-200 animate-pulse" style="width:' + (60 + (i * 12) % 30) + '%"></div>' +
+            '</td></tr>';
+        }
+        return baris;
+      }
+
       // Helper: cek apakah role user termasuk kecamatan/kemenag (bukan admin utama).
       // Role user di sistem ini hanya bisa: "UTAMA", "KECAMATAN", atau salah satu layanan kemenag
       // (GURU MAGHRIB MENGAJI, GURU SEKOLAH BUDDHA/HINDU/MINGGU, PENATUA GEREJA).
@@ -1723,7 +1808,7 @@
 
       function pastikanLogin() {
         if (!dataPengguna.token) {
-          alert("Sesi Anda berakhir atau belum login. Silakan login ulang.");
+          tampilkanToast("🔒 Sesi Anda berakhir atau belum login. Silakan login ulang.", "gagal");
           document.getElementById('modal-login').classList.remove('hidden');
           return false;
         }
@@ -1897,23 +1982,19 @@
       document.getElementById('btn-retur-kematian').addEventListener('click', function () {
         if (!pastikanLogin()) return;
         const btn = this;
-        const teksAsli = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Membuka...';
+        setTombolMemuat(btn, "Membuka...");
         google.script.run
           .withSuccessHandler(function (res) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
+            pulihkanTombol(btn);
             if (res && res.sukses) {
               window.open(res.url, '_blank');
             } else {
-              alert('Gagal membuka aplikasi Retur: ' + (res ? res.pesan : 'tidak diketahui'));
+              tampilkanToast('Gagal membuka aplikasi Retur: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal');
             }
           })
           .withFailureHandler(function (err) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
-            alert('Error: ' + (err && err.message ? err.message : err));
+            pulihkanTombol(btn);
+            tampilkanToast(pesanErrorRamah(err), 'gagal');
           })
           .buatTokenSSORetur(dataPengguna.token);
       });
@@ -1964,7 +2045,7 @@
       window.addEventListener('DOMContentLoaded', () => {
         google.script.run
           .withSuccessHandler((data) => { masterLayanan = data; })
-          .withFailureHandler((err) => { alert("Gagal mengambil data master: " + err.message); })
+          .withFailureHandler((err) => { tampilkanToast("Gagal mengambil data master: " + pesanErrorRamah(err), "gagal", { durasi: 6000 }); })
           .getMasterLayanan();
       });
 
@@ -1972,7 +2053,7 @@
         // SAFEGUARD: kalau sakelar TUTUP dan user bukan admin utama,
         // jangan izinkan pindah ke panel INPUT.
         if (inputDitutupGlobal && dataPengguna.role !== "UTAMA") {
-          alert("Periode input telah ditutup. Anda hanya bisa melihat data.");
+          tampilkanToast("Periode input telah ditutup. Anda hanya bisa melihat data.", "info");
           return;
         }
 
@@ -2097,7 +2178,7 @@
           if (elLay) { elLay.innerHTML = '<option value="">-- Semua Layanan --</option>'; elLay.value = ''; }
 
           const tbody = document.getElementById('body-tabel-lihat');
-          tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-slate-400 italic">Memuat data ${tahun}...</td></tr>`;
+          tbody.innerHTML = htmlSkeletonBaris(8, 5);
           document.getElementById('info-total-penerima').textContent = 'Total Data: Memuat...';
 
           google.script.run
@@ -2501,7 +2582,7 @@
         google.script.run
           .withSuccessHandler(function (res) {
             if (res && res.blokir) {
-              alert('⚠️ ' + res.pesan);
+              tampilkanToast(res.pesan, 'gagal', { durasi: 6000 });
               kunciDariBlokSetelah('KUOTA', 0, null); // field ini di luar semua fieldset -> kunci semuanya
             }
           })
@@ -2583,7 +2664,7 @@
 
       inputKontak.addEventListener('input', (e) => {
         let val = e.target.value.replace(/[^0-9]/g, '');
-        if (val.length >= 2 && !val.startsWith("08")) { alert("Nomor kontak harus diawali dengan angka 08!"); val = "08"; }
+        if (val.length >= 2 && !val.startsWith("08")) { tampilkanToast("Nomor kontak harus diawali dengan angka 08!", "gagal"); val = "08"; }
         e.target.value = val;
       });
 
@@ -3048,7 +3129,7 @@
             }
             if (!status.valid) {
               loadingOverlay.classList.add('hidden');
-              alert(status.pesan);
+              tampilkanToast(status.pesan, 'gagal', { durasi: 6000 });
               return;
             }
             // Validasi lolos -> baca berkas jadi base64, lalu kirim sebagai OBJEK (bukan elemen form).
@@ -3059,23 +3140,23 @@
                 google.script.run
                   .withSuccessHandler(function (response) {
                     loadingOverlay.classList.add('hidden');
-                    if (response.sukses) { alert("SUKSES: " + response.pesan); formPembayaran.reset(); btnResetForm.click(); }
-                    else { alert("GAGAL MENYIMPAN: " + response.pesan); }
+                    if (response.sukses) { tampilkanToast(response.pesan, 'sukses'); formPembayaran.reset(); btnResetForm.click(); }
+                    else { tampilkanToast("Gagal menyimpan: " + response.pesan, 'gagal', { durasi: 6000 }); }
                   })
                   .withFailureHandler(function (errSimpan) {
                     loadingOverlay.classList.add('hidden');
-                    alert(pesanErrorRamah(errSimpan));
+                    tampilkanToast(pesanErrorRamah(errSimpan), 'gagal', { durasi: 6000 });
                   })
                   .simpanDataKeSheet(dataPengguna.token, dataObjek);
               })
               .catch(function (errBaca) {
                 loadingOverlay.classList.add('hidden');
-                alert("Gagal membaca berkas: " + (errBaca && errBaca.message ? errBaca.message : errBaca));
+                tampilkanToast("Gagal membaca berkas: " + (errBaca && errBaca.message ? errBaca.message : errBaca), 'gagal');
               });
           })
           .withFailureHandler(function (err) {
             loadingOverlay.classList.add('hidden');
-            alert(pesanErrorRamah(err));
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
           })
           .validasiDataBaru(dataPengguna.token, inputNik.value, selectLayanan.value, inputTempatTugas.value, instansiAktif, inputNoRek.value, document.getElementById('control-kecamatan').value, document.getElementById('input-almt-tugas').value);
       }
@@ -3150,7 +3231,7 @@
 
       document.getElementById('btn-lanjutkan-nama-beda').addEventListener('click', function () {
         const ket = document.getElementById('input-catatan-nama-beda').value.trim().toUpperCase();
-        if (!ket) { alert('Keterangan wajib diisi.'); return; }
+        if (!ket) { tampilkanToast('Keterangan wajib diisi.', 'gagal'); return; }
         namaBerbedaDikonfirmasi = true;
         catatanPerbedaanNamaTersimpan = ket;
         document.getElementById('modal-nama-beda').classList.add('hidden');
@@ -3170,7 +3251,7 @@
         for (const modeKoordinat of Object.keys(KONFIG_KOORDINAT)) {
           const cfgKoordinat = KONFIG_KOORDINAT[modeKoordinat];
           if (cfgKoordinat.layananList.indexOf(selectLayanan.value) !== -1 && !cfgKoordinat.siap) {
-            alert("Koordinat lokasi foto wajib terisi (otomatis dari GPS foto, atau tempel tautan Google Maps manual) sebelum data bisa disimpan.");
+            tampilkanToast("Koordinat lokasi foto wajib terisi (otomatis dari GPS foto, atau tempel tautan Google Maps manual) sebelum data bisa disimpan.", "gagal", { durasi: 6000 });
             document.getElementById(cfgKoordinat.wrapperId).scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
           }
@@ -3185,12 +3266,12 @@
 
         // Validasi lokal cepat sebelum tampilkan modal
         const kecVal = document.getElementById('control-kecamatan').value;
-        if (!kecVal) { alert("Kecamatan lokasi tugas wajib dipilih!"); document.getElementById('control-kecamatan').focus(); return; }
-        if (parseInt(inputUmur.value) < 18) { alert("Umur di bawah 18 tahun!"); inputTglLahir.focus(); return; }
-        if (inputNik.value.length !== 16) { alert("NIK wajib 16 digit!"); inputNik.focus(); return; }
-        if (inputNoRek.value.length !== 14) { alert("No Rekening wajib 14 digit!"); inputNoRek.focus(); return; }
+        if (!kecVal) { tampilkanToast("Kecamatan lokasi tugas wajib dipilih!", "gagal"); document.getElementById('control-kecamatan').focus(); return; }
+        if (parseInt(inputUmur.value) < 18) { tampilkanToast("Umur di bawah 18 tahun!", "gagal"); inputTglLahir.focus(); return; }
+        if (inputNik.value.length !== 16) { tampilkanToast("NIK wajib 16 digit!", "gagal"); inputNik.focus(); return; }
+        if (inputNoRek.value.length !== 14) { tampilkanToast("No Rekening wajib 14 digit!", "gagal"); inputNoRek.focus(); return; }
         if (!inputKontak.value.startsWith("08") || inputKontak.value.length < 10 || inputKontak.value.length > 13) {
-          alert("Nomor kontak tidak valid! Harus diawali 08, tanpa spasi/simbol, dan panjang 10-13 digit.");
+          tampilkanToast("Nomor kontak tidak valid! Harus diawali 08, tanpa spasi/simbol, dan panjang 10-13 digit.", "gagal");
           inputKontak.focus();
           return;
         }
@@ -3222,9 +3303,7 @@
         if (btnVerifMassal) btnVerifMassal.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
         const btnSalinWA = document.getElementById('btn-salin-wa-berkas');
         if (btnSalinWA) btnSalinWA.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
-        document.getElementById('body-tabel-lihat').innerHTML = `
-    <tr><td colspan="7" class="px-4 py-8 text-center font-medium text-sky-600 bg-white">
-      <span class="inline-block animate-pulse text-sm">⏳ Mengunduh data, mohon tunggu sesaat...</span></td></tr>`;
+        document.getElementById('body-tabel-lihat').innerHTML = htmlSkeletonBaris(7, 5);
         google.script.run
           .withSuccessHandler(function (jsonResponse) {
             try {
@@ -3241,10 +3320,10 @@
                 halamanSekarang = 1;
                 saringDanTampilkanTabel();
                 setupPencarianRealtime();
-              } else { alert("Gagal memuat data: " + (response ? response.pesan : "Error JSON")); }
-            } catch (err) { alert("Error Render: " + err.message); }
+              } else { tampilkanToast("Gagal memuat data: " + (response ? response.pesan : "Error JSON"), "gagal"); }
+            } catch (err) { tampilkanToast("Error Render: " + err.message, "gagal"); }
           })
-          .withFailureHandler(function (error) { alert("Error Server Google: " + error.message); })
+          .withFailureHandler(function (error) { tampilkanToast(pesanErrorRamah(error), "gagal", { durasi: 6000 }); })
           .ambilDataLihatDataHakAkses(dataPengguna.token);
       }
 
@@ -3649,12 +3728,12 @@
           // Pasang handler kedua tombol verifikasi (kalau UTAMA)
           function jalankanVerifikasi(statusBaru, tombolAktif, teksAsliTombol) {
             const ket = document.getElementById('input-keterangan-verifikasi').value.trim().toUpperCase();
-            if (!ket) { alert('Keterangan hasil verifikasi wajib diisi.'); return; }
+            if (!ket) { tampilkanToast('Keterangan hasil verifikasi wajib diisi.', 'gagal'); return; }
 
             let batasWaktu = "";
             if (statusBaru === "Berkas Tidak Lengkap") {
               batasWaktu = document.getElementById('input-batas-waktu-verifikasi').value;
-              if (!batasWaktu) { alert('Batas waktu perbaikan wajib diisi untuk status Berkas Tidak Lengkap.'); return; }
+              if (!batasWaktu) { tampilkanToast('Batas waktu perbaikan wajib diisi untuk status Berkas Tidak Lengkap.', 'gagal'); return; }
             }
 
             tombolAktif.disabled = true;
@@ -3663,18 +3742,19 @@
               .withSuccessHandler(function (res) {
                 tombolAktif.disabled = false;
                 tombolAktif.innerText = teksAsliTombol;
-                if (!res.sukses) { alert('Gagal: ' + res.pesan); return; }
+                if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
                 dataAktif[32] = res.status;
                 dataAktif[33] = res.keterangan;
                 dataAktif[34] = res.tanggal;
                 dataAktif[35] = res.verifikator;
                 dataAktif[36] = res.batasWaktu || "";
                 renderBaca(dataAktif);
+                tampilkanToast('Status verifikasi berhasil disimpan.', 'sukses');
               })
               .withFailureHandler(function (err) {
                 tombolAktif.disabled = false;
                 tombolAktif.innerText = teksAsliTombol;
-                alert('Error: ' + (err.message || err));
+                tampilkanToast(pesanErrorRamah(err), 'gagal');
               })
               .verifikasiSatuData(dataPengguna.token, nomorBarisAktif, statusBaru, ket, batasWaktu, dataAktif[32] || "");
           }
@@ -3700,15 +3780,16 @@
               btnLaporPerbaikan.innerText = 'Mengirim...';
               google.script.run
                 .withSuccessHandler(function (res) {
-                  if (!res.sukses) { alert('Gagal: ' + res.pesan); btnLaporPerbaikan.disabled = false; btnLaporPerbaikan.innerHTML = teksAsli; return; }
+                  if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); btnLaporPerbaikan.disabled = false; btnLaporPerbaikan.innerHTML = teksAsli; return; }
                   dataAktif[38] = res.tanggalLapor;
                   dataAktif[39] = res.dilaporOleh;
                   renderBaca(dataAktif);
+                  tampilkanToast('Perbaikan berkas berhasil dilaporkan.', 'sukses');
                 })
                 .withFailureHandler(function (err) {
                   btnLaporPerbaikan.disabled = false;
                   btnLaporPerbaikan.innerHTML = teksAsli;
-                  alert('Error: ' + (err.message || err));
+                  tampilkanToast(pesanErrorRamah(err), 'gagal');
                 })
                 .laporkanPerbaikanBerkas(dataPengguna.token, nomorBarisAktif);
             });
@@ -3722,7 +3803,7 @@
               btnSudahDiperbaiki.innerText = 'Menyimpan...';
               google.script.run
                 .withSuccessHandler(function (res) {
-                  if (!res.sukses) { alert('Gagal: ' + res.pesan); btnSudahDiperbaiki.disabled = false; btnSudahDiperbaiki.innerHTML = teksAsli; return; }
+                  if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); btnSudahDiperbaiki.disabled = false; btnSudahDiperbaiki.innerHTML = teksAsli; return; }
                   dataAktif[32] = res.status;
                   dataAktif[33] = "";
                   dataAktif[34] = res.tanggal;
@@ -3731,11 +3812,12 @@
                   dataAktif[38] = "";
                   dataAktif[39] = "";
                   renderBaca(dataAktif);
+                  tampilkanToast('Data ditandai sudah diperbaiki.', 'sukses');
                 })
                 .withFailureHandler(function (err) {
                   btnSudahDiperbaiki.disabled = false;
                   btnSudahDiperbaiki.innerHTML = teksAsli;
-                  alert('Error: ' + (err.message || err));
+                  tampilkanToast(pesanErrorRamah(err), 'gagal');
                 })
                 .tandaiSudahDiperbaiki(dataPengguna.token, nomorBarisAktif);
             });
@@ -3822,7 +3904,7 @@
           const idx = inputEl.dataset.berkasIdx;
           const file = inputEl.files[0];
           if (!file) return;
-          if (file.size > 25 * 1024 * 1024) { alert("Ukuran berkas melebihi 25 MB."); inputEl.value = ""; return; }
+          if (file.size > 25 * 1024 * 1024) { tampilkanToast("Ukuran berkas melebihi 25 MB.", "gagal"); inputEl.value = ""; return; }
           const labelEl = document.getElementById("label-berkas-" + idx);
           if (labelEl) labelEl.textContent = "Membaca...";
           const reader = new FileReader();
@@ -3866,7 +3948,7 @@
             if (nilaiInput !== nilaiLama) teks[i] = el.value.toString().trim();
           });
           if (Object.keys(teks).length === 0 && Object.keys(berkasBaruMap).length === 0) {
-            alert("Tidak ada perubahan yang dilakukan."); return;
+            tampilkanToast("Tidak ada perubahan yang dilakukan.", "info"); return;
           }
           btnSimpan.disabled = true;
           btnSimpan.textContent = "⏳ Menyimpan...";
@@ -3875,7 +3957,7 @@
               btnSimpan.disabled = false;
               btnSimpan.textContent = "💾 Simpan Perubahan";
               if (res && res.sukses) {
-                alert("✅ " + res.pesan);
+                tampilkanToast(res.pesan, "sukses");
                 modeEdit = false;
                 berkasBaruMap = {};
                 btnSimpan.classList.add('hidden');
@@ -3886,13 +3968,13 @@
                 // Refresh tabel lihat data
                 if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
               } else {
-                alert("❌ " + (res ? res.pesan : "Gagal menyimpan."));
+                tampilkanToast(res ? res.pesan : "Gagal menyimpan.", "gagal", { durasi: 6000 });
               }
             })
             .withFailureHandler(function (err) {
               btnSimpan.disabled = false;
               btnSimpan.textContent = "💾 Simpan Perubahan";
-              alert("Error: " + (err && err.message ? err.message : err));
+              tampilkanToast(pesanErrorRamah(err), "gagal", { durasi: 6000 });
             })
             .editDataPenerima(dataPengguna.token, nomorBarisAktif, { teks: teks, berkas: berkasBaruMap });
         }
@@ -4021,19 +4103,19 @@
       document.getElementById('btn-export-xlsx').addEventListener('click', function () {
         if (!pastikanLogin()) return;
         const dataLolos = ambilDataLolosFilter();
-        if (dataLolos.length === 0) { alert("Tidak ada data untuk diekspor."); return; }
-        loadingOverlay.classList.remove('hidden');
-        loadingOverlay.querySelector('h3').innerText = "MEMBUAT FILE EXCEL...";
+        if (dataLolos.length === 0) { tampilkanToast("Tidak ada data untuk diekspor.", "info"); return; }
+        const idToastProses = tampilkanToast("Sedang membuat file Excel, mohon tunggu...", "proses");
         google.script.run
           .withSuccessHandler(function (res) {
-            loadingOverlay.classList.add('hidden');
+            tutupToast(idToastProses);
             if (res.sukses) {
               unduhFileBase64(res.base64, res.namaFile);
+              tampilkanToast("File berhasil diunduh: " + res.namaFile, "sukses");
             } else {
-              alert("Gagal: " + res.pesan);
+              tampilkanToast("Gagal: " + res.pesan, "gagal", { durasi: 6000 });
             }
           })
-          .withFailureHandler(function (err) { loadingOverlay.classList.add('hidden'); alert(pesanErrorRamah(err)); })
+          .withFailureHandler(function (err) { tutupToast(idToastProses); tampilkanToast(pesanErrorRamah(err), "gagal", { durasi: 6000 }); })
           .eksporDataKeSpreadsheet(dataPengguna.token, dataLolos, buatNamaFile());
       });
 
@@ -4042,22 +4124,18 @@
         if (!konfirmasi) return;
 
         const btn = this;
-        const teksAsli = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Memproses...';
+        setTombolMemuat(btn, "Memproses...");
 
         google.script.run
           .withSuccessHandler(function (res) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
-            if (!res.sukses) { alert('Gagal: ' + res.pesan); return; }
-            alert('✅ Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".');
+            pulihkanTombol(btn);
+            if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal', { durasi: 6000 }); return; }
+            tampilkanToast('Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".', 'sukses');
             inisialisasiMenuLihatData(); // muat ulang tabel supaya badge ter-update
           })
           .withFailureHandler(function (err) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
-            alert('Error: ' + (err.message || err));
+            pulihkanTombol(btn);
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
           })
           .verifikasiMassalMemenuhiSyarat(dataPengguna.token);
       });
@@ -4156,30 +4234,26 @@
       document.getElementById('btn-salin-wa-berkas').addEventListener('click', function () {
         if (!pastikanLogin()) return;
         const btn = this;
-        const teksAsli = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '⏳ Menyiapkan...';
+        setTombolMemuat(btn, "Menyiapkan...");
 
         google.script.run
           .withSuccessHandler(function (res) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
-            if (!res.sukses) { alert('Gagal: ' + res.pesan); return; }
+            pulihkanTombol(btn);
+            if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
             if (!res.data || res.data.length === 0) {
-              alert('Tidak ada data berstatus "Berkas Tidak Lengkap" saat ini.');
+              tampilkanToast('Tidak ada data berstatus "Berkas Tidak Lengkap" saat ini.', 'info');
               return;
             }
             const teks = susunTeksWhatsAppBerkasTidakLengkap(res.data);
             navigator.clipboard.writeText(teks).then(function () {
-              alert('✅ Tersalin ke clipboard! (' + res.data.length + ' data)\n\nSilakan buka WhatsApp dan tempel (Ctrl+V atau tekan-tahan lalu Tempel) di chat/grup tujuan.');
+              tampilkanToast('Tersalin ke clipboard! (' + res.data.length + ' data). Buka WhatsApp lalu tempel di chat/grup tujuan.', 'sukses', { durasi: 5000 });
             }).catch(function () {
               prompt('Browser tidak izinkan salin otomatis. Salin manual teks ini (Ctrl+A lalu Ctrl+C):', teks);
             });
           })
           .withFailureHandler(function (err) {
-            btn.disabled = false;
-            btn.innerHTML = teksAsli;
-            alert('Error: ' + (err.message || err));
+            pulihkanTombol(btn);
+            tampilkanToast(pesanErrorRamah(err), 'gagal');
           })
           .getDaftarBerkasTidakLengkapUntukWA(dataPengguna.token);
       });
@@ -4591,9 +4665,9 @@
           .withSuccessHandler(function (res) {
             btn.disabled = false; input.disabled = false;
             if (res && res.sukses) { input.value = ""; muatPesanChat(true); input.focus(); }
-            else { alert("Gagal mengirim: " + (res ? res.pesan : "tidak diketahui")); }
+            else { tampilkanToast("Gagal mengirim: " + (res ? res.pesan : "tidak diketahui"), "gagal"); }
           })
-          .withFailureHandler(function (err) { btn.disabled = false; input.disabled = false; alert("Error: " + err.message); })
+          .withFailureHandler(function (err) { btn.disabled = false; input.disabled = false; tampilkanToast(pesanErrorRamah(err), "gagal"); })
           .kirimPesanChat(dataPengguna.token, teks);
       }
 
@@ -4603,10 +4677,10 @@
         if (!confirm("Hapus pesan ini? Tindakan tidak bisa dibatalkan.")) return;
         google.script.run
           .withSuccessHandler(function (res) {
-            if (res && res.sukses) { chatPesanTerakhirId = -1; muatPesanChat(true); }
-            else { alert("Gagal menghapus: " + (res ? res.pesan : "tidak diketahui")); }
+            if (res && res.sukses) { chatPesanTerakhirId = -1; muatPesanChat(true); tampilkanToast("Pesan dihapus.", "sukses"); }
+            else { tampilkanToast("Gagal menghapus: " + (res ? res.pesan : "tidak diketahui"), "gagal"); }
           })
-          .withFailureHandler(function (err) { alert("Error: " + err.message); })
+          .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
           .hapusPesanChat(dataPengguna.token, id);
       }
 
@@ -5079,7 +5153,7 @@
           btnKelolaUser.addEventListener('click', function () {
             if (!pastikanLogin()) return;
             if (dataPengguna.role !== "UTAMA") {
-              alert("Hanya admin utama yang boleh mengelola akses per user.");
+              tampilkanToast("Hanya admin utama yang boleh mengelola akses per user.", "gagal");
               return;
             }
             bukaModalKelolaUser();
@@ -5105,7 +5179,7 @@
             .withSuccessHandler(function (res) {
               document.getElementById('ku-loading').classList.add('hidden');
               if (!res || !res.sukses) {
-                alert("Gagal memuat daftar user: " + (res && res.pesan ? res.pesan : "Unknown error"));
+                tampilkanToast("Gagal memuat daftar user: " + (res && res.pesan ? res.pesan : "Unknown error"), "gagal");
                 return;
               }
               semuaUser = res.daftar || [];
@@ -5120,7 +5194,7 @@
             })
             .withFailureHandler(function (err) {
               document.getElementById('ku-loading').classList.add('hidden');
-              alert("Error: " + (err && err.message ? err.message : err));
+              tampilkanToast(pesanErrorRamah(err), "gagal");
             })
             .ambilDaftarUserDenganStatus(dataPengguna.token);
         }
@@ -5250,7 +5324,7 @@
           const aksi = btn.dataset.aksi;
           const userId = btn.dataset.userId;
           if (!userId) {
-            alert("User ID kosong, tidak bisa mengubah sakelar. Isi kolom User ID di db_admin dulu.");
+            tampilkanToast("User ID kosong, tidak bisa mengubah sakelar. Isi kolom User ID di db_admin dulu.", "gagal");
             return;
           }
           eksekusiAksiPerUser(userId, aksi);
@@ -5263,27 +5337,23 @@
           if (aksi === "RESET") {
             google.script.run
               .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
-              .withFailureHandler(function (err) { alert("Error: " + (err && err.message ? err.message : err)); })
+              .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
               .resetSakelarUserByAdmin(dataPengguna.token, userId);
           } else {
             google.script.run
               .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
-              .withFailureHandler(function (err) { alert("Error: " + (err && err.message ? err.message : err)); })
+              .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
               .setSakelarUserByAdmin(dataPengguna.token, userId, aksi === "BUKA");
           }
         }
 
         function hasilAksiPerUser(res) {
           if (res && res.sukses) {
-            const pesan = document.getElementById('ku-pesan-footer');
-            pesan.textContent = "✅ " + (res.pesan || "Berhasil.");
-            pesan.classList.remove('hidden', 'text-red-600');
-            pesan.classList.add('text-emerald-700');
+            tampilkanToast(res.pesan || "Berhasil.", "sukses");
             // Reload daftar
             bukaModalKelolaUser();
-            setTimeout(function () { pesan.classList.add('hidden'); }, 4000);
           } else {
-            alert("Gagal: " + (res && res.pesan ? res.pesan : "Unknown error"));
+            tampilkanToast("Gagal: " + (res && res.pesan ? res.pesan : "Unknown error"), "gagal");
           }
         }
 
@@ -5381,8 +5451,8 @@
 
         document.getElementById('bk-eksekusi').addEventListener('click', function () {
           const kec = document.getElementById('bk-kecamatan').value;
-          if (!bkAksiTerpilih) { alert("Pilih aksi dulu."); return; }
-          if (kec === undefined || kec === null) { alert("Pilih kecamatan dulu."); return; }
+          if (!bkAksiTerpilih) { tampilkanToast("Pilih aksi dulu.", "gagal"); return; }
+          if (kec === undefined || kec === null) { tampilkanToast("Pilih kecamatan dulu.", "gagal"); return; }
 
           const kecLabel = kec || "(TANPA KECAMATAN)";
           const namaAksi = bkAksiTerpilih === "BUKA" ? "membuka" : (bkAksiTerpilih === "TUTUP" ? "menutup" : "mereset");
@@ -5413,7 +5483,7 @@
             .withFailureHandler(function (err) {
               document.getElementById('bk-eksekusi').textContent = "Eksekusi";
               document.getElementById('bk-eksekusi').disabled = false;
-              alert("Error: " + (err && err.message ? err.message : err));
+              tampilkanToast(pesanErrorRamah(err), "gagal");
             })
             .bulkSakelarPerKecamatan(dataPengguna.token, kec, bkAksiTerpilih);
         });
@@ -5911,7 +5981,7 @@
         const bodyRi = document.getElementById('body-ri');
 
         if (modalRi) modalRi.classList.remove('hidden');
-        if (bodyRi) bodyRi.innerHTML = '<tr><td colspan="5" class="text-center p-4">SEDANG MEMUAT DATA...</td></tr>';
+        if (bodyRi) bodyRi.innerHTML = htmlSkeletonBaris(5, 4);
 
         google.script.run
           .withSuccessHandler(renderTable)
@@ -6267,7 +6337,7 @@
         const alamat = manualAlamat ? manualAlamat.value.trim().toUpperCase() : "";
 
         if (!nama || !alamat) {
-          alert("Mohon lengkapi nama tempat tugas dan alamat terlebih dahulu!");
+          tampilkanToast("Mohon lengkapi nama tempat tugas dan alamat terlebih dahulu!", "gagal");
           return;
         }
 
