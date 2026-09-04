@@ -527,18 +527,22 @@ function getIndeksTerdaftar_() {
   const cNik = cache.get("INDEKS_NIK");
   const cRek = cache.get("INDEKS_REK");
   const cTempat = cache.get("INDEKS_TEMPAT");
+  const cKuota = cache.get("INDEKS_KUOTA");
   
-  if (cNik && cRek && cTempat) {
-    return {
-      nik: JSON.parse(cNik),
-      rek: JSON.parse(cRek),
-      tempat: JSON.parse(cTempat)
-    };
+  if (cNik && cRek && cTempat && cKuota) {
+    try {
+      return {
+        nik: JSON.parse(cNik),
+        rek: JSON.parse(cRek),
+        tempat: JSON.parse(cTempat),
+        kuota: JSON.parse(cKuota)
+      };
+    } catch (e) {}
   }
   
   const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
   const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-  const dataMap = { nik: {}, rek: {}, tempat: {} };
+  const dataMap = { nik: {}, rek: {}, tempat: {}, kuota: {} };
   
   if (sheet && sheet.getLastRow() >= 2) {
     const lastRow = sheet.getLastRow();
@@ -555,6 +559,10 @@ function getIndeksTerdaftar_() {
       
       if (nik) dataMap.nik[nik] = nama;
       if (rek) dataMap.rek[rek] = nama;
+      if (lay && kec) {
+        const kKey = lay + "||" + kec;
+        dataMap.kuota[kKey] = (dataMap.kuota[kKey] || 0) + 1;
+      }
       if (LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(lay) !== -1) {
         if (tempat && alamat) {
           dataMap.tempat[lay + "||" + tempat + "||" + alamat] = { nama: nama, kecamatan: kec };
@@ -567,13 +575,14 @@ function getIndeksTerdaftar_() {
     cache.put("INDEKS_NIK", JSON.stringify(dataMap.nik), 10800);
     cache.put("INDEKS_REK", JSON.stringify(dataMap.rek), 10800);
     cache.put("INDEKS_TEMPAT", JSON.stringify(dataMap.tempat), 10800);
+    cache.put("INDEKS_KUOTA", JSON.stringify(dataMap.kuota), 10800);
   } catch (e) {} // Abaikan jika payload melebihi batas 100KB CacheService
   
   return dataMap;
 }
 
 function invalidateIndeksTerdaftar_() {
-  CacheService.getScriptCache().removeAll(["INDEKS_NIK", "INDEKS_REK", "INDEKS_TEMPAT"]);
+  CacheService.getScriptCache().removeAll(["INDEKS_NIK", "INDEKS_REK", "INDEKS_TEMPAT", "INDEKS_KUOTA"]);
 }
 
 // Cek 3 hal berbasis NIK sekaligus secara real-time: Domisili Capil, Status Tahun Lalu, NIK Ganda.
@@ -1343,26 +1352,37 @@ function eksporDataKeSpreadsheet(token, dataRows, namaFile) {
 // =========================================================================
 // FUNGSI MANAJEMEN KUOTA
 // =========================================================================
+function getSemuaKuotaInternal_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get("MASTER_KUOTA");
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
+  const sheet = ss.getSheetByName("db_kuota");
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
+  const list = data.filter(r => r[0] && r[1]).map(r => ({
+    kecamatan: r[0].toString().trim().toUpperCase(),
+    layanan: r[1].toString().trim().toUpperCase(),
+    kuota: Number(r[2]) || 0
+  }));
+
+  try {
+    cache.put("MASTER_KUOTA", JSON.stringify(list), 21600); // 6 jam
+  } catch (e) {}
+
+  return list;
+}
+
 function getSemuaKuota(token) {
   // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — siapa pun (termasuk yang belum
   // login) bisa menarik data kuota seluruh kecamatan+layanan lewat google.script.run langsung.
   // Kedua pemanggil (getSemuaKuotaDenganPemakaian, getProgresKuota) sudah tervalidasi sesi
   // sendiri, jadi ini murni defense-in-depth agar fungsi ini tidak bisa dipanggil telanjang.
   try { wajibSesi_(token); } catch (e) { return []; }
-
-  try {
-    const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-    const sheet = ss.getSheetByName("db_kuota");
-    if (!sheet || sheet.getLastRow() < 2) return [];
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 3).getValues();
-    return data.filter(r => r[0] && r[1]).map(r => ({
-      kecamatan: r[0].toString().trim().toUpperCase(),
-      layanan: r[1].toString().trim().toUpperCase(),
-      kuota: Number(r[2]) || 0
-    }));
-  } catch (e) {
-    return [];
-  }
+  return getSemuaKuotaInternal_();
 }
 
 function simpanKuota(token, kecamatan, layanan, kuota) {
@@ -1394,15 +1414,25 @@ function simpanKuota(token, kecamatan, layanan, kuota) {
     const kuotaNum = Number(kuota) || 0;
 
     const data = sheet.getDataRange().getValues();
+    let diubah = false;
     for (let i = 1; i < data.length; i++) {
       if (data[i][0].toString().trim().toUpperCase() === kecUpper &&
           data[i][1].toString().trim().toUpperCase() === layUpper) {
         sheet.getRange(i + 1, 3).setValue(kuotaNum);
-        return { sukses: true, pesan: "Kuota berhasil diperbarui." };
+        diubah = true;
+        break;
       }
     }
-    sheet.appendRow([kecUpper, layUpper, kuotaNum]);
-    return { sukses: true, pesan: "Kuota berhasil ditambahkan." };
+    if (!diubah) {
+      sheet.appendRow([kecUpper, layUpper, kuotaNum]);
+    }
+    
+    // Invalidate cache master kuota
+    try {
+      CacheService.getScriptCache().remove("MASTER_KUOTA");
+    } catch (eCache) {}
+
+    return { sukses: true, pesan: diubah ? "Kuota berhasil diperbarui." : "Kuota berhasil ditambahkan." };
   } catch (e) {
     return { sukses: false, pesan: e.toString() };
   } finally {
@@ -1412,25 +1442,18 @@ function simpanKuota(token, kecamatan, layanan, kuota) {
 
 function cekKuotaTersedia(kecamatan, layanan, jumlahTerpakaiOverride) {
   try {
-    const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-    const sheetKuota = ss.getSheetByName("db_kuota");
-    if (!sheetKuota) return { tersedia: false, pesan: "Sheet kuota tidak ditemukan." };
+    const kecUpper = (kecamatan || "").toString().trim().toUpperCase();
+    const layUpper = (layanan || "").toString().trim().toUpperCase();
 
-    const kecUpper = kecamatan.toString().trim().toUpperCase();
-    const layUpper = layanan.toString().trim().toUpperCase();
-
+    const listKuota = getSemuaKuotaInternal_();
     let kuotaMaks = 0;
     let kuotaDitemukan = false;
 
-    if (sheetKuota.getLastRow() >= 2) {
-      const dataKuota = sheetKuota.getDataRange().getValues();
-      for (let i = 1; i < dataKuota.length; i++) {
-        if (dataKuota[i][0].toString().trim().toUpperCase() === kecUpper &&
-            dataKuota[i][1].toString().trim().toUpperCase() === layUpper) {
-          kuotaMaks = Number(dataKuota[i][2]) || 0;
-          kuotaDitemukan = true;
-          break;
-        }
+    for (let i = 0; i < listKuota.length; i++) {
+      if (listKuota[i].kecamatan === kecUpper && listKuota[i].layanan === layUpper) {
+        kuotaMaks = listKuota[i].kuota;
+        kuotaDitemukan = true;
+        break;
       }
     }
 
@@ -1447,20 +1470,26 @@ function cekKuotaTersedia(kecamatan, layanan, jumlahTerpakaiOverride) {
       // Sudah dihitung sebelumnya (oleh validasiDataBaru_ dalam loop yang sama) — tidak perlu baca ulang sheet.
       jumlahTerpakai = jumlahTerpakaiOverride;
     } else {
-      // Dipanggil berdiri sendiri (bukan dari validasiDataBaru_) — tetap hitung manual seperti biasa.
-      const ssPenyimpanan = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-      const sheetData = ssPenyimpanan.getSheetByName(NAMA_SHEET_INPUT);
-      if (!sheetData || sheetData.getLastRow() < 2) {
-        return { tersedia: true, terpakai: 0, maks: kuotaMaks };
-      }
-      const lastRowData = sheetData.getLastRow();
-      // Kolom H(8)=Layanan, I(9)=Tempat Tugas, J(10)=Alamat Tugas, K(11)=Kecamatan — baca 4 kolom, pakai H & K saja.
-      const dataInput = sheetData.getRange(2, 8, lastRowData - 1, 4).getValues();
-      jumlahTerpakai = 0;
-      for (let i = 0; i < dataInput.length; i++) {
-        const laySheet = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : "";
-        const kecSheet = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : "";
-        if (kecSheet === kecUpper && laySheet === layUpper) jumlahTerpakai++;
+      // Cek dari cache indeks terdaftar terlebih dahulu (0 API call)
+      const indeks = getIndeksTerdaftar_();
+      const kKey = layUpper + "||" + kecUpper;
+      if (indeks && indeks.kuota && typeof indeks.kuota[kKey] === "number") {
+        jumlahTerpakai = indeks.kuota[kKey];
+      } else {
+        const ssPenyimpanan = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
+        const sheetData = ssPenyimpanan.getSheetByName(NAMA_SHEET_INPUT);
+        if (!sheetData || sheetData.getLastRow() < 2) {
+          return { tersedia: true, terpakai: 0, maks: kuotaMaks };
+        }
+        const lastRowData = sheetData.getLastRow();
+        // Kolom H(8)=Layanan, I(9)=Tempat Tugas, J(10)=Alamat Tugas, K(11)=Kecamatan — baca 4 kolom, pakai H & K saja.
+        const dataInput = sheetData.getRange(2, 8, lastRowData - 1, 4).getValues();
+        jumlahTerpakai = 0;
+        for (let i = 0; i < dataInput.length; i++) {
+          const laySheet = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : "";
+          const kecSheet = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : "";
+          if (kecSheet === kecUpper && laySheet === layUpper) jumlahTerpakai++;
+        }
       }
     }
 
@@ -1499,10 +1528,12 @@ function getSemuaKuotaDenganPemakaian(token) {
 
     const pemakaian = {};
     if (sheet && sheet.getLastRow() >= 2) {
-      const dataInput = sheet.getDataRange().getValues();
-      for (let i = 1; i < dataInput.length; i++) {
-        const kec = dataInput[i][10] ? dataInput[i][10].toString().trim().toUpperCase() : "";
-        const lay = dataInput[i][7] ? dataInput[i][7].toString().trim().toUpperCase() : "";
+      const lastRow = sheet.getLastRow();
+      // Baca HANYA Kolom H(8) s/d K(11) — 4 kolom (Layanan s/d Kecamatan), alih-alih seluruh 40 kolom
+      const dataInput = sheet.getRange(2, 8, lastRow - 1, 4).getValues();
+      for (let i = 0; i < dataInput.length; i++) {
+        const lay = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : ""; // H
+        const kec = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : ""; // K
         if (kec && lay) {
           const key = lay + "||" + kec;
           pemakaian[key] = (pemakaian[key] || 0) + 1;
@@ -1584,10 +1615,12 @@ function getProgresKuota(token) {
     const sheetP = ssP.getSheetByName(NAMA_SHEET_INPUT);
     const pemakaian = {};
     if (sheetP && sheetP.getLastRow() >= 2) {
-      const dataInput = sheetP.getDataRange().getValues();
-      for (let i = 1; i < dataInput.length; i++) {
-        const lay = dataInput[i][7] ? dataInput[i][7].toString().trim().toUpperCase() : "";
-        const kec = dataInput[i][10] ? dataInput[i][10].toString().trim().toUpperCase() : "";
+      const lastRow = sheetP.getLastRow();
+      // Baca HANYA Kolom H(8) s/d K(11) — 4 kolom (Layanan s/d Kecamatan), alih-alih seluruh 40 kolom
+      const dataInput = sheetP.getRange(2, 8, lastRow - 1, 4).getValues();
+      for (let i = 0; i < dataInput.length; i++) {
+        const lay = dataInput[i][0] ? dataInput[i][0].toString().trim().toUpperCase() : ""; // H
+        const kec = dataInput[i][3] ? dataInput[i][3].toString().trim().toUpperCase() : ""; // K
         if (!lay || !kec) continue;
         const key = lay + "||" + kec;
         pemakaian[key] = (pemakaian[key] || 0) + 1;
@@ -1682,10 +1715,8 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
     }
 
     const lastRow = sheet.getLastRow();
-    const dataLayanan = sheet.getRange(2, 8, lastRow - 1, 1).getValues();
-    const dataTempatTugas = sheet.getRange(2, 9, lastRow - 1, 1).getValues();
-    const dataKecamatan = sheet.getRange(2, 11, lastRow - 1, 1).getValues();
-    const dataKelurahan = sheet.getRange(2, 12, lastRow - 1, 1).getValues();
+    // Baca rentang kolom 8 s/d 12 (5 kolom: Layanan, Tempat Tugas, Alamat Tugas, Kecamatan, Kelurahan) sekaligus
+    const dataWilayah = sheet.getRange(2, 8, lastRow - 1, 5).getValues();
     const dataStatus = sheet.getRange(2, 33, lastRow - 1, 1).getValues();
 
     // Kalau USER_ID akun ini diawali "KELURAHAN ", batasi rekap cuma ke kelurahan itu.
@@ -1713,11 +1744,11 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
       });
     }
 
-    for (let i = 0; i < dataLayanan.length; i++) {
-      const lay = (dataLayanan[i][0] || "").toString().trim().toUpperCase();
-      const kec = (dataKecamatan[i][0] || "").toString().trim().toUpperCase();
-      const kel = (dataKelurahan[i][0] || "").toString().trim().toUpperCase();
-      const tempatTugas = (dataTempatTugas[i][0] || "").toString().trim().toUpperCase();
+    for (let i = 0; i < dataWilayah.length; i++) {
+      const lay = (dataWilayah[i][0] || "").toString().trim().toUpperCase();
+      const kec = (dataWilayah[i][3] || "").toString().trim().toUpperCase();
+      const kel = (dataWilayah[i][4] || "").toString().trim().toUpperCase();
+      const tempatTugas = (dataWilayah[i][1] || "").toString().trim().toUpperCase();
       if (!lay) continue;
 
       if (role === "KECAMATAN" && kec !== kecUser) continue;
@@ -2758,30 +2789,20 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
 
     const nikBerubah = (teks[2] !== undefined) && nikBaruEdit !== (rowLama[2] || "").toString().trim();
     const rekBerubah = (teks[13] !== undefined) && rekBaruEdit !== (rowLama[13] || "").toString().trim();
-    const tempatTugasBerubah = (teks[8] !== undefined) || (teks[9] !== undefined);
+    const tempatBerubah = (tempatTugasBaruEdit !== rapikanTeks_(rowLama[8])) || (alamatTugasBaruEdit !== rapikanTeks_(rowLama[9]));
 
-    if (nikBerubah || rekBerubah || tempatTugasBerubah) {
-      const lastRowCek = sheet.getLastRow();
-      if (lastRowCek > 1) {
-        const dataCek = sheet.getRange(2, 1, lastRowCek - 1, 14).getValues();
-        for (let i = 0; i < dataCek.length; i++) {
-          if (i + 2 === baris) continue; // lewati baris yang sedang diedit sendiri
-          if (dataCek[i].length < 14) continue;
-
-          if (nikBerubah && (dataCek[i][2] || "").toString().trim() === nikBaruEdit) {
-            return { sukses: false, pesan: "GAGAL: NIK " + nikBaruEdit + " sudah terdaftar atas nama " + (dataCek[i][1] || "").toString().trim() + "." };
-          }
-          if (rekBerubah && (dataCek[i][13] || "").toString().trim() === rekBaruEdit) {
-            return { sukses: false, pesan: "GAGAL: Nomor rekening " + rekBaruEdit + " sudah digunakan oleh " + (dataCek[i][1] || "").toString().trim() + "." };
-          }
-          if (tempatTugasBerubah && LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(layananSheet) !== -1) {
-            const tempatTerdaftar = rapikanTeks_(dataCek[i][8]);
-            const alamatTerdaftar = rapikanTeks_(dataCek[i][9]);
-            const layananTerdaftar = (dataCek[i][7] || "").toString().trim().toUpperCase();
-            if (tempatTerdaftar === tempatTugasBaruEdit && alamatTerdaftar === alamatTugasBaruEdit && layananTerdaftar === layananSheet) {
-              return { sukses: false, pesan: "GAGAL: " + tempatTugasBaruEdit + " sudah memiliki penerima untuk layanan " + layananSheet + " atas nama " + (dataCek[i][1] || "").toString().trim() + "." };
-            }
-          }
+    if (nikBerubah || rekBerubah || (tempatBerubah && LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(layananSheet) !== -1)) {
+      const indeks = getIndeksTerdaftar_();
+      if (nikBerubah && indeks.nik[nikBaruEdit]) {
+        return { sukses: false, pesan: "GAGAL: NIK " + nikBaruEdit + " sudah terdaftar atas nama " + indeks.nik[nikBaruEdit] + "." };
+      }
+      if (rekBerubah && indeks.rek[rekBaruEdit]) {
+        return { sukses: false, pesan: "GAGAL: Nomor rekening " + rekBaruEdit + " sudah digunakan oleh " + indeks.rek[rekBaruEdit] + "." };
+      }
+      if (tempatBerubah && LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(layananSheet) !== -1) {
+        const tKey = layananSheet + "||" + tempatTugasBaruEdit + "||" + alamatTugasBaruEdit;
+        if (indeks.tempat[tKey]) {
+          return { sukses: false, pesan: "GAGAL: " + tempatTugasBaruEdit + " sudah memiliki penerima untuk layanan " + layananSheet + " atas nama " + indeks.tempat[tKey].nama + "." };
         }
       }
     }
@@ -2854,6 +2875,7 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
     }
 
     SpreadsheetApp.flush();
+    invalidateIndeksTerdaftar_(); // Invalidate cache agar indeks terdaftar langsung ter-refresh
 
     // ── Catat riwayat ke db_riwayat_edit ──
     if (riwayat.length > 0) {
@@ -3118,25 +3140,33 @@ function getDaftarBerkasTidakLengkapUntukWA(token) {
     if (!sheet || sheet.getLastRow() < 2) return { sukses: true, data: [] };
 
     const lastRow = sheet.getLastRow();
-    const dataNama = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
-    const dataNik = sheet.getRange(2, 3, lastRow - 1, 1).getValues();
-    const dataLayanan = sheet.getRange(2, 8, lastRow - 1, 1).getValues();
-    const dataKecamatan = sheet.getRange(2, 11, lastRow - 1, 1).getValues();
-    const dataKelurahan = sheet.getRange(2, 12, lastRow - 1, 1).getValues();
-    const dataVerif = sheet.getRange(2, 33, lastRow - 1, 5).getValues(); // Status,Keterangan,Tanggal,Oleh,BatasWaktu
-
-    const hasil = [];
+    // 1. Baca kolom verifikasi terlebih dahulu (kolom 33 s/d 37: 5 kolom)
+    const dataVerif = sheet.getRange(2, 33, lastRow - 1, 5).getValues();
+    const indeksMatch = [];
     for (let i = 0; i < dataVerif.length; i++) {
-      const status = (dataVerif[i][0] || "").toString().trim();
-      if (status !== "Berkas Tidak Lengkap") continue;
+      if ((dataVerif[i][0] || "").toString().trim() === "Berkas Tidak Lengkap") {
+        indeksMatch.push(i);
+      }
+    }
+    // Jika tidak ada data Berkas Tidak Lengkap, langsung return (hanya 1 API call!)
+    if (indeksMatch.length === 0) return { sukses: true, data: [] };
+
+    // 2. Jika ada, baca rentang kolom identitas (kolom 2 s/d 12: 11 kolom) dalam 1 panggilan API tunggal
+    // Kolom B(2)=Nama, C(3)=NIK, H(8)=Layanan, K(11)=Kecamatan, L(12)=Kelurahan
+    const dataIdentitas = sheet.getRange(2, 2, lastRow - 1, 11).getValues();
+    const hasil = [];
+    for (let j = 0; j < indeksMatch.length; j++) {
+      const i = indeksMatch[j];
+      const rId = dataIdentitas[i];
+      const rVf = dataVerif[i];
       hasil.push({
-        nama: (dataNama[i][0] || "").toString().trim(),
-        nik: (dataNik[i][0] || "").toString().replace(/'/g, "").trim(),
-        layanan: (dataLayanan[i][0] || "").toString().trim(),
-        kecamatan: (dataKecamatan[i][0] || "").toString().trim(),
-        kelurahan: (dataKelurahan[i][0] || "").toString().trim(),
-        keterangan: (dataVerif[i][1] || "").toString().trim(),
-        batasWaktu: dataVerif[i][4] ? Utilities.formatDate(new Date(dataVerif[i][4]), "GMT+7", "yyyy-MM-dd") : ""
+        nama: (rId[0] || "").toString().trim(),
+        nik: (rId[1] || "").toString().replace(/'/g, "").trim(),
+        layanan: (rId[6] || "").toString().trim(),
+        kecamatan: (rId[9] || "").toString().trim(),
+        kelurahan: (rId[10] || "").toString().trim(),
+        keterangan: (rVf[1] || "").toString().trim(),
+        batasWaktu: rVf[4] ? Utilities.formatDate(new Date(rVf[4]), "GMT+7", "yyyy-MM-dd") : ""
       });
     }
 
@@ -3429,13 +3459,18 @@ function ambilDataTahunHakAkses(token, tahun) {
 function cekDomisiliCapil_(token, nik) {
   try {
     // KEAMANAN: fungsi ini membocorkan nama+alamat domisili+status seseorang berdasarkan NIK.
-    // Sebelumnya tidak menerima/mengecek token sama sekali — karena ini fungsi top-level, Apps
-    // Script tetap mengeksposnya ke google.script.run dari browser terlepas dari akhiran "_",
-    // sehingga bisa dipanggil langsung tanpa login untuk mengintip data warga per NIK. Sesi wajib
-    // divalidasi dulu; kalau tidak sah, kembalikan hasil "tidak ditemukan" (bentuk yang sama
-    // dipakai untuk kegagalan baca sheet di bawah) supaya tidak ada data yang bocor maupun error
-    // yang mengganggu alur validasi form bagi pemanggil yang sah.
+    // Sesi wajib divalidasi dulu; kalau tidak sah, kembalikan hasil "tidak ditemukan".
     try { wajibSesi_(token); } catch (eSesi) { return { ditemukan: false }; }
+
+    const nikTarget = (nik || "").toString().trim();
+    if (!nikTarget) return { ditemukan: false };
+
+    const cache = CacheService.getScriptCache();
+    const cCapilMap = cache.get("CAPIL_NIK_MAP");
+    let capilMap = null;
+    if (cCapilMap) {
+      try { capilMap = JSON.parse(cCapilMap); } catch (e) {}
+    }
 
     const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
     const sheet = ss.getSheetByName("db_capil");
@@ -3444,23 +3479,35 @@ function cekDomisiliCapil_(token, nik) {
       return { ditemukan: false };
     }
 
-    const nikTarget = nik.toString().trim();
-    // Ambil kolom A-K sekaligus (11 kolom) untuk efisiensi.
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues();
-
-    for (let i = 0; i < data.length; i++) {
-      const nikSheet = (data[i][1] || "").toString().trim(); // kolom B
-      if (nikSheet === nikTarget) {
-        return {
-          ditemukan: true,
-          nama: (data[i][0] || "").toString().trim(),                // A
-          nik: nikTarget,                                             // B
-          status: (data[i][8] || "").toString().trim(),               // I = STATUS
-          alamatDomisili: (data[i][9] || "").toString().trim(),      // J
-          kabKotaDomisili: (data[i][10] || "").toString().trim()     // K
-        };
+    // Jika map belum ada di cache, buat map dengan membaca HANYA Kolom B (NIK - 1 kolom saja)
+    if (!capilMap) {
+      const lastRow = sheet.getLastRow();
+      const dataNik = sheet.getRange(2, 2, lastRow - 1, 1).getValues(); // Kolom B
+      capilMap = {};
+      for (let i = 0; i < dataNik.length; i++) {
+        const n = (dataNik[i][0] || "").toString().trim();
+        if (n) capilMap[n] = i + 2; // Simpan nomor baris asli (2-based)
       }
+      try {
+        cache.put("CAPIL_NIK_MAP", JSON.stringify(capilMap), 21600); // Cache 6 jam
+      } catch (e) {}
     }
+
+    // Cek apakah NIK terdaftar di Capil (warga luar Kota Medan)
+    if (capilMap && capilMap[nikTarget]) {
+      const targetRow = capilMap[nikTarget];
+      // Ambil detail baris SPESIFIK tersebut saja (1 baris x 11 kolom)
+      const rowData = sheet.getRange(targetRow, 1, 1, 11).getValues()[0];
+      return {
+        ditemukan: true,
+        nama: (rowData[0] || "").toString().trim(),                // A
+        nik: nikTarget,                                           // B
+        status: (rowData[8] || "").toString().trim(),             // I = STATUS
+        alamatDomisili: (rowData[9] || "").toString().trim(),      // J
+        kabKotaDomisili: (rowData[10] || "").toString().trim()     // K
+      };
+    }
+
     return { ditemukan: false };
   } catch (e) {
     Logger.log("cekDomisiliCapil_ error: " + e.toString());
@@ -3474,10 +3521,11 @@ function cekDomisiliCapil_(token, nik) {
 function cekStatusTahunLalu_(token, nik) {
   try {
     // KEAMANAN: sama seperti cekDomisiliCapil_ — fungsi ini membocorkan nama+status+layanan
-    // seseorang di tahun-tahun sebelumnya berdasarkan NIK, dan sebelumnya bisa dipanggil langsung
-    // tanpa login. Wajib sesi sah dulu; kalau tidak, kembalikan "tidak ditemukan" (aman, konsisten
-    // dengan fallback error lain di fungsi ini).
+    // seseorang di tahun-tahun sebelumnya berdasarkan NIK. Wajib sesi sah dulu.
     try { wajibSesi_(token); } catch (eSesi) { return { ditemukan: false }; }
+
+    const nikTarget = (nik || "").toString().trim();
+    if (!nikTarget) return { ditemukan: false };
 
     var ssMaster  = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
     var sheets    = ssMaster.getSheets();
@@ -3489,7 +3537,7 @@ function cekStatusTahunLalu_(token, nik) {
       .filter(function(sh) { return /^db_\d{4}$/.test(sh.getName()); })
       .sort(function(a, b) { return Number(b.getName().slice(3)) - Number(a.getName().slice(3)); });
 
-    var nikTarget = nik.toString().trim();
+    const cache = CacheService.getScriptCache();
 
     for (var s = 0; s < sheetDb.length; s++) {
       var sh  = sheetDb[s];
@@ -3499,33 +3547,48 @@ function cekStatusTahunLalu_(token, nik) {
       var lastRow = sh.getLastRow();
       if (lastRow < 2) continue;
 
-      // Ambil semua data sekaligus untuk menghindari multiple getRange calls
-      // Kolom A(1) s/d S(19) — 19 kolom
-      try {
-        var semuaData = sh.getRange(2, 1, lastRow - 1, 19).getValues();
-        for (var i = 0; i < semuaData.length; i++) {
-          var r = semuaData[i];
-          // NIK kolom C = indeks 2 (0-based)
-          var nikSheet = (r[2] || "").toString().trim();
-          if (nikSheet === nikTarget) {
-            var status  = (r[18] || "").toString().trim().toUpperCase(); // kolom S
-            var nama    = (r[1]  || "").toString().trim();               // kolom B
-            var layanan = (r[7]  || "").toString().trim().toUpperCase(); // kolom H
-            Logger.log("cekStatusTahunLalu_: NIK ditemukan di " + sh.getName() + " status=" + status);
-            return {
-              ditemukan : true,
-              status    : status,
-              aktif     : status === "AKTIF",
-              nama      : nama,
-              layanan   : layanan,
-              tahun     : thn
-            };
+      // Cek cache map NIK untuk tahun ini
+      var cacheKey = "STATUS_THN_" + thn;
+      var cMap = cache.get(cacheKey);
+      var thnMap = null;
+      if (cMap) {
+        try { thnMap = JSON.parse(cMap); } catch (e) {}
+      }
+
+      if (!thnMap) {
+        try {
+          // Ambil HANYA Kolom C (NIK - 1 kolom saja) alih-alih 19 kolom seluruh tabel
+          var nikData = sh.getRange(2, 3, lastRow - 1, 1).getValues();
+          thnMap = {};
+          for (var i = 0; i < nikData.length; i++) {
+            var n = (nikData[i][0] || "").toString().trim();
+            if (n) thnMap[n] = i + 2; // Baris asli di sheet
           }
+          try {
+            cache.put(cacheKey, JSON.stringify(thnMap), 21600); // 6 jam
+          } catch (eCache) {}
+        } catch (eInner) {
+          // Sheet mungkin masih loading IMPORTRANGE — catat dan lanjut ke sheet berikutnya
+          Logger.log("cekStatusTahunLalu_ skip " + sh.getName() + ": " + eInner.toString());
+          continue;
         }
-      } catch(eInner) {
-        // Sheet mungkin masih loading IMPORTRANGE — catat dan lanjut ke sheet berikutnya
-        Logger.log("cekStatusTahunLalu_ skip " + sh.getName() + ": " + eInner.toString());
-        continue;
+      }
+
+      if (thnMap && thnMap[nikTarget]) {
+        var targetRow = thnMap[nikTarget];
+        var r = sh.getRange(targetRow, 1, 1, 19).getValues()[0];
+        var status  = (r[18] || "").toString().trim().toUpperCase(); // kolom S
+        var nama    = (r[1]  || "").toString().trim();               // kolom B
+        var layanan = (r[7]  || "").toString().trim().toUpperCase(); // kolom H
+        Logger.log("cekStatusTahunLalu_: NIK ditemukan di " + sh.getName() + " status=" + status);
+        return {
+          ditemukan : true,
+          status    : status,
+          aktif     : status === "AKTIF",
+          nama      : nama,
+          layanan   : layanan,
+          tahun     : thn
+        };
       }
     }
     return { ditemukan: false };
