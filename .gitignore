@@ -1,0 +1,13 @@
+# OS metadata
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Vercel
+.vercel
+
+# Node
+node_modules/
+
+# Logs
+*.log

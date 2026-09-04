@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sistem Layanan Data Penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027</title>
+  <meta name="description"
+    content="Aplikasi Pendataan Penerima Dana Jasa Pelayanan Warga Pelayan Masyarakat Kota Medan Tahun 2027 - Dinas Sosial Kota Medan">
+  <meta name="theme-color" content="#0284c7">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    #app-frame {
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
+      border: none;
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease, visibility 0.4s ease;
+    }
+
+    #loader.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid #e2e8f0;
+      border-top: 4px solid #0284c7;
+      border-radius: 50%;
+      animation: spin 0.9s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+    }
+
+    .loading-text {
+      margin-top: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #334155;
+      letter-spacing: 0.02em;
+    }
+
+    .loading-subtext {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    #fallback-btn {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 20;
+      background-color: #0284c7;
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+      transition: transform 0.2s, background-color 0.2s;
+    }
+
+    #fallback-btn:hover {
+      background-color: #0369a1;
+      transform: translateY(-1px);
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Loading Screen -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div class="loading-text">Memuat Sistem Layanan Data 2027...</div>
+    <div class="loading-subtext">Menghubungkan ke server Google Apps Script Kota Medan</div>
+  </div>
+
+  <!-- Fallback Button in case browser blocks iframe cross-origin storage -->
+  <a id="fallback-btn"
+    href="https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec"
+    target="_blank" rel="noopener noreferrer">
+    Buka Langsung di Tab Baru &nearr;
+  </a>
+
+  <!-- Seamless Fullscreen Web App Frame -->
+  <iframe id="app-frame"
+    src="https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec"
+    allow="geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *"
+    allowfullscreen="true" loading="eager" title="Sistem Layanan Data Penerima Dana Jasa Pelayanan 2027">
+  </iframe>
+
+  <script>
+    const iframe = document.getElementById('app-frame');
+    const loader = document.getElementById('loader');
+    const fallbackBtn = document.getElementById('fallback-btn');
+
+    // Sembunyikan loader setelah iframe selesai dimuat
+    iframe.addEventListener('load', function () {
+      setTimeout(function () {
+        loader.classList.add('hidden');
+      }, 500);
+    });
+
+    // Timeout cadangan: jika koneksi lambat atau iframe tertahan cookie 3rd-party
+    setTimeout(function () {
+      if (!loader.classList.contains('hidden')) {
+        loader.classList.add('hidden');
+      }
+      fallbackBtn.style.display = 'inline-flex';
+    }, 7000);
+  </script>
+</body>
+
+</html>
