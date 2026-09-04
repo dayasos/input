@@ -84,7 +84,6 @@ function doPost(e) {
       "getSemuaKuota"                    : getSemuaKuota,
       "simpanKuota"                      : simpanKuota,
       "cekKuotaTersedia"                 : cekKuotaTersedia,
-      "getSemuaKuotaDenganPemakaian"     : getSemuaKuotaDenganPemakaian,
       "getProgresKuota"                  : getProgresKuota,
       "getDashboardProgresVerifikasi"    : getDashboardProgresVerifikasi,
       "kirimPesanChat"                   : kirimPesanChat,
@@ -612,9 +611,8 @@ function invalidateIndeksTerdaftar_() {
 
 // =========================================================================
 // SNAPSHOT RINGAN NAMA_SHEET_INPUT — dipakai bersama oleh fungsi Lihat Data & Dashboard
-// (ambilDataLihatDataHakAkses, getSemuaKuotaDenganPemakaian, getProgresKuota, getDashboardProgresVerifikasi)
-// supaya sheet transaksi (yang terus tumbuh sepanjang periode input) tidak dibaca ulang dari nol
-// oleh 4 fungsi berbeda tiap kali salah satu tab dibuka.
+// (ambilDataLihatDataHakAkses, getProgresKuota, getDashboardProgresVerifikasi) supaya sheet transaksi
+// (yang terus tumbuh sepanjang periode input) tidak dibaca ulang dari nol tiap kali salah satu tab dibuka.
 // =========================================================================
 const KUNCI_CACHE_SNAPSHOT_INPUT = "SNAPSHOT_INPUT_V1";
 const TTL_CACHE_SNAPSHOT_INPUT_DETIK = 90; // pendek (bukan jam-jaman) karena data transaksi sering berubah
@@ -967,7 +965,7 @@ function simpanDataKeSheet(token, formObject) {
     ]);
 
     SpreadsheetApp.flush();
-    invalidateSemuaCacheData_(); // Bersihkan cache indeks & snapshot listing/dashboard agar data ter-refresh
+    invalidateSemuaCacheData_();
 
     return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
   } catch (error) {
@@ -1549,60 +1547,6 @@ function cekKuotaTersedia(kecamatan, layanan, jumlahTerpakaiOverride) {
     return { tersedia: true, terpakai: jumlahTerpakai, maks: kuotaMaks };
   } catch (e) {
     return { tersedia: false, pesan: "Error cek kuota: " + e.toString() };
-  }
-}
-
-function getSemuaKuotaDenganPemakaian(token) {
-  let sesi;
-  try {
-    sesi = wajibSesi_(token);
-  } catch (e) {
-    return { kecamatanList: [], layananList: [], matriksData: {}, pesan: e.message };
-  }
-  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
-    return { kecamatanList: [], layananList: [], matriksData: {}, pesan: "Fitur ini khusus Admin Utama." };
-  }
-  try {
-    const listKuota = getSemuaKuota(token);
-    if (listKuota.length === 0) return { kecamatanList: [], layananList: [], matriksData: {} };
-
-    // Pakai snapshot ringan bersama (lihat getSnapshotSheetInput_) alih-alih baca sheet sendiri.
-    const barisSnapshot = getSnapshotSheetInput_();
-    const pemakaian = {};
-    for (let i = 0; i < barisSnapshot.length; i++) {
-      const lay = barisSnapshot[i][6] ? barisSnapshot[i][6].toString().trim().toUpperCase() : ""; // LAYANAN
-      const kec = barisSnapshot[i][9] ? barisSnapshot[i][9].toString().trim().toUpperCase() : ""; // KECAMATAN
-      if (kec && lay) {
-        const key = lay + "||" + kec;
-        pemakaian[key] = (pemakaian[key] || 0) + 1;
-      }
-    }
-
-    const setKecamatan = new Set();
-    const setLayanan = new Set();
-    listKuota.forEach(item => {
-      setKecamatan.add(item.kecamatan);
-      setLayanan.add(item.layanan);
-    });
-
-    const kecamatanList = Array.from(setKecamatan).sort();
-    const layananList = Array.from(setLayanan).sort();
-
-    const matriksData = {};
-    listKuota.forEach(item => {
-      if (!matriksData[item.layanan]) matriksData[item.layanan] = {};
-      const key = item.layanan + "||" + item.kecamatan;
-      const terpakai = pemakaian[key] || 0;
-      matriksData[item.layanan][item.kecamatan] = {
-        kuota: item.kuota,
-        terpakai: terpakai,
-        sisa: item.kuota - terpakai
-      };
-    });
-
-    return { kecamatanList, layananList, matriksData };
-  } catch (e) {
-    return { kecamatanList: [], layananList: [], matriksData: {}, pesan: e.toString() };
   }
 }
 
@@ -2824,7 +2768,7 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
     }
 
     SpreadsheetApp.flush();
-    invalidateSemuaCacheData_(); // Invalidate cache indeks & snapshot listing/dashboard agar langsung ter-refresh
+    invalidateSemuaCacheData_();
 
     // ── Catat riwayat ke db_riwayat_edit ──
     if (riwayat.length > 0) {
