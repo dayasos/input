@@ -47,6 +47,27 @@
         transform: rotate(360deg);
       }
     }
+
+    /* Animasi ringan (CSS murni, tanpa library) untuk kartu Dashboard Progres Verifikasi */
+    @keyframes kartuMasuk {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .kartu-dashboard-animasi {
+      animation: kartuMasuk .35s ease-out both;
+    }
+
+    .bar-progres-animasi {
+      transition: width .6s ease-out;
+    }
   </style>
   <script src="/js/api-bridge.js"></script>
 </head>
@@ -4252,6 +4273,7 @@
             pulihkanTombol(btn);
             if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal', { durasi: 6000 }); return; }
             tampilkanToast('Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".', 'sukses');
+            cacheDashboardProgres = {}; // basi-kan cache dashboard, jumlah status ikut berubah
             inisialisasiMenuLihatData(); // muat ulang tabel supaya badge ter-update
           })
           .withFailureHandler(function (err) {
@@ -4418,49 +4440,73 @@
         muatDashboardProgres();
       });
 
+      // Cache ringan per filter kecamatan — dipakai supaya gonta-ganti filter atau buka-tutup modal
+      // dalam waktu singkat tidak perlu round-trip ke server tiap kali. TTL diselaraskan dengan
+      // TTL_CACHE_SNAPSHOT_INPUT_DETIK di backend (90 detik) supaya tidak menampilkan data yang lebih basi
+      // daripada yang sudah dijamin backend.
+      let cacheDashboardProgres = {}; // { [kecFilter]: { res, waktu } }
+      const TTL_CACHE_DASHBOARD_PROGRES_MS = 90 * 1000;
+
       function muatDashboardProgres() {
         const kecFilter = document.getElementById('filter-dashboard-kecamatan').value || "";
         const isi = document.getElementById('isi-dashboard-progres');
+
+        const tersimpan = cacheDashboardProgres[kecFilter];
+        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_DASHBOARD_PROGRES_MS) {
+          renderDashboardProgres(tersimpan.res, kecFilter);
+          return;
+        }
+
         isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Memuat dashboard...</p></div>`;
 
         google.script.run
           .withSuccessHandler(function (res) {
             if (!res || !res.sukses) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Gagal memuat: ${res ? esc(res.pesan) : 'tidak diketahui'}</p>`; return; }
+            cacheDashboardProgres[kecFilter] = { res: res, waktu: Date.now() };
+            renderDashboardProgres(res, kecFilter);
+          })
+          .withFailureHandler(function (err) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Error: ${esc(err.message || err)}</p>`; })
+          .getDashboardProgresVerifikasi(dataPengguna.token, kecFilter);
+      }
 
-            const judulModal = document.getElementById('judul-modal-dashboard');
-            if (judulModal) {
-              const kecUntukJudul = kecFilter || dataPengguna.kecamatan || '';
-              let teksJudul = '📊 Dashboard Progres Verifikasi' + (kecUntukJudul ? ' — ' + kecUntukJudul.toUpperCase() : '');
-              if (dataPengguna.kelurahanTerkunci) {
-                teksJudul += ' — ' + dataPengguna.kelurahanTerkunci;
-              }
-              judulModal.innerText = teksJudul;
-            }
+      function renderDashboardProgres(res, kecFilter) {
+        const isi = document.getElementById('isi-dashboard-progres');
 
-            const filterWrap = document.getElementById('filter-dashboard-wrap');
-            if (res.bisaFilterKecamatan) {
-              filterWrap.classList.remove('hidden');
-              const sel = document.getElementById('filter-dashboard-kecamatan');
-              if (sel.options.length <= 1) {
-                DAFTAR_KECAMATAN_MEDAN.forEach(function (k) {
-                  const o = document.createElement('option'); o.value = k; o.text = k; sel.appendChild(o);
-                });
-              }
-            }
+        const judulModal = document.getElementById('judul-modal-dashboard');
+        if (judulModal) {
+          const kecUntukJudul = kecFilter || dataPengguna.kecamatan || '';
+          let teksJudul = '📊 Dashboard Progres Verifikasi' + (kecUntukJudul ? ' — ' + kecUntukJudul.toUpperCase() : '');
+          if (dataPengguna.kelurahanTerkunci) {
+            teksJudul += ' — ' + dataPengguna.kelurahanTerkunci;
+          }
+          judulModal.innerText = teksJudul;
+        }
 
-            if (!res.kartu || res.kartu.length === 0) {
-              isi.innerHTML = `<p class="text-slate-400 italic text-sm text-center py-6">Belum ada data untuk ditampilkan.</p>`;
-              return;
-            }
+        const filterWrap = document.getElementById('filter-dashboard-wrap');
+        if (res.bisaFilterKecamatan) {
+          filterWrap.classList.remove('hidden');
+          const sel = document.getElementById('filter-dashboard-kecamatan');
+          if (sel.options.length <= 1) {
+            DAFTAR_KECAMATAN_MEDAN.forEach(function (k) {
+              const o = document.createElement('option'); o.value = k; o.text = k; sel.appendChild(o);
+            });
+          }
+        }
 
-            isi.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">` +
-              res.kartu.map(function (k) {
-                const selesai = k.memenuhiSyarat + k.tidakMemenuhiSyarat;
-                const persen = k.total > 0 ? Math.round((selesai / k.total) * 100) : 0;
-                const judul = esc(k.layanan) + (k.kecamatanLabel ? '<span class="block text-slate-900 font-bold normal-case mt-0.5">' + esc(k.kecamatanLabel) + '</span>' : '');
-                const warnaSisa = k.sisaKuota <= 0 ? 'text-red-600' : 'text-emerald-600';
-                const tampilkanKuota = !dataPengguna.kelurahanTerkunci; // kuota GSM Katolik/Kristen sekarang sudah dipecah dari sheet db_kuotakatolik, jadi boleh ditampilkan lagi
-                return `<div class="border-2 border-sky-200 rounded-xl p-4 bg-slate-50 shadow-sm hover:border-sky-400 hover:shadow-md transition">
+        if (!res.kartu || res.kartu.length === 0) {
+          isi.innerHTML = `<p class="text-slate-400 italic text-sm text-center py-6">Belum ada data untuk ditampilkan.</p>`;
+          return;
+        }
+
+        isi.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">` +
+          res.kartu.map(function (k, i) {
+            const selesai = k.memenuhiSyarat + k.tidakMemenuhiSyarat;
+            const persen = k.total > 0 ? Math.round((selesai / k.total) * 100) : 0;
+            const judul = esc(k.layanan) + (k.kecamatanLabel ? '<span class="block text-slate-900 font-bold normal-case mt-0.5">' + esc(k.kecamatanLabel) + '</span>' : '');
+            const warnaSisa = k.sisaKuota <= 0 ? 'text-red-600' : 'text-emerald-600';
+            const tampilkanKuota = !dataPengguna.kelurahanTerkunci; // kuota GSM Katolik/Kristen sekarang sudah dipecah dari sheet db_kuotakatolik, jadi boleh ditampilkan lagi
+            const delayMs = Math.min(i * 40, 320); // animasi masuk sedikit beruntun, dibatasi supaya kartu terakhir tidak menunggu lama
+            return `<div class="kartu-dashboard-animasi border-2 border-sky-200 rounded-xl p-4 bg-slate-50 shadow-sm hover:border-sky-400 hover:shadow-md transition" style="animation-delay:${delayMs}ms">
             <div class="flex justify-between items-start gap-2 mb-2">
               <p class="text-xs font-bold text-slate-800 uppercase">${judul}</p>
               ${tampilkanKuota ? `<span class="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded-full whitespace-nowrap">Kuota: ${k.kuota}</span>` : ''}
@@ -4476,14 +4522,19 @@
               <div class="flex justify-between"><span class="text-red-500">❌ Tidak Memenuhi Syarat</span><span class="font-bold text-red-600">${k.tidakMemenuhiSyarat}</span></div>
             </div>
             <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
-              <div class="h-full bg-teal-600" style="width:${persen}%"></div>
+              <div class="bar-progres-animasi h-full bg-teal-600" style="width:0%" data-target-width="${persen}"></div>
             </div>
             <p class="text-[10px] text-slate-400 mt-1">${persen}% sudah diverifikasi</p>
           </div>`;
-              }).join('') + `</div>`;
-          })
-          .withFailureHandler(function (err) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Error: ${esc(err.message || err)}</p>`; })
-          .getDashboardProgresVerifikasi(dataPengguna.token, kecFilter);
+          }).join('') + `</div>`;
+
+        // Animasikan bar dari 0% ke nilai sebenarnya (harus di frame berikutnya, kalau langsung set
+        // di frame yang sama browser tidak sempat memutar transisinya).
+        requestAnimationFrame(function () {
+          isi.querySelectorAll('.bar-progres-animasi').forEach(function (bar) {
+            bar.style.width = bar.dataset.targetWidth + '%';
+          });
+        });
       }
 
       // ===================== PROGRES KUOTA (khusus Admin Utama) =====================
