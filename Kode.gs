@@ -66,6 +66,7 @@ function doPost(e) {
     var ALLOWED = {
       "loginPengguna"                    : loginPengguna,
       "logoutPengguna"                   : logoutPengguna,
+      "pulihkanSesi"                     : pulihkanSesi,
       "getMasterLayanan"                 : getMasterLayanan,
       "getKelurahanByKecamatan"          : getKelurahanByKecamatan,
       "validasiDataBaru"                 : validasiDataBaru,
@@ -305,6 +306,50 @@ function logoutPengguna(token) {
   } catch (e) {
     return { sukses: false, error: e.toString() };
   }
+}
+
+/**
+ * Memulihkan sesi yang tersimpan di browser (sessionStorage, dipulihkan saat halaman di-refresh)
+ * tanpa perlu username/password lagi — cukup token masih ada & belum kedaluwarsa di CacheService.
+ * Mengembalikan bentuk respons yang sama seperti loginPengguna() supaya frontend bisa memakai
+ * alur "masuk aplikasi" yang identik untuk keduanya.
+ */
+function pulihkanSesi(token) {
+  const sesi = ambilSesi_(token);
+  if (!sesi || !sesi.role) {
+    return { sukses: false, pesan: "Sesi tidak valid atau sudah kedaluwarsa. Silakan login ulang." };
+  }
+
+  // Ambil profil terbaru (nama lengkap dkk) supaya tampilan setelah refresh sama persis dengan login baru.
+  // Kalau gagal karena sebab apa pun, tetap pulihkan sesi dasarnya — jangan paksa login ulang gara-gara ini.
+  let namaSheet = "", hpSheet = "", jabatanSheet = "";
+  try {
+    const sheet = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN).getSheetByName("db_admin");
+    if (sheet && sheet.getLastRow() >= 2) {
+      const data = sheet.getDataRange().getValues();
+      const usernameTarget = (sesi.username || "").toString().trim().toUpperCase();
+      for (let i = 1; i < data.length; i++) {
+        const usernameSheet = data[i][0] ? data[i][0].toString().trim() : "";
+        if (usernameSheet.toUpperCase() === usernameTarget) {
+          namaSheet = data[i][4] ? data[i][4].toString().trim() : "";
+          hpSheet = data[i][5] ? data[i][5].toString().trim() : "";
+          jabatanSheet = data[i][6] ? data[i][6].toString().trim() : "";
+          break;
+        }
+      }
+    }
+  } catch (e) { /* abaikan — sesi dasar tetap dipulihkan di bawah */ }
+
+  return {
+    sukses: true,
+    token: token,
+    username: sesi.username,
+    role: sesi.role,
+    kecamatan: sesi.kecamatan,
+    userId: sesi.userId || "",
+    profileBelumDiisi: !namaSheet,
+    profil: { namaLengkap: namaSheet, nomorHp: hpSheet, jabatan: jabatanSheet }
+  };
 }
 
 // =========================================================================
@@ -1029,27 +1074,52 @@ function getSheetName(kategori) {
   }
 }
 
+// Data master rumah ibadah (db_masjid/db_musholla/db_gereja/db_pgk/db_vihara_klenteng_kuil) jarang berubah —
+// di-cache 6 jam (pola sama seperti getMasterLayanan) supaya modal pilih rumah ibadah di form input
+// tidak membaca ulang sheet dari nol setiap kali dibuka.
 function getDataRumahIbadah(token, kategori) {
   try { wajibSesi_(token); } catch (e) { return []; }
 
   const sheetName = getSheetName(kategori);
   if (!sheetName) return [];
+
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "MASTER_RI_" + sheetName;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+
   const sheet = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN).getSheetByName(sheetName);
-  if (!sheet || sheet.getLastRow() < 2) return [];
-  return sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+  const data = (!sheet || sheet.getLastRow() < 2) ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
+
+  try { cache.put(cacheKey, JSON.stringify(data), 21600); } catch (e) {} // lewati cache kalau >100KB
+
+  return data;
 }
 
 function getKemenagData(token, sheetName) {
   try { wajibSesi_(token); } catch (e) { return { error: "Sesi tidak sah. Silakan login ulang." }; }
 
-  const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
   const allowedSheets = ["db_gereja", "db_pgk", "db_masjid", "db_musholla", "db_vihara_klenteng_kuil"];
   if (!allowedSheets.includes(sheetName)) return { error: "Akses ditolak" };
+
+  const cache = CacheService.getScriptCache();
+  const cacheKey = "MASTER_KEMENAG_" + sheetName;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return { error: "Sheet tidak ditemukan" };
   if (sheet.getLastRow() < 2) return [];
   const data = sheet.getDataRange().getValues();
   data.shift();
+
+  try { cache.put(cacheKey, JSON.stringify(data), 21600); } catch (e) {} // lewati cache kalau >100KB
+
   return data;
 }
 
@@ -1624,12 +1694,8 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
     const kecUser = (sesi.kecamatan || "").toString().trim().toUpperCase();
     const kecFilterInput = (kecamatanFilter || "").toString().trim().toUpperCase();
 
-    const KECAMATAN_MEDAN_URUT = [
-      "MEDAN AMPLAS","MEDAN AREA","MEDAN BARAT","MEDAN BARU","MEDAN BELAWAN",
-      "MEDAN DELI","MEDAN DENAI","MEDAN HELVETIA","MEDAN JOHOR","MEDAN KOTA",
-      "MEDAN LABUHAN","MEDAN MAIMUN","MEDAN MARELAN","MEDAN PERJUANGAN","MEDAN PETISAH",
-      "MEDAN POLONIA","MEDAN SELAYANG","MEDAN SUNGGAL","MEDAN TEMBUNG","MEDAN TIMUR","MEDAN TUNTUNGAN"
-    ];
+    // Catatan: KECAMATAN_MEDAN_URUT dipakai dari const global (lihat dekat getProgresKuota di atas)
+    // — sebelumnya didefinisikan ulang persis sama di sini, sekarang disatukan ke satu sumber.
 
     // Ambil kuota dari db_kuota -> map "LAYANAN||KECAMATAN" -> angka
     const ssMaster = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
@@ -3105,6 +3171,7 @@ function cekBatasWaktuVerifikasi() {
   if (jumlahBerubah > 0) {
     sheet.getRange(2, KOL_STATUS, lastRow - 1, JUMLAH_KOLOM).setValues(data);
     SpreadsheetApp.flush();
+    invalidateSemuaCacheData_();
   }
   Logger.log(jumlahBerubah + " data diubah otomatis karena lewat batas waktu.");
 }

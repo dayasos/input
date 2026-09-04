@@ -60,6 +60,8 @@ class GoogleScriptRunProxy {
               if (data && data.error) {
                 // Deteksi otomatis jika sesi kedaluwarsa dari server
                 if (typeof data.error === 'string' && (data.error.includes("SESI TIDAK SAH") || data.error.includes("Silakan login ulang"))) {
+                  // Bersihkan token sesi tersimpan supaya refresh berikutnya tidak mencoba memulihkan sesi yang sudah mati.
+                  try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
                   const modalLogin = document.getElementById('modal-login');
                   if (modalLogin && modalLogin.classList.contains('hidden')) {
                     modalLogin.classList.remove('hidden');

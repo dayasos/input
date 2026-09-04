@@ -613,6 +613,10 @@
             class="hidden bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
             📈 Progres Kuota
           </button>
+          <button id="btn-kelola-kuota"
+            class="hidden bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
+            ⚙️ Kelola Kuota
+          </button>
           <button id="btn-export-xlsx"
             class="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
             📥 Export Excel
@@ -1049,6 +1053,76 @@
         <div id="isi-progres-kuota" class="p-6 overflow-y-auto"></div>
         <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end rounded-b-2xl">
           <button onclick="document.getElementById('modal-progres-kuota').classList.add('hidden')"
+            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">Tutup</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Kelola Kuota (khusus Admin Utama) -->
+    <div id="modal-kelola-kuota"
+      class="hidden fixed inset-0 z-[163] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto"
+      onclick="if(event.target===this)this.classList.add('hidden')">
+      <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-amber-800 rounded-t-2xl">
+          <div>
+            <h3 class="text-base font-bold text-white tracking-wide uppercase">⚙️ Kelola Kuota Layanan</h3>
+            <p class="text-amber-100 text-xs mt-0.5">Atur jumlah kuota per Kecamatan &amp; Layanan</p>
+          </div>
+          <button onclick="document.getElementById('modal-kelola-kuota').classList.add('hidden')"
+            class="text-white/80 hover:text-white text-2xl font-semibold leading-none">&times;</button>
+        </div>
+
+        <!-- Form tambah/ubah kuota -->
+        <div class="px-6 pt-4 pb-3 border-b border-slate-100 bg-slate-50">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Kecamatan</label>
+              <select id="kk-kecamatan" class="w-full p-2 border rounded-lg text-xs bg-white font-medium">
+                <option value="">-- Pilih Kecamatan --</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Layanan</label>
+              <select id="kk-layanan" class="w-full p-2 border rounded-lg text-xs bg-white font-medium">
+                <option value="">-- Pilih Layanan --</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Jumlah Kuota</label>
+              <input type="number" id="kk-kuota" min="0" step="1" placeholder="0"
+                class="w-full p-2 border rounded-lg text-xs bg-white font-medium" style="text-transform:none">
+            </div>
+          </div>
+          <button id="kk-btn-simpan"
+            class="mt-2 w-full py-2 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg transition">
+            💾 Simpan Kuota
+          </button>
+        </div>
+
+        <!-- Daftar kuota tersimpan -->
+        <div class="px-6 py-3 overflow-y-auto flex-1">
+          <div class="flex items-center justify-between mb-2 gap-2">
+            <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Daftar Kuota Tersimpan</h4>
+            <input type="text" id="kk-cari" placeholder="🔎 Cari kecamatan/layanan..."
+              class="px-2 py-1 border border-slate-300 rounded-lg text-[11px] w-48" style="text-transform:none">
+          </div>
+          <div class="overflow-x-auto border border-slate-200 rounded-lg">
+            <table class="w-full text-xs border-collapse">
+              <thead class="bg-slate-100 sticky top-0">
+                <tr class="text-left text-slate-700 font-bold uppercase">
+                  <th class="p-2 border-b border-slate-200">Kecamatan</th>
+                  <th class="p-2 border-b border-slate-200">Layanan</th>
+                  <th class="p-2 border-b border-slate-200 text-center">Kuota</th>
+                  <th class="p-2 border-b border-slate-200 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="kk-tabel-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end rounded-b-2xl">
+          <button onclick="document.getElementById('modal-kelola-kuota').classList.add('hidden')"
             class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">Tutup</button>
         </div>
       </div>
@@ -1666,6 +1740,43 @@
       let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
 
       // =========================================================================
+      // PULIHKAN SESI SETELAH REFRESH HALAMAN
+      // Sebelumnya token sesi hanya disimpan di variabel JS (hilang tiap refresh) sehingga user selalu
+      // diminta login ulang walau sesi di server (CacheService, 6 jam) masih berlaku. Sekarang token
+      // (bukan password) disimpan di sessionStorage saat login (lihat masukSetelahAuth di bagian LOGIN),
+      // lalu dicoba dipulihkan di sini setiap kali skrip dimuat — otomatis hilang saat tab/browser ditutup.
+      // =========================================================================
+      (function cobaPulihkanSesi() {
+        let sesiTersimpan = null;
+        try {
+          const raw = sessionStorage.getItem('dana_jasa_sesi');
+          if (raw) sesiTersimpan = JSON.parse(raw);
+        } catch (e) { sesiTersimpan = null; }
+
+        if (!sesiTersimpan || !sesiTersimpan.token) return;
+
+        // Sembunyikan modal login lebih dulu supaya tidak sempat "kedip" sebelum sesi dipastikan.
+        const modalLoginEl = document.getElementById('modal-login');
+        if (modalLoginEl) modalLoginEl.classList.add('hidden');
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && res.sukses) {
+              masukSetelahAuth(res);
+            } else {
+              // Sesi di server sudah kedaluwarsa/tidak valid -> bersihkan penyimpanan lokal, minta login ulang.
+              try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
+              if (modalLoginEl) modalLoginEl.classList.remove('hidden');
+            }
+          })
+          .withFailureHandler(function () {
+            // Gagal terhubung (bukan berarti sesi tidak valid) -> jangan hapus sesi tersimpan, cukup minta login ulang untuk saat ini.
+            if (modalLoginEl) modalLoginEl.classList.remove('hidden');
+          })
+          .pulihkanSesi(sesiTersimpan.token);
+      })();
+
+      // =========================================================================
       // TOAST / NOTIFIKASI RINGAN (pengganti alert() untuk hasil aksi CRUD/download)
       // =========================================================================
       const KONFIG_TOAST = {
@@ -1745,6 +1856,15 @@
         }
         return baris;
       }
+
+      // Daftar 21 kecamatan Kota Medan (urutan tetap) — satu sumber dipakai bersama oleh filter dashboard
+      // dan panel Kelola Kuota, alih-alih didefinisikan ulang di beberapa tempat.
+      const DAFTAR_KECAMATAN_MEDAN = [
+        "MEDAN AMPLAS", "MEDAN AREA", "MEDAN BARAT", "MEDAN BARU", "MEDAN BELAWAN",
+        "MEDAN DELI", "MEDAN DENAI", "MEDAN HELVETIA", "MEDAN JOHOR", "MEDAN KOTA",
+        "MEDAN LABUHAN", "MEDAN MAIMUN", "MEDAN MARELAN", "MEDAN PERJUANGAN", "MEDAN PETISAH",
+        "MEDAN POLONIA", "MEDAN SELAYANG", "MEDAN SUNGGAL", "MEDAN TEMBUNG", "MEDAN TIMUR", "MEDAN TUNTUNGAN"
+      ];
 
       // Helper: cek apakah role user termasuk kecamatan/kemenag (bukan admin utama).
       // Role user di sistem ini hanya bisa: "UTAMA", "KECAMATAN", atau salah satu layanan kemenag
@@ -1827,9 +1947,11 @@
         if (btnReturKematian) btnReturKematian.classList.remove('hidden');
         const btnKeluar = document.getElementById('btn-keluar-aplikasi');
         if (btnKeluar) btnKeluar.classList.remove('hidden');
-        // Tombol Progres Kuota hanya untuk Admin Utama.
+        // Tombol Progres Kuota & Kelola Kuota hanya untuk Admin Utama.
         const btnProgresKuota = document.getElementById('btn-progres-kuota');
         if (btnProgresKuota) btnProgresKuota.classList.toggle('hidden', role !== "UTAMA");
+        const btnKelolaKuota = document.getElementById('btn-kelola-kuota');
+        if (btnKelolaKuota) btnKelolaKuota.classList.toggle('hidden', role !== "UTAMA");
         // Dashboard Progres Verifikasi — tampil untuk semua role.
         const btnDashboardProgres = document.getElementById('btn-dashboard-progres');
         if (btnDashboardProgres) btnDashboardProgres.classList.remove('hidden');
@@ -4154,6 +4276,7 @@
 
         // Reset data sesi
         dataPengguna = { username: "", role: "", kecamatan: "", token: "" };
+        try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
         // Kosongkan cache data tabel Lihat Data — supaya login berikutnya (bisa jadi user berbeda)
         // wajib memuat ulang data dari server dan toggle tombol sesuai role ikut dievaluasi ulang.
         masterDataLihat = [];
@@ -4320,13 +4443,7 @@
               filterWrap.classList.remove('hidden');
               const sel = document.getElementById('filter-dashboard-kecamatan');
               if (sel.options.length <= 1) {
-                const KECAMATAN_MEDAN_URUT = [
-                  "MEDAN AMPLAS", "MEDAN AREA", "MEDAN BARAT", "MEDAN BARU", "MEDAN BELAWAN",
-                  "MEDAN DELI", "MEDAN DENAI", "MEDAN HELVETIA", "MEDAN JOHOR", "MEDAN KOTA",
-                  "MEDAN LABUHAN", "MEDAN MAIMUN", "MEDAN MARELAN", "MEDAN PERJUANGAN", "MEDAN PETISAH",
-                  "MEDAN POLONIA", "MEDAN SELAYANG", "MEDAN SUNGGAL", "MEDAN TEMBUNG", "MEDAN TIMUR", "MEDAN TUNTUNGAN"
-                ];
-                KECAMATAN_MEDAN_URUT.forEach(function (k) {
+                DAFTAR_KECAMATAN_MEDAN.forEach(function (k) {
                   const o = document.createElement('option'); o.value = k; o.text = k; sel.appendChild(o);
                 });
               }
@@ -4452,6 +4569,127 @@
           })
           .withFailureHandler(function (err) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Error server: ${esc(err.message)}</p>`; })
           .getProgresKuota(dataPengguna.token);
+      });
+
+      // ===================== KELOLA KUOTA (khusus Admin Utama) =====================
+      let daftarKuotaCache = [];
+      let dropdownKuotaSudahDiisi = false;
+
+      function isiDropdownFormKuota() {
+        if (dropdownKuotaSudahDiisi) return;
+        const selKec = document.getElementById('kk-kecamatan');
+        const selLay = document.getElementById('kk-layanan');
+        if (!selKec || !selLay) return;
+
+        DAFTAR_KECAMATAN_MEDAN.forEach(function (k) {
+          const o = document.createElement('option'); o.value = k; o.text = k; selKec.appendChild(o);
+        });
+
+        const daftarLayanan = [].concat(masterLayanan.kecamatan || [], masterLayanan.kemenag || [])
+          .map(function (l) { return l.toString().trim().toUpperCase(); })
+          .filter(function (l, i, arr) { return l && arr.indexOf(l) === i; })
+          .sort();
+        daftarLayanan.forEach(function (l) {
+          const o = document.createElement('option'); o.value = l; o.text = l; selLay.appendChild(o);
+        });
+
+        dropdownKuotaSudahDiisi = true;
+      }
+
+      function renderTabelKuota(filterTeks) {
+        const tbody = document.getElementById('kk-tabel-body');
+        if (!tbody) return;
+        const cari = (filterTeks || '').toUpperCase().trim();
+        const dataSaring = !cari ? daftarKuotaCache : daftarKuotaCache.filter(function (item) {
+          return item.kecamatan.indexOf(cari) !== -1 || item.layanan.indexOf(cari) !== -1;
+        });
+
+        if (dataSaring.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-slate-400 italic">Belum ada data kuota tersimpan.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = dataSaring.map(function (item, i) {
+          const idxAsli = daftarKuotaCache.indexOf(item);
+          return `<tr class="border-b border-slate-100 hover:bg-slate-50">
+        <td class="p-2">${esc(item.kecamatan)}</td>
+        <td class="p-2">${esc(item.layanan)}</td>
+        <td class="p-2 text-center font-bold">${item.kuota}</td>
+        <td class="p-2 text-center">
+          <button type="button" onclick="isiFormEditKuota(${idxAsli})"
+            class="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[11px] font-semibold">Edit</button>
+        </td>
+      </tr>`;
+        }).join('');
+      }
+
+      function isiFormEditKuota(idx) {
+        const item = daftarKuotaCache[idx];
+        if (!item) return;
+        document.getElementById('kk-kecamatan').value = item.kecamatan;
+        document.getElementById('kk-layanan').value = item.layanan;
+        document.getElementById('kk-kuota').value = item.kuota;
+        document.getElementById('kk-kuota').focus();
+      }
+
+      function muatDaftarKuota() {
+        const tbody = document.getElementById('kk-tabel-body');
+        if (tbody) tbody.innerHTML = htmlSkeletonBaris(4, 4);
+        google.script.run
+          .withSuccessHandler(function (list) {
+            daftarKuotaCache = list || [];
+            renderTabelKuota(document.getElementById('kk-cari').value);
+          })
+          .withFailureHandler(function (err) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
+          })
+          .getSemuaKuota(dataPengguna.token);
+      }
+
+      document.getElementById('btn-kelola-kuota').addEventListener('click', function () {
+        if (!pastikanLogin()) return;
+        isiDropdownFormKuota();
+        document.getElementById('kk-kecamatan').value = '';
+        document.getElementById('kk-layanan').value = '';
+        document.getElementById('kk-kuota').value = '';
+        document.getElementById('kk-cari').value = '';
+        document.getElementById('modal-kelola-kuota').classList.remove('hidden');
+        muatDaftarKuota();
+      });
+
+      document.getElementById('kk-cari').addEventListener('input', function (e) {
+        renderTabelKuota(e.target.value);
+      });
+
+      document.getElementById('kk-btn-simpan').addEventListener('click', function () {
+        const btn = this;
+        const kecamatan = document.getElementById('kk-kecamatan').value;
+        const layanan = document.getElementById('kk-layanan').value;
+        const kuotaEl = document.getElementById('kk-kuota');
+        const kuota = kuotaEl.value;
+
+        if (!kecamatan) { tampilkanToast('Pilih kecamatan dulu.', 'gagal'); return; }
+        if (!layanan) { tampilkanToast('Pilih layanan dulu.', 'gagal'); return; }
+        if (kuota === '' || Number(kuota) < 0 || !Number.isInteger(Number(kuota))) {
+          tampilkanToast('Jumlah kuota wajib diisi angka bulat 0 atau lebih.', 'gagal');
+          kuotaEl.focus();
+          return;
+        }
+
+        setTombolMemuat(btn, 'Menyimpan...');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            pulihkanTombol(btn);
+            if (!res || !res.sukses) { tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 }); return; }
+            tampilkanToast(res.pesan, 'sukses');
+            document.getElementById('kk-kuota').value = '';
+            muatDaftarKuota();
+          })
+          .withFailureHandler(function (err) {
+            pulihkanTombol(btn);
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .simpanKuota(dataPengguna.token, kecamatan, layanan, Number(kuota));
       });
 
       // ===================== CHAT GRUP =====================
@@ -5490,6 +5728,87 @@
 
       })();
 
+      // ===================== MASUK APLIKASI (dipakai bersama oleh login baru & pemulihan sesi) =====================
+      // res: {token, username, role, kecamatan, userId, profileBelumDiisi, profil} — bentuk yang sama
+      // dikembalikan baik oleh loginPengguna() (login baru) maupun pulihkanSesi() (saat refresh halaman).
+      function masukSetelahAuth(res, usernameFallback) {
+        const usernameFinal = res.username || usernameFallback || "";
+
+        // Simpan sesi ke sessionStorage supaya bertahan lewat refresh halaman (otomatis hilang saat
+        // tab/browser ditutup — lebih aman daripada localStorage untuk menyimpan token sesi).
+        try {
+          sessionStorage.setItem('dana_jasa_sesi', JSON.stringify({
+            token: res.token, username: usernameFinal, role: res.role,
+            kecamatan: res.kecamatan, userId: res.userId || ""
+          }));
+        } catch (e) { }
+
+        // Simpan username ke localStorage agar terisi otomatis besok
+        try { localStorage.setItem('dana_jasa_username', usernameFinal); } catch (e) { }
+
+        dataPengguna.username = usernameFinal;
+        dataPengguna.role = res.role;
+        dataPengguna.kecamatan = res.kecamatan;
+        dataPengguna.token = res.token;
+        dataPengguna.userId = res.userId || "";
+
+        // Kalau USER_ID diawali "KELURAHAN ", akun ini terikat ke 1 kelurahan spesifik.
+        dataPengguna.kelurahanTerkunci = "";
+        const userIdUpper = dataPengguna.userId.toUpperCase().trim();
+        if (userIdUpper.indexOf("KELURAHAN ") === 0) {
+          dataPengguna.kelurahanTerkunci = userIdUpper.substring("KELURAHAN ".length).trim();
+        }
+
+        // Tampilkan nama lengkap di subtitle header (dari kolom E db_admin)
+        const elSubtitle = document.getElementById('info-admin-subtitle');
+        if (elSubtitle) {
+          const namaLengkap = (res.profil && res.profil.namaLengkap) ? res.profil.namaLengkap : usernameFinal;
+          let teksSubtitle = 'Administratur : ' + namaLengkap;
+          if (dataPengguna.kelurahanTerkunci) {
+            teksSubtitle += ' &nbsp;·&nbsp; Kelurahan ' + dataPengguna.kelurahanTerkunci;
+          }
+          elSubtitle.innerHTML = teksSubtitle;
+        }
+
+        // Muat daftar tahun di dropdown
+        if (window._muatDaftarTahun) window._muatDaftarTahun();
+        document.getElementById('modal-login').classList.add('hidden');
+
+        if (res.profileBelumDiisi) {
+          // Pertama login: tampilkan modal isi profil dulu, terapkanHakAkses dipanggil setelah selesai.
+          if (res.role === "UTAMA") {
+            window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, false);
+          } else {
+            google.script.run
+              .withSuccessHandler(function (st) {
+                const ditutup = st && st.sukses ? !!st.ditutup : false;
+                window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, ditutup);
+              })
+              .withFailureHandler(function () {
+                window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, false);
+              })
+              .statusInputKecKem(res.token);
+          }
+        } else {
+          // Login berikutnya (atau sesi dipulihkan setelah refresh): langsung masuk.
+          if (typeof aktifkanChat === "function") aktifkanChat();
+          if (typeof mulaiVersionCheck === "function") mulaiVersionCheck();
+          if (res.role === "UTAMA") {
+            terapkanHakAkses(res.role, res.kecamatan, false);
+          } else {
+            google.script.run
+              .withSuccessHandler(function (st) {
+                const ditutup = st && st.sukses ? !!st.ditutup : false;
+                terapkanHakAkses(res.role, res.kecamatan, ditutup);
+              })
+              .withFailureHandler(function () {
+                terapkanHakAkses(res.role, res.kecamatan, false);
+              })
+              .statusInputKecKem(res.token);
+          }
+        }
+      }
+
       // ===================== LOGIN =====================
       (function () {
         const btnLogin = document.getElementById('btn-login');
@@ -5530,70 +5849,7 @@
               btnLogin.disabled = false;
               btnLogin.textContent = "MASUK";
               if (res.sukses) {
-                // Simpan username ke localStorage agar terisi otomatis besok
-                try { localStorage.setItem('dana_jasa_username', res.username || username); } catch (e) { }
-
-                dataPengguna.username = res.username || username;
-                dataPengguna.role = res.role;
-                dataPengguna.kecamatan = res.kecamatan;
-                dataPengguna.token = res.token;
-                dataPengguna.userId = res.userId || "";
-
-                // Kalau USER_ID diawali "KELURAHAN ", akun ini terikat ke 1 kelurahan spesifik.
-                dataPengguna.kelurahanTerkunci = "";
-                const userIdUpper = dataPengguna.userId.toUpperCase().trim();
-                if (userIdUpper.indexOf("KELURAHAN ") === 0) {
-                  dataPengguna.kelurahanTerkunci = userIdUpper.substring("KELURAHAN ".length).trim();
-                }
-
-                // Tampilkan nama lengkap di subtitle header (dari kolom E db_admin)
-                const elSubtitle = document.getElementById('info-admin-subtitle');
-                if (elSubtitle) {
-                  const namaLengkap = (res.profil && res.profil.namaLengkap) ? res.profil.namaLengkap : (res.username || username);
-                  let teksSubtitle = 'Administratur : ' + namaLengkap;
-                  if (dataPengguna.kelurahanTerkunci) {
-                    teksSubtitle += ' &nbsp;·&nbsp; Kelurahan ' + dataPengguna.kelurahanTerkunci;
-                  }
-                  elSubtitle.innerHTML = teksSubtitle;
-                }
-
-                // Muat daftar tahun di dropdown
-                if (window._muatDaftarTahun) window._muatDaftarTahun();
-                document.getElementById('modal-login').classList.add('hidden');
-
-                if (res.profileBelumDiisi) {
-                  // Pertama login: tampilkan modal isi profil dulu, terapkanHakAkses dipanggil setelah selesai.
-                  if (res.role === "UTAMA") {
-                    window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, false);
-                  } else {
-                    google.script.run
-                      .withSuccessHandler(function (st) {
-                        const ditutup = st && st.sukses ? !!st.ditutup : false;
-                        window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, ditutup);
-                      })
-                      .withFailureHandler(function () {
-                        window.bukaMoldalProfilAwal(res.token, res.role, res.kecamatan, false);
-                      })
-                      .statusInputKecKem(res.token);
-                  }
-                } else {
-                  // Login berikutnya: langsung masuk.
-                  if (typeof aktifkanChat === "function") aktifkanChat();
-                  if (typeof mulaiVersionCheck === "function") mulaiVersionCheck();
-                  if (res.role === "UTAMA") {
-                    terapkanHakAkses(res.role, res.kecamatan, false);
-                  } else {
-                    google.script.run
-                      .withSuccessHandler(function (st) {
-                        const ditutup = st && st.sukses ? !!st.ditutup : false;
-                        terapkanHakAkses(res.role, res.kecamatan, ditutup);
-                      })
-                      .withFailureHandler(function () {
-                        terapkanHakAkses(res.role, res.kecamatan, false);
-                      })
-                      .statusInputKecKem(res.token);
-                  }
-                }
+                masukSetelahAuth(res, username);
               } else {
                 loginError.textContent = res.pesan || "Username atau password salah.";
                 loginError.classList.remove('hidden');
