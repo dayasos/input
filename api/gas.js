@@ -26,16 +26,25 @@ async function fetchWithRetry(url, options, maxRetries = 2) {
   throw lastError;
 }
 
+function sanitizeUrl(raw) {
+  if (!raw) return DEFAULT_GAS_URL;
+  let u = raw.trim().replace(/^["']|["']$/g, '');
+  if (u.startsWith('ttps://')) u = 'h' + u; // Otomatis perbaiki jika huruf 'h' tertinggal saat copy-paste
+  if (u.startsWith('http://')) u = 'https://' + u.slice(7);
+  if (!u.startsWith('https://script.google.com/macros/s/')) return DEFAULT_GAS_URL;
+  return u;
+}
+
 export default async function handler(req, res) {
+  const rawEnv = process.env.GAS_API_URL || '';
+  const sanitizedTargetUrl = sanitizeUrl(rawEnv);
+
   // 1. Endpoint Health-Check jika diakses via GET
   if (req.method === 'GET') {
-    const rawEnv = process.env.GAS_API_URL || '';
-    const cleanEnv = rawEnv.trim().replace(/^["']|["']$/g, '');
     let pingStatus = 'untested';
 
     try {
-      const pingTarget = cleanEnv || DEFAULT_GAS_URL;
-      const testRes = await fetch(pingTarget, {
+      const testRes = await fetch(sanitizedTargetUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8',
@@ -58,8 +67,8 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: 'API Proxy Online',
       envConfigured: Boolean(rawEnv),
-      activeBackendUrl: cleanEnv || DEFAULT_GAS_URL,
-      isUsingFallback: !cleanEnv,
+      activeBackendUrl: sanitizedTargetUrl,
+      isUsingFallback: sanitizedTargetUrl === DEFAULT_GAS_URL && rawEnv !== DEFAULT_GAS_URL,
       pingTest: pingStatus
     });
   }
@@ -69,14 +78,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 3. Sanitasi URL Backend
-  const rawEnvUrl = process.env.GAS_API_URL || '';
-  let targetUrl = rawEnvUrl.trim().replace(/^["']|["']$/g, '');
-
-  // Jika variabel env kosong atau bukan URL Google Script yang valid, gunakan DEFAULT_GAS_URL
-  if (!targetUrl || !targetUrl.startsWith('https://script.google.com/macros/s/')) {
-    targetUrl = DEFAULT_GAS_URL;
-  }
+  // 3. Gunakan URL yang telah disanitasi
+  let targetUrl = sanitizedTargetUrl;
 
   // 4. Siapkan payload dan injeksi Secret Token
   let payloadObj = {};
