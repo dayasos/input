@@ -24,12 +24,12 @@
   "redirects": [
     {
       "source": "/gas",
-      "destination": "https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec",
+      "destination": "https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec",
       "permanent": false
     },
     {
       "source": "/direct",
-      "destination": "https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec",
+      "destination": "https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec",
       "permanent": false
     }
   ],
