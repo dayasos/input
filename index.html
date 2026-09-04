@@ -68,6 +68,17 @@
     .bar-progres-animasi {
       transition: width .6s ease-out;
     }
+
+    /* Spinner kecil untuk toast jenis 'proses' */
+    .loader-kecil {
+      display: block;
+      width: 11px;
+      height: 11px;
+      border: 2px solid #cbd5e1;
+      border-top-color: #64748b;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
   </style>
   <script src="/js/api-bridge.js"></script>
 </head>
@@ -1796,14 +1807,25 @@
           .pulihkanSesi(sesiTersimpan.token);
       })();
 
+      // Sapaan ramah sesuai jam browser pengguna — dipakai di toast selamat datang setelah login.
+      function sapaanWaktu() {
+        const jam = new Date().getHours();
+        if (jam >= 4 && jam < 11) return "Selamat Pagi";
+        if (jam >= 11 && jam < 15) return "Selamat Siang";
+        if (jam >= 15 && jam < 18) return "Selamat Sore";
+        return "Selamat Malam";
+      }
+
       // =========================================================================
       // TOAST / NOTIFIKASI RINGAN (pengganti alert() untuk hasil aksi CRUD/download)
       // =========================================================================
+      // Gaya kartu putih + aksen warna kiri (bukan blok warna solid) — lebih tenang & profesional
+      // untuk konteks aplikasi layanan pemerintahan, dibanding toast warna-warni mencolok.
       const KONFIG_TOAST = {
-        sukses: { bg: "bg-emerald-600", ikon: "✅" },
-        gagal: { bg: "bg-red-600", ikon: "❌" },
-        info: { bg: "bg-sky-600", ikon: "ℹ️" },
-        proses: { bg: "bg-slate-700", ikon: "⏳" }
+        sukses: { border: "border-emerald-500", iconBg: "bg-emerald-100", iconColor: "text-emerald-600", ikon: "✓" },
+        gagal: { border: "border-red-500", iconBg: "bg-red-100", iconColor: "text-red-600", ikon: "✕" },
+        info: { border: "border-sky-500", iconBg: "bg-sky-100", iconColor: "text-sky-600", ikon: "i" },
+        proses: { border: "border-slate-400", iconBg: "bg-slate-100", iconColor: "text-slate-500", ikon: null }
       };
       let _toastCounter = 0;
 
@@ -1820,11 +1842,14 @@
         const id = "toast-" + (++_toastCounter);
         const el = document.createElement("div");
         el.id = id;
-        el.className = cfg.bg + " text-white text-sm font-medium rounded-xl shadow-lg px-4 py-3 pr-8 flex items-start gap-2 max-w-sm w-max relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
+        el.className = "bg-white " + cfg.border + " border-l-4 text-slate-700 text-sm font-medium rounded-lg shadow-lg ring-1 ring-slate-900/5 px-4 py-3 pr-8 flex items-start gap-3 max-w-sm w-max relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
+        const ikonHtml = cfg.ikon
+          ? '<span class="w-5 h-5 rounded-full ' + cfg.iconBg + ' ' + cfg.iconColor + ' flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">' + cfg.ikon + '</span>'
+          : '<span class="w-5 h-5 rounded-full ' + cfg.iconBg + ' flex items-center justify-center shrink-0 mt-0.5"><span class="loader-kecil"></span></span>';
         el.innerHTML =
-          '<span class="text-base leading-none shrink-0">' + cfg.ikon + '</span>' +
+          ikonHtml +
           '<span class="whitespace-pre-line leading-snug">' + (typeof esc === "function" ? esc(pesan) : String(pesan)) + '</span>' +
-          '<button type="button" aria-label="Tutup notifikasi" class="absolute top-1.5 right-2 text-white/70 hover:text-white text-base leading-none" onclick="tutupToast(\'' + id + '\')">&times;</button>';
+          '<button type="button" aria-label="Tutup notifikasi" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600 text-base leading-none" onclick="tutupToast(\'' + id + '\')">&times;</button>';
         cont.appendChild(el);
 
         requestAnimationFrame(function () { el.classList.remove("opacity-0", "translate-x-4"); });
@@ -1885,6 +1910,20 @@
         "MEDAN LABUHAN", "MEDAN MAIMUN", "MEDAN MARELAN", "MEDAN PERJUANGAN", "MEDAN PETISAH",
         "MEDAN POLONIA", "MEDAN SELAYANG", "MEDAN SUNGGAL", "MEDAN TEMBUNG", "MEDAN TIMUR", "MEDAN TUNTUNGAN"
       ];
+
+      // TTL cache client-side untuk data TRANSAKSI (listing/dashboard) — selaras dengan
+      // TTL_CACHE_SNAPSHOT_INPUT_DETIK (90 detik) di backend, supaya tidak menampilkan data
+      // yang lebih basi daripada yang sudah dijamin backend.
+      const TTL_CACHE_DATA_TRANSAKSI_MS = 90 * 1000;
+      // TTL cache client-side untuk data MASTER/referensi (kelurahan, rumah ibadah, dsb.) —
+      // selaras dengan cache 6 jam di backend (getMasterLayanan, getDataRumahIbadah, dst.),
+      // karena data ini jarang berubah selama satu sesi berjalan.
+      const TTL_CACHE_MASTER_MS = 6 * 60 * 60 * 1000;
+      // Wadah cache master untuk tab Input Data — dipakai bersama oleh dropdown kelurahan
+      // dan modal pilih rumah ibadah (Kecamatan lama & Kemenag), lihat pemakaiannya di masing-masing.
+      const cacheKelurahanByKecamatan = {}; // { [kecamatan]: { data, waktu } }
+      const cacheRumahIbadah = {};          // { [kategori]: { data, waktu } }
+      const cacheKemenagData = {};          // { [sheetName]: { data, waktu } }
 
       // Helper: cek apakah role user termasuk kecamatan/kemenag (bukan admin utama).
       // Role user di sistem ini hanya bisa: "UTAMA", "KECAMATAN", atau salah satu layanan kemenag
@@ -2236,7 +2275,10 @@
         panelRekap.classList.remove('hidden');
         panelInput.classList.add('hidden');
         document.getElementById('btn-refresh-data').classList.remove('hidden');
-        if (masterDataLihat.length === 0) inisialisasiMenuLihatData();
+        // Cache TTL: kalau data sebelumnya masih segar (< TTL_CACHE_DATA_TRANSAKSI_MS), tampilkan
+        // langsung tanpa fetch ulang — tabel yang sudah dirender tetap ada di DOM (cuma disembunyikan).
+        const dataMasihSegar = masterDataLihat.length > 0 && (Date.now() - waktuMasterDataLihat) < TTL_CACHE_DATA_TRANSAKSI_MS;
+        if (!dataMasihSegar) inisialisasiMenuLihatData();
       });
 
       // ===================== MULTI-TAHUN =====================
@@ -3282,7 +3324,7 @@
                 google.script.run
                   .withSuccessHandler(function (response) {
                     loadingOverlay.classList.add('hidden');
-                    if (response.sukses) { tampilkanToast(response.pesan, 'sukses'); formPembayaran.reset(); btnResetForm.click(); }
+                    if (response.sukses) { invalidateCacheDataTransaksi(); tampilkanToast(response.pesan, 'sukses'); formPembayaran.reset(); btnResetForm.click(); }
                     else { tampilkanToast("Gagal menyimpan: " + response.pesan, 'gagal', { durasi: 6000 }); }
                   })
                   .withFailureHandler(function (errSimpan) {
@@ -3435,8 +3477,18 @@
 
       // ===================== LIHAT DATA =====================
       let masterDataLihat = [];
+      let waktuMasterDataLihat = 0; // timestamp fetch terakhir, dipakai untuk cache TTL_CACHE_DATA_TRANSAKSI_MS
       let halamanSekarang = 1;
       const dataPerHalaman = 50;
+
+      // Invalidasi cache client-side untuk data transaksi (listing "Lihat Data" & Dashboard Progres
+      // Verifikasi) — dipanggil di titik yang SAMA dengan invalidateSemuaCacheData_() di backend
+      // (simpan data baru, edit, verifikasi satu/massal, lapor & tandai perbaikan berkas), supaya
+      // frontend tidak menampilkan status/hitungan yang sudah basi lebih lama dari yang perlu.
+      function invalidateCacheDataTransaksi() {
+        waktuMasterDataLihat = 0;
+        cacheDashboardProgres = {};
+      }
       let penandaWaktuKetik;
 
       function inisialisasiMenuLihatData() {
@@ -3452,6 +3504,7 @@
               const response = jsonResponse ? JSON.parse(jsonResponse) : null;
               if (response && response.sukses) {
                 masterDataLihat = response.rows;
+                waktuMasterDataLihat = Date.now();
                 const infoTotal = document.getElementById('info-total-penerima');
                 if (infoTotal) infoTotal.innerText = "Total Data: " + masterDataLihat.length + " Baris";
                 if (masterDataLihat.length === 0) {
@@ -3891,6 +3944,7 @@
                 dataAktif[35] = res.verifikator;
                 dataAktif[36] = res.batasWaktu || "";
                 renderBaca(dataAktif);
+                invalidateCacheDataTransaksi();
                 tampilkanToast('Status verifikasi berhasil disimpan.', 'sukses');
               })
               .withFailureHandler(function (err) {
@@ -3926,6 +3980,7 @@
                   dataAktif[38] = res.tanggalLapor;
                   dataAktif[39] = res.dilaporOleh;
                   renderBaca(dataAktif);
+                  invalidateCacheDataTransaksi();
                   tampilkanToast('Perbaikan berkas berhasil dilaporkan.', 'sukses');
                 })
                 .withFailureHandler(function (err) {
@@ -3954,6 +4009,7 @@
                   dataAktif[38] = "";
                   dataAktif[39] = "";
                   renderBaca(dataAktif);
+                  invalidateCacheDataTransaksi();
                   tampilkanToast('Data ditandai sudah diperbaiki.', 'sukses');
                 })
                 .withFailureHandler(function (err) {
@@ -4107,7 +4163,8 @@
                 btnEdit.classList.remove('hidden');
                 // Reload detail dari server agar data segar
                 ambilDanTampilkanDetail(nomorBarisAktif);
-                // Refresh tabel lihat data
+                // Refresh tabel lihat data & basi-kan cache dashboard (kalau layanan/kecamatan ikut berubah)
+                invalidateCacheDataTransaksi();
                 if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
               } else {
                 tampilkanToast(res ? res.pesan : "Gagal menyimpan.", "gagal", { durasi: 6000 });
@@ -4273,7 +4330,7 @@
             pulihkanTombol(btn);
             if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal', { durasi: 6000 }); return; }
             tampilkanToast('Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".', 'sukses');
-            cacheDashboardProgres = {}; // basi-kan cache dashboard, jumlah status ikut berubah
+            invalidateCacheDataTransaksi();
             inisialisasiMenuLihatData(); // muat ulang tabel supaya badge ter-update
           })
           .withFailureHandler(function (err) {
@@ -4440,19 +4497,16 @@
         muatDashboardProgres();
       });
 
-      // Cache ringan per filter kecamatan — dipakai supaya gonta-ganti filter atau buka-tutup modal
-      // dalam waktu singkat tidak perlu round-trip ke server tiap kali. TTL diselaraskan dengan
-      // TTL_CACHE_SNAPSHOT_INPUT_DETIK di backend (90 detik) supaya tidak menampilkan data yang lebih basi
-      // daripada yang sudah dijamin backend.
+      // Cache ringan per filter kecamatan (TTL_CACHE_DATA_TRANSAKSI_MS) — dipakai supaya gonta-ganti
+      // filter atau buka-tutup modal dalam waktu singkat tidak perlu round-trip ke server tiap kali.
       let cacheDashboardProgres = {}; // { [kecFilter]: { res, waktu } }
-      const TTL_CACHE_DASHBOARD_PROGRES_MS = 90 * 1000;
 
       function muatDashboardProgres() {
         const kecFilter = document.getElementById('filter-dashboard-kecamatan').value || "";
         const isi = document.getElementById('isi-dashboard-progres');
 
         const tersimpan = cacheDashboardProgres[kecFilter];
-        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_DASHBOARD_PROGRES_MS) {
+        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_DATA_TRANSAKSI_MS) {
           renderDashboardProgres(tersimpan.res, kecFilter);
           return;
         }
@@ -5900,6 +5954,8 @@
               btnLogin.textContent = "MASUK";
               if (res.sukses) {
                 masukSetelahAuth(res, username);
+                const namaSapa = (res.profil && res.profil.namaLengkap) ? res.profil.namaLengkap : (res.username || username);
+                tampilkanToast(sapaanWaktu() + ", " + namaSapa + "! Selamat bekerja.", "sukses", { durasi: 4500 });
               } else {
                 loginError.textContent = res.pesan || "Username atau password salah.";
                 loginError.classList.remove('hidden');
@@ -6171,23 +6227,33 @@
             }
 
             if (domisiliKelurahanForm) {
+              const isiDropdownKelurahan = function (daftarKelurahan) {
+                domisiliKelurahanForm.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
+                if (daftarKelurahan && daftarKelurahan.length > 0) {
+                  daftarKelurahan.forEach(function (kelurahan) {
+                    const opt = document.createElement('option');
+                    const teksKapital = kelurahan.trim().toUpperCase();
+                    opt.value = teksKapital;
+                    opt.textContent = teksKapital;
+                    domisiliKelurahanForm.appendChild(opt);
+                  });
+                } else {
+                  domisiliKelurahanForm.innerHTML = '<option value="">DATA KELURAHAN TIDAK DITEMUKAN</option>';
+                }
+              };
+
+              const tersimpan = cacheKelurahanByKecamatan[nilaiKecamatan];
+              if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+                isiDropdownKelurahan(tersimpan.data);
+                return;
+              }
+
               domisiliKelurahanForm.innerHTML = '<option value="">MENGAMBIL DATA KELURAHAN...</option>';
 
               google.script.run
                 .withSuccessHandler(function (daftarKelurahan) {
-                  domisiliKelurahanForm.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
-
-                  if (daftarKelurahan && daftarKelurahan.length > 0) {
-                    daftarKelurahan.forEach(function (kelurahan) {
-                      const opt = document.createElement('option');
-                      const teksKapital = kelurahan.trim().toUpperCase();
-                      opt.value = teksKapital;
-                      opt.textContent = teksKapital;
-                      domisiliKelurahanForm.appendChild(opt);
-                    });
-                  } else {
-                    domisiliKelurahanForm.innerHTML = '<option value="">DATA KELURAHAN TIDAK DITEMUKAN</option>';
-                  }
+                  cacheKelurahanByKecamatan[nilaiKecamatan] = { data: daftarKelurahan, waktu: Date.now() };
+                  isiDropdownKelurahan(daftarKelurahan);
                 })
                 .withFailureHandler(function (error) {
                   console.error("Gagal memuat kelurahan:", error);
@@ -6287,10 +6353,20 @@
         const bodyRi = document.getElementById('body-ri');
 
         if (modalRi) modalRi.classList.remove('hidden');
+
+        const tersimpan = cacheRumahIbadah[kategori];
+        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+          renderTable(tersimpan.data);
+          return;
+        }
+
         if (bodyRi) bodyRi.innerHTML = htmlSkeletonBaris(5, 4);
 
         google.script.run
-          .withSuccessHandler(renderTable)
+          .withSuccessHandler(function (data) {
+            cacheRumahIbadah[kategori] = { data: data, waktu: Date.now() };
+            renderTable(data);
+          })
           .withFailureHandler(function (err) {
             if (!bodyRi) return;
             const pesan = (typeof pesanErrorRamah === 'function') ? pesanErrorRamah(err) : 'Gagal memuat data. Silakan coba lagi.';
@@ -6503,6 +6579,12 @@
           return;
         }
 
+        const tersimpan = cacheKemenagData[sheetName];
+        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+          renderKemenagTable(tersimpan.data, contentArea);
+          return;
+        }
+
         contentArea.innerHTML = "<p class='text-center p-4 text-slate-500 text-sm animate-pulse'>Sedang memuat data dari database...</p>";
 
         google.script.run
@@ -6511,7 +6593,21 @@
               contentArea.innerHTML = "<p class='text-center p-4 text-red-500 text-sm'>Gagal memuat data atau database kosong.</p>";
               return;
             }
+            cacheKemenagData[sheetName] = { data: data, waktu: Date.now() };
+            renderKemenagTable(data, contentArea);
+          })
+          .withFailureHandler(function (err) {
+            const pesan = (typeof pesanErrorRamah === 'function') ? pesanErrorRamah(err) : 'Gagal memuat data. Silakan coba lagi.';
+            contentArea.innerHTML =
+              "<p class='text-center p-4 text-red-600 text-sm whitespace-pre-line'>" + esc(pesan) + "</p>" +
+              "<div class='text-center pb-2'><button type='button' id='btn-retry-modal-kemenag' class='bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-sky-700'>🔄 Coba Lagi</button></div>";
+            const btnRetry = document.getElementById('btn-retry-modal-kemenag');
+            if (btnRetry) btnRetry.addEventListener('click', function () { loadDataToModal(sheetName); });
+          })
+          .getKemenagData(dataPengguna.token, sheetName);
+      }
 
+      function renderKemenagTable(data, contentArea) {
             kemenagCache = data;
             const kecList = [...new Set(data.map(r => (r[0] || '').trim().toUpperCase()))].filter(Boolean).sort();
 
@@ -6566,18 +6662,8 @@
   </tr>`;
             });
 
-            tableHtml += `</tbody></table></div>`;
-            contentArea.innerHTML = filterHtml + tableHtml;
-          })
-          .withFailureHandler(function (err) {
-            const pesan = (typeof pesanErrorRamah === 'function') ? pesanErrorRamah(err) : 'Gagal memuat data. Silakan coba lagi.';
-            contentArea.innerHTML =
-              "<p class='text-center p-4 text-red-600 text-sm whitespace-pre-line'>" + esc(pesan) + "</p>" +
-              "<div class='text-center pb-2'><button type='button' id='btn-retry-modal-kemenag' class='bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-sky-700'>🔄 Coba Lagi</button></div>";
-            const btnRetry = document.getElementById('btn-retry-modal-kemenag');
-            if (btnRetry) btnRetry.addEventListener('click', function () { loadDataToModal(sheetName); });
-          })
-          .getKemenagData(dataPengguna.token, sheetName);
+        tableHtml += `</tbody></table></div>`;
+        contentArea.innerHTML = filterHtml + tableHtml;
       }
 
       function updateKemenagKelurahanFilter() {
