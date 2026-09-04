@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistem Layanan Data Penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027</title>
+  <link rel="icon" type="image/png" href="/logo-medan.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -66,38 +67,50 @@
               style="color:#FDE047;font-weight:600;">Administratur : admin</span></p>
         </div>
       </div>
-      <nav class="flex gap-2 bg-slate-800 p-1 rounded-lg text-sm font-medium shrink-0">
-        <button id="tab-input" class="px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition">
-          INPUT DATA
-        </button>
-        <button id="tab-rekap" class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
-          LIHAT DATA
-        </button>
-        <button id="btn-retur-kematian"
-          class="hidden px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition"
-          title="Laporan Retur & Kematian">
-          🔁 Retur & Kematian
-        </button>
-      </nav>
-    </div>
-    <div class="max-w-7xl mx-auto px-6 pb-1 flex justify-end items-center gap-2">
-      <button id="btn-keluar-aplikasi"
-        class="hidden bg-red-700 hover:bg-red-800 text-white px-3 h-8 rounded-full shadow flex items-center justify-center text-xs font-semibold transition"
-        title="Keluar">
-        Keluar
-      </button>
-      <button id="fab-ganti-password"
-        class="hidden bg-slate-700 hover:bg-slate-800 text-white w-8 h-8 rounded-full shadow flex items-center justify-center text-sm transition"
-        title="Akun Saya">
-        🔑
-      </button>
-      <button id="fab-chat"
-        class="hidden relative bg-sky-600 hover:bg-sky-700 text-white w-8 h-8 rounded-full shadow flex items-center justify-center text-sm transition"
-        title="Chat">
-        💬
-        <span id="chat-badge"
-          class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center">0</span>
-      </button>
+      <div class="flex items-center gap-3 flex-wrap justify-center lg:justify-end">
+        <nav class="flex gap-2 bg-slate-800 p-1 rounded-lg text-sm font-medium shrink-0">
+          <button id="tab-input" class="px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition">
+            INPUT DATA
+          </button>
+          <button id="tab-rekap" class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
+            LIHAT DATA
+          </button>
+          <button id="btn-retur-kematian"
+            class="hidden px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
+            title="Laporan Retur & Kematian">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Retur & Kematian</span>
+          </button>
+        </nav>
+        <div class="flex items-center gap-2">
+          <button id="fab-ganti-password"
+            class="hidden bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white w-9 h-9 rounded-lg shadow flex items-center justify-center text-sm transition"
+            title="Akun Saya">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </button>
+          <button id="fab-chat"
+            class="hidden relative bg-sky-600 hover:bg-sky-500 text-white w-9 h-9 rounded-lg shadow flex items-center justify-center text-sm transition"
+            title="Pesan / Chat">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span id="chat-badge"
+              class="hidden absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-4 px-1 flex items-center justify-center border-2 border-slate-900">0</span>
+          </button>
+          <button id="btn-keluar-aplikasi"
+            class="hidden bg-red-600/80 hover:bg-red-600 border border-red-500/50 text-white px-3.5 h-9 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            title="Keluar Aplikasi">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span>Keluar</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -889,10 +902,10 @@
           <p class="text-sky-200 text-xs mt-0.5">Dinas Sosial Kota Medan &nbsp;·&nbsp; 2027</p>
         </div>
 
-        <div class="p-6 space-y-4">
+        <form id="form-login" onsubmit="return false;" class="p-6 space-y-4">
           <div>
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Username</label>
-            <input type="text" id="login-username" placeholder="Masukkan username"
+            <label for="login-username" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Username</label>
+            <input type="text" id="login-username" name="username" autocomplete="username" placeholder="Masukkan username"
               class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500 bg-white"
               style="text-transform:none">
             <p id="login-username-info" class="hidden mt-1 text-[11px] text-emerald-600 flex items-center gap-1">
@@ -900,9 +913,9 @@
             </p>
           </div>
           <div>
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password</label>
+            <label for="login-password" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password</label>
             <div class="relative">
-              <input type="password" id="login-password" placeholder="Masukkan password"
+              <input type="password" id="login-password" name="password" autocomplete="current-password" placeholder="Masukkan password"
                 class="w-full px-3 py-2.5 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
                 style="text-transform:none">
               <button type="button" onclick="togglePw('login-password', this)"
@@ -921,11 +934,11 @@
           <div id="login-error"
             class="hidden text-xs text-red-600 font-medium bg-red-50 border border-red-200 rounded-lg px-3 py-2"></div>
 
-          <button id="btn-login"
+          <button type="submit" id="btn-login"
             class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg shadow transition">
             MASUK
           </button>
-        </div>
+        </form>
 
       </div>
     </div>
@@ -4041,6 +4054,14 @@
         const konfirmasi = confirm("Yakin ingin keluar dari aplikasi?");
         if (!konfirmasi) return;
 
+        // Beritahu server untuk menghapus token sesi dari cache
+        const tokenKeluar = dataPengguna.token;
+        if (tokenKeluar && window.google && window.google.script && window.google.script.run) {
+          try {
+            google.script.run.logoutPengguna(tokenKeluar);
+          } catch (e) { }
+        }
+
         // Reset data sesi
         dataPengguna = { username: "", role: "", kecamatan: "", token: "" };
         // Kosongkan cache data tabel Lihat Data — supaya login berikutnya (bisa jadi user berbeda)
@@ -5410,18 +5431,30 @@
           const inputUser = document.getElementById('login-username');
           const inputPassEl = document.getElementById('login-password');
           const loginError = document.getElementById('login-error');
-          const username = inputUser.value.trim();
-          const password = inputPassEl.value.trim();
-          if (!username || !password) { loginError.textContent = "Username dan password wajib diisi."; loginError.classList.remove('hidden'); return; }
-          btnLogin.disabled = true; btnLogin.textContent = "MEMVERIFIKASI..."; loginError.classList.add('hidden');
+          const username = inputUser ? inputUser.value.trim() : "";
+          const password = inputPassEl ? inputPassEl.value.trim() : "";
+          if (!username || !password) {
+            loginError.textContent = "Username dan password wajib diisi.";
+            loginError.classList.remove('hidden');
+            if (!username && inputUser) inputUser.focus();
+            else if (inputPassEl) inputPassEl.focus();
+            return;
+          }
+          btnLogin.disabled = true;
+          btnLogin.textContent = "MEMVERIFIKASI...";
+          loginError.classList.add('hidden');
           google.script.run
             .withSuccessHandler(function (res) {
-              btnLogin.disabled = false; btnLogin.textContent = "MASUK";
+              btnLogin.disabled = false;
+              btnLogin.textContent = "MASUK";
               if (res.sukses) {
                 // Simpan username ke localStorage agar terisi otomatis besok
                 try { localStorage.setItem('dana_jasa_username', res.username || username); } catch (e) { }
 
-                dataPengguna.username = res.username || username; dataPengguna.role = res.role; dataPengguna.kecamatan = res.kecamatan; dataPengguna.token = res.token;
+                dataPengguna.username = res.username || username;
+                dataPengguna.role = res.role;
+                dataPengguna.kecamatan = res.kecamatan;
+                dataPengguna.token = res.token;
                 dataPengguna.userId = res.userId || "";
 
                 // Kalau USER_ID diawali "KELURAHAN ", akun ini terikat ke 1 kelurahan spesifik.
@@ -5479,13 +5512,51 @@
                       .statusInputKecKem(res.token);
                   }
                 }
-              } else { loginError.textContent = res.pesan; loginError.classList.remove('hidden'); inputPassEl.value = ""; inputPassEl.focus(); }
+              } else {
+                loginError.textContent = res.pesan || "Username atau password salah.";
+                loginError.classList.remove('hidden');
+                if (inputPassEl) { inputPassEl.value = ""; inputPassEl.focus(); }
+              }
             })
-            .withFailureHandler(function (err) { btnLogin.disabled = false; btnLogin.textContent = "MASUK"; loginError.textContent = "Gagal terhubung ke server."; loginError.classList.remove('hidden'); })
+            .withFailureHandler(function (err) {
+              btnLogin.disabled = false;
+              btnLogin.textContent = "MASUK";
+              const pesanErr = (err && err.message) ? err.message : "Gagal terhubung ke server. Silakan coba beberapa saat lagi.";
+              loginError.textContent = pesanErr;
+              loginError.classList.remove('hidden');
+            })
             .loginPengguna(username, password);
         }
+
         if (btnLogin) btnLogin.addEventListener('click', prosesLogin);
-        if (inputPass) inputPass.addEventListener('keydown', function (e) { if (e.key === 'Enter') prosesLogin(); });
+
+        const formLogin = document.getElementById('form-login');
+        if (formLogin) {
+          formLogin.addEventListener('submit', function (e) {
+            e.preventDefault();
+            prosesLogin();
+          });
+        }
+
+        const inputUser = document.getElementById('login-username');
+        if (inputUser) {
+          inputUser.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              if (inputPass && !inputPass.value.trim()) {
+                e.preventDefault();
+                inputPass.focus();
+              } else {
+                prosesLogin();
+              }
+            }
+          });
+        }
+
+        if (inputPass) {
+          inputPass.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') prosesLogin();
+          });
+        }
       })();
 
       // ===================== PENANDA FIELD SELESAI =====================

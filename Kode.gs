@@ -78,6 +78,7 @@ function doPost(e) {
     // Mapping nama fungsi → fungsi aktual yang aman diekspos
     var ALLOWED = {
       "loginPengguna"                    : loginPengguna,
+      "logoutPengguna"                   : logoutPengguna,
       "getMasterLayanan"                 : getMasterLayanan,
       "getKelurahanByKecamatan"          : getKelurahanByKecamatan,
       "validasiDataBaru"                 : validasiDataBaru,
@@ -273,7 +274,7 @@ function loginPengguna(username, password) {
 
       if (!usernameSheet || !passwordSheet) continue;
 
-      if (usernameSheet === usernameInput && passwordSheet === passwordHashInput) {
+      if (usernameSheet.toUpperCase() === usernameInput.toUpperCase() && passwordSheet === passwordHashInput) {
         cache.remove(kunciPercobaan); // login berhasil -> reset hitungan percobaan gagal
         const dataPengguna = {
           username: usernameSheet,
@@ -306,6 +307,20 @@ function loginPengguna(username, password) {
     return { sukses: false, pesan: "Username atau password salah." };
   } catch (e) {
     return { sukses: false, pesan: "Error sistem: " + e.toString() };
+  }
+}
+
+/**
+ * Menghapus token sesi dari CacheService saat pengguna logout.
+ */
+function logoutPengguna(token) {
+  try {
+    if (!token) return { sukses: true };
+    const cache = CacheService.getScriptCache();
+    cache.remove("sesi_" + token);
+    return { sukses: true, pesan: "Sesi berhasil dihapus." };
+  } catch (e) {
+    return { sukses: false, error: e.toString() };
   }
 }
 

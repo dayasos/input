@@ -58,6 +58,22 @@ class GoogleScriptRunProxy {
             })
             .then(data => {
               if (data && data.error) {
+                // Deteksi otomatis jika sesi kedaluwarsa dari server
+                if (typeof data.error === 'string' && (data.error.includes("SESI TIDAK SAH") || data.error.includes("Silakan login ulang"))) {
+                  const modalLogin = document.getElementById('modal-login');
+                  if (modalLogin && modalLogin.classList.contains('hidden')) {
+                    modalLogin.classList.remove('hidden');
+                    const fsContainer = document.getElementById('fs-container');
+                    if (fsContainer) {
+                      fsContainer.disabled = true;
+                      fsContainer.classList.add('opacity-50', 'pointer-events-none');
+                    }
+                    const panelRekap = document.getElementById('panel-rekap');
+                    if (panelRekap) panelRekap.classList.add('hidden');
+                    alert("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+                  }
+                }
+
                 // Jika server mengembalikan error, jalankan failureHandler
                 const errObj = new Error(data.error);
                 if (target._failureHandler) {
