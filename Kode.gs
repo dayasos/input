@@ -1,20 +1,3 @@
-/**
- * SISTEM INPUT DATA PENERIMA DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN 2027
- * -------------------------------------------------------------------------
- * File: Kode.gs  (VERSI PERBAIKAN KEAMANAN)
- * Fokus: ROUTING, VALIDASI, OTORISASI SERVER-SIDE, DAN PENYIMPANAN DATABASE
- *
- * RINGKASAN PERUBAHAN:
- *  - Password di-hash (SHA-256). Tidak lagi membandingkan teks polos.
- *  - Login menghasilkan TOKEN SESI (CacheService) yang wajib dikirim setiap request sensitif.
- *  - Hak akses (role + kecamatan + layanan) diambil DARI SESI di server,
- *    BUKAN dari parameter yang dikirim browser.
- *  - LockService pada penyimpanan data & kuota (anti race-condition).
- *  - Validasi diulang di dalam penyimpanan setelah lock didapat (menutup celah waktu).
- *  - Validasi umur < 18 ditegakkan di server.
- *  - Pengecekan sheet kosong dibuat konsisten.
- */
-
 // =========================================================================
 // KONFIGURASI SPREADSHEET & FOLDER GOOGLE DRIVE
 // =========================================================================
@@ -329,6 +312,12 @@ function logoutPengguna(token) {
 // =========================================================================
 function getMasterLayanan() {
   try {
+    const cache = CacheService.getScriptCache();
+    const cachedData = cache.get("MASTER_LAYANAN");
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+
     const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
     const sheet = ss.getSheetByName("db_layanan");
     if (!sheet) throw new Error("Sheet dengan nama 'db_layanan' tidak ditemukan.");
@@ -343,7 +332,9 @@ function getMasterLayanan() {
     const dataKecamatan = data.map(function (r) { return bersih(r[0]); }).filter(Boolean);
     const dataKemenag   = data.map(function (r) { return bersih(r[1]); }).filter(Boolean);
 
-    return { kecamatan: dataKecamatan, kemenag: dataKemenag };
+    const result = { kecamatan: dataKecamatan, kemenag: dataKemenag };
+    cache.put("MASTER_LAYANAN", JSON.stringify(result), 21600); // Cache selama 6 jam
+    return result;
   } catch (error) {
     throw new Error("Gagal mengambil data layanan: " + error.toString());
   }
@@ -355,25 +346,36 @@ function getKelurahanByKecamatan(token, kecamatanTerpilih) {
   // tanpa akun). Tidak dipakai fungsi lain secara internal, jadi aman ditambah token di sini.
   wajibSesi_(token);
   try {
-    const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-    const sheet = ss.getSheetByName("db_wilayah");
-    if (!sheet) throw new Error("Sheet dengan nama 'db_wilayah' tidak ditemukan.");
+    const cache = CacheService.getScriptCache();
+    const cacheKey = "MASTER_WILAYAH";
+    let dataMap = null;
+    const cachedData = cache.get(cacheKey);
 
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return [];
+    if (cachedData) {
+      dataMap = JSON.parse(cachedData);
+    } else {
+      const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
+      const sheet = ss.getSheetByName("db_wilayah");
+      if (!sheet) throw new Error("Sheet dengan nama 'db_wilayah' tidak ditemukan.");
 
-    const dataWilayah = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-    const listKelurahan = [];
-
-    for (let i = 0; i < dataWilayah.length; i++) {
-      const kecamatanDiSheet = dataWilayah[i][0].toString().trim().toUpperCase();
-      const kelurahanDiSheet = dataWilayah[i][1].toString().trim();
-
-      if (kecamatanDiSheet === kecamatanTerpilih.toString().trim().toUpperCase() && kelurahanDiSheet) {
-        listKelurahan.push(kelurahanDiSheet);
+      const lastRow = sheet.getLastRow();
+      dataMap = {};
+      if (lastRow >= 2) {
+        const dataWilayah = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+        for (let i = 0; i < dataWilayah.length; i++) {
+          const kecDiSheet = dataWilayah[i][0].toString().trim().toUpperCase();
+          const kelDiSheet = dataWilayah[i][1].toString().trim();
+          if (kecDiSheet && kelDiSheet) {
+            if (!dataMap[kecDiSheet]) dataMap[kecDiSheet] = [];
+            dataMap[kecDiSheet].push(kelDiSheet);
+          }
+        }
       }
+      cache.put(cacheKey, JSON.stringify(dataMap), 21600); // Cache selama 6 jam
     }
-    return listKelurahan.sort();
+
+    const kecTarget = kecamatanTerpilih.toString().trim().toUpperCase();
+    return (dataMap[kecTarget] || []).sort();
   } catch (error) {
     throw new Error("Gagal memproses filter data kelurahan: " + error.toString());
   }
@@ -519,6 +521,61 @@ function validasiDataBaru(token, nikBaru, layananBaru, tempatTugasBaru, instansi
   return validasiDataBaru_(token, nikBaru, layananBaru, tempatTugasBaru, instansiBaru, noRekBaru, kecamatanBaru, alamatTugasBaru);
 }
 
+// Helper caching indeks untuk real-time validation agar tidak membebani Spreadsheet
+function getIndeksTerdaftar_() {
+  const cache = CacheService.getScriptCache();
+  const cNik = cache.get("INDEKS_NIK");
+  const cRek = cache.get("INDEKS_REK");
+  const cTempat = cache.get("INDEKS_TEMPAT");
+  
+  if (cNik && cRek && cTempat) {
+    return {
+      nik: JSON.parse(cNik),
+      rek: JSON.parse(cRek),
+      tempat: JSON.parse(cTempat)
+    };
+  }
+  
+  const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
+  const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
+  const dataMap = { nik: {}, rek: {}, tempat: {} };
+  
+  if (sheet && sheet.getLastRow() >= 2) {
+    const lastRow = sheet.getLastRow();
+    const data = sheet.getRange(2, 2, lastRow - 1, 13).getValues(); // B(0)..N(12)
+    for (let i = 0; i < data.length; i++) {
+      const r = data[i];
+      const nama = (r[0] || "").toString().trim();
+      const nik = (r[1] || "").toString().trim();
+      const lay = (r[6] || "").toString().trim().toUpperCase();
+      const tempat = rapikanTeks_(r[7]);
+      const alamat = rapikanTeks_(r[8]);
+      const kec = (r[9] || "").toString().trim().toUpperCase();
+      const rek = (r[12] || "").toString().trim();
+      
+      if (nik) dataMap.nik[nik] = nama;
+      if (rek) dataMap.rek[rek] = nama;
+      if (LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(lay) !== -1) {
+        if (tempat && alamat) {
+          dataMap.tempat[lay + "||" + tempat + "||" + alamat] = { nama: nama, kecamatan: kec };
+        }
+      }
+    }
+  }
+  
+  try {
+    cache.put("INDEKS_NIK", JSON.stringify(dataMap.nik), 10800);
+    cache.put("INDEKS_REK", JSON.stringify(dataMap.rek), 10800);
+    cache.put("INDEKS_TEMPAT", JSON.stringify(dataMap.tempat), 10800);
+  } catch (e) {} // Abaikan jika payload melebihi batas 100KB CacheService
+  
+  return dataMap;
+}
+
+function invalidateIndeksTerdaftar_() {
+  CacheService.getScriptCache().removeAll(["INDEKS_NIK", "INDEKS_REK", "INDEKS_TEMPAT"]);
+}
+
 // Cek 3 hal berbasis NIK sekaligus secara real-time: Domisili Capil, Status Tahun Lalu, NIK Ganda.
 function cekNikRealtime(token, nik) {
   try { wajibSesi_(token); } catch (e) { return { blokir: false }; }
@@ -544,17 +601,11 @@ function cekNikRealtime(token, nik) {
       };
     }
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-    if (sheet && sheet.getLastRow() > 1) {
-      const lastRow = sheet.getLastRow();
-      const data = sheet.getRange(2, 2, lastRow - 1, 2).getValues(); // B=Nama, C=NIK
-      for (let i = 0; i < data.length; i++) {
-        if ((data[i][1] || "").toString().trim() === nikTarget) {
-          return { blokir: true, jenis: "NIK_GANDA", pesan: "NIK ini sudah terdaftar atas nama " + (data[i][0] || "").toString().trim() + ".", nama: (data[i][0] || "").toString().trim() };
-        }
-      }
+    const indeks = getIndeksTerdaftar_();
+    if (indeks.nik[nikTarget]) {
+      return { blokir: true, jenis: "NIK_GANDA", pesan: "NIK ini sudah terdaftar atas nama " + indeks.nik[nikTarget] + ".", nama: indeks.nik[nikTarget] };
     }
+    
     return { blokir: false };
   } catch (e) {
     return { blokir: false }; // gagal cek -> jangan blokir; validasi final saat submit tetap jadi jaring pengaman
@@ -568,16 +619,9 @@ function cekRekeningRealtime(token, noRekening) {
     const rekTarget = (noRekening || "").toString().trim();
     if (rekTarget.length !== 14) return { blokir: false };
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-    if (!sheet || sheet.getLastRow() < 2) return { blokir: false };
-
-    const lastRow = sheet.getLastRow();
-    const data = sheet.getRange(2, 2, lastRow - 1, 13).getValues(); // B=Nama(0) .. N=NoRekening(12)
-    for (let i = 0; i < data.length; i++) {
-      if ((data[i][12] || "").toString().trim() === rekTarget) {
-        return { blokir: true, pesan: "Nomor rekening ini sudah digunakan oleh " + (data[i][0] || "").toString().trim() + ".", nama: (data[i][0] || "").toString().trim() };
-      }
+    const indeks = getIndeksTerdaftar_();
+    if (indeks.rek[rekTarget]) {
+      return { blokir: true, pesan: "Nomor rekening ini sudah digunakan oleh " + indeks.rek[rekTarget] + ".", nama: indeks.rek[rekTarget] };
     }
     return { blokir: false };
   } catch (e) {
@@ -596,21 +640,12 @@ function cekTempatTugasGandaRealtime(token, layanan, tempatTugas, alamatTugas) {
     const alamatTarget = rapikanTeks_(alamatTugas);
     if (!tempatTarget || !alamatTarget) return { blokir: false, relevan: true };
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-    if (!sheet || sheet.getLastRow() < 2) return { blokir: false, relevan: true };
-
-    const lastRow = sheet.getLastRow();
-    // B=Nama(0) H=Layanan(6) I=TempatTugas(7) J=AlamatTugas(8) K=Kecamatan(9)
-    const data = sheet.getRange(2, 2, lastRow - 1, 10).getValues();
-    for (let i = 0; i < data.length; i++) {
-      const laySheet    = (data[i][6] || "").toString().trim().toUpperCase();
-      const tempatSheet = rapikanTeks_(data[i][7]);
-      const alamatSheet = rapikanTeks_(data[i][8]);
-      if (laySheet === layananTarget && tempatSheet === tempatTarget && alamatSheet === alamatTarget) {
-        return { blokir: true, relevan: true, nama: (data[i][0] || "").toString().trim(), kecamatan: (data[i][9] || "").toString().trim() };
-      }
+    const tKey = layananTarget + "||" + tempatTarget + "||" + alamatTarget;
+    const indeks = getIndeksTerdaftar_();
+    if (indeks.tempat[tKey]) {
+       return { blokir: true, relevan: true, nama: indeks.tempat[tKey].nama, kecamatan: indeks.tempat[tKey].kecamatan };
     }
+
     return { blokir: false, relevan: true };
   } catch (e) {
     return { blokir: false, relevan: false };
@@ -859,6 +894,8 @@ function simpanDataKeSheet(token, formObject) {
     ]);
 
     SpreadsheetApp.flush();
+    invalidateIndeksTerdaftar_(); // Bersihkan cache indeks agar data ter-refresh
+    
     return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
   } catch (error) {
     return { sukses: false, pesan: "Gagal Sistem: " + error.toString() };
@@ -1211,23 +1248,8 @@ function ambilDetailPenerimaPerBaris(token, nomorBarisAsli) {
 // =========================================================================
 // EKSPOR DATA (DENGAN OTORISASI)
 // =========================================================================
-function formatBarisDalamEkspor_(row, sheet) {
-  const r = row.slice();
-  r[5] = r[5] ? r[5].toString().trim() : "";
-  const nikBersih = r[2] ? r[2].toString().replace(/^'+/, '').trim() : "";
-  const noRekBersih = r[13] ? r[13].toString().replace(/^'+/, '').trim() : "";
-  const noKontakBersih = r[15] ? r[15].toString().replace(/^'+/, '').trim() : "";
-  r[2] = "";
-  r[13] = "";
-  r[15] = "";
-  sheet.appendRow(r);
-
-  const barisTerakhir = sheet.getLastRow();
-  sheet.getRange(barisTerakhir, 3).setNumberFormat("@").setValue("'" + nikBersih);   // NIK
-  sheet.getRange(barisTerakhir, 6).setNumberFormat("@");                              // Tanggal lahir
-  sheet.getRange(barisTerakhir, 14).setNumberFormat("@").setValue("'" + noRekBersih); // Nomor rekening
-  sheet.getRange(barisTerakhir, 16).setNumberFormat("@").setValue("'" + noKontakBersih); // No kontak
-}
+// Fungsi formatBarisDalamEkspor_ telah dioptimasi dengan pendekatan Bulk Insert 
+// dan logikanya digabung langsung ke dalam fungsi eksporDataKeSpreadsheet.
 
 function eksporDataKeSpreadsheet(token, dataRows, namaFile) {
   try {
@@ -1255,8 +1277,37 @@ function eksporDataKeSpreadsheet(token, dataRows, namaFile) {
     headerRange.setVerticalAlignment("middle");
     headerRange.setWrap(true);
 
+    const rowsToExport = [];
     for (let i = 0; i < dataRows.length; i++) {
-      formatBarisDalamEkspor_(dataRows[i], sheet);
+      const r = dataRows[i].slice();
+      r[5] = r[5] ? r[5].toString().trim() : "";
+      const nikBersih = r[2] ? r[2].toString().replace(/^'+/, '').trim() : "";
+      const noRekBersih = r[13] ? r[13].toString().replace(/^'+/, '').trim() : "";
+      const noKontakBersih = r[15] ? r[15].toString().replace(/^'+/, '').trim() : "";
+      
+      r[2] = "'" + nikBersih;
+      r[13] = "'" + noRekBersih;
+      r[15] = "'" + noKontakBersih;
+      
+      // Amankan panjang data agar sesuai dengan panjang header
+      while (r.length < header.length) { r.push(""); }
+      rowsToExport.push(r.slice(0, header.length));
+    }
+    
+    if (rowsToExport.length > 0) {
+      const numRows = rowsToExport.length;
+      const numCols = header.length;
+      const startRow = 2;
+      
+      // 1. Set format kolom sebagai teks TERLEBIH DAHULU sebelum setValues 
+      // (Untuk mencegah Google Sheets mengubahnya menjadi format scientific)
+      sheet.getRange(startRow, 3, numRows, 1).setNumberFormat("@");  // NIK
+      sheet.getRange(startRow, 6, numRows, 1).setNumberFormat("@");  // Tanggal Lahir
+      sheet.getRange(startRow, 14, numRows, 1).setNumberFormat("@"); // Rekening
+      sheet.getRange(startRow, 16, numRows, 1).setNumberFormat("@"); // Kontak
+
+      // 2. Tulis seluruh baris secara instan dalam 1 API call
+      sheet.getRange(startRow, 1, numRows, numCols).setValues(rowsToExport);
     }
 
     sheet.autoResizeColumns(1, header.length);
@@ -3585,11 +3636,6 @@ function ambilUserIdDariUsername_(token, username) {
   }
 }
 
-// Cek apakah user boleh akses input/edit berdasarkan master + sakelar per user.
-// Logika:
-//   1. Kalau ada sakelar khusus untuk user tsb, PAKAI itu (override master)
-//   2. Kalau tidak ada, ikuti master switch
-// Return object { ditutup, sumber } — sumber = "KHUSUS" atau "MASTER".
 function cekAksesInputUser_(token, userId) {
   // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — siapa pun (termasuk yang belum
   // login) bisa memanggil langsung untuk mengintip status buka/tutup akses seorang user. Ketiga
