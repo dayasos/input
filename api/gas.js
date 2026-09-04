@@ -1,17 +1,23 @@
+export const config = {
+  maxDuration: 60,
+};
+
+const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec';
+
 export default async function handler(req, res) {
-  // Only allow POST requests (matching how google.script.run proxies data)
+  // Hanya izinkan HTTP POST (menyamai proxy google.script.run)
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const url = process.env.GAS_API_URL;
+  // Ambil URL dari environment variable Vercel, dengan fallback ke DEFAULT_GAS_URL
+  const url = process.env.GAS_API_URL || DEFAULT_GAS_URL;
   if (!url) {
     return res.status(500).json({ error: 'Missing GAS_API_URL in environment' });
   }
 
   try {
-    // Forward the POST body to Google Apps Script. 
-    // We send it as text/plain so GAS doesn't require complex CORS preflight
+    // Teruskan payload POST ke Google Apps Script via text/plain (bebas CORS preflight di GAS)
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -20,7 +26,7 @@ export default async function handler(req, res) {
       body: typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
     });
 
-    // fetch automatically follows the 302 redirect that GAS uses to serve JSON
+    // fetch otomatis mengikuti 302 redirect dari Google Apps Script
     const text = await response.text();
     try {
       const data = JSON.parse(text);
