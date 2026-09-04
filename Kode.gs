@@ -53,6 +53,91 @@ function include(filename) {
 }
 
 // =========================================================================
+// ROUTER REST API — dipanggil dari Vercel Serverless Function (/api/gas)
+// Tidak pernah dipanggil langsung dari browser; URL GAS disimpan di .env Vercel.
+// =========================================================================
+function doPost(e) {
+  try {
+    var request  = JSON.parse(e.postData.contents);
+    var action   = request.action;
+    var args     = request.args || [];
+
+    // Mapping nama fungsi → fungsi aktual yang aman diekspos
+    var ALLOWED = {
+      "loginPengguna"                    : loginPengguna,
+      "getMasterLayanan"                 : getMasterLayanan,
+      "getKelurahanByKecamatan"          : getKelurahanByKecamatan,
+      "validasiDataBaru"                 : validasiDataBaru,
+      "cekNikRealtime"                   : cekNikRealtime,
+      "cekRekeningRealtime"              : cekRekeningRealtime,
+      "cekTempatTugasGandaRealtime"      : cekTempatTugasGandaRealtime,
+      "cekKuotaRealtime"                 : cekKuotaRealtime,
+      "simpanDataKeSheet"                : simpanDataKeSheet,
+      "getSheetName"                     : getSheetName,
+      "getDataRumahIbadah"               : getDataRumahIbadah,
+      "getKemenagData"                   : getKemenagData,
+      "ambilDataLihatDataHakAkses"       : ambilDataLihatDataHakAkses,
+      "ambilDetailPenerimaPerBaris"      : ambilDetailPenerimaPerBaris,
+      "eksporDataKeSpreadsheet"          : eksporDataKeSpreadsheet,
+      "getSemuaKuota"                    : getSemuaKuota,
+      "simpanKuota"                      : simpanKuota,
+      "cekKuotaTersedia"                 : cekKuotaTersedia,
+      "getSemuaKuotaDenganPemakaian"     : getSemuaKuotaDenganPemakaian,
+      "getProgresKuota"                  : getProgresKuota,
+      "getDashboardProgresVerifikasi"    : getDashboardProgresVerifikasi,
+      "kirimPesanChat"                   : kirimPesanChat,
+      "ambilPesanChat"                   : ambilPesanChat,
+      "tandaiChatDibaca"                 : tandaiChatDibaca,
+      "hitungChatBelumDibaca"            : hitungChatBelumDibaca,
+      "hapusPesanChat"                   : hapusPesanChat,
+      "statusInputKecKem"                : statusInputKecKem,
+      "setInputKecKem"                   : setInputKecKem,
+      "ambilStatusDetailSetelan"         : ambilStatusDetailSetelan,
+      "ubahAkunSendiri"                  : ubahAkunSendiri,
+      "ambilDaftarAkun"                  : ambilDaftarAkun,
+      "resetPasswordUser"                : resetPasswordUser,
+      "simpanProfilUser"                 : simpanProfilUser,
+      "ubahProfilUser"                   : ubahProfilUser,
+      "editDataPenerima"                 : editDataPenerima,
+      "verifikasiSatuData"               : verifikasiSatuData,
+      "laporkanPerbaikanBerkas"          : laporkanPerbaikanBerkas,
+      "tandaiSudahDiperbaiki"            : tandaiSudahDiperbaiki,
+      "verifikasiMassalMemenuhiSyarat"   : verifikasiMassalMemenuhiSyarat,
+      "getDaftarBerkasTidakLengkapUntukWA": getDaftarBerkasTidakLengkapUntukWA,
+      "cekBatasWaktuVerifikasi"          : cekBatasWaktuVerifikasi,
+      "ambilRiwayatEdit"                 : ambilRiwayatEdit,
+      "ambilTahunTersedia"               : ambilTahunTersedia,
+      "ambilDataTahunHakAkses"           : ambilDataTahunHakAkses,
+      "getVersiAplikasi"                 : getVersiAplikasi,
+      "setHeaderUserId"                  : setHeaderUserId,
+      "setSakelarUserByAdmin"            : setSakelarUserByAdmin,
+      "resetSakelarUserByAdmin"          : resetSakelarUserByAdmin,
+      "ambilDaftarUserDenganStatus"      : ambilDaftarUserDenganStatus,
+      "bulkSakelarPerKecamatan"          : bulkSakelarPerKecamatan,
+      "buatTokenSSORetur"                : buatTokenSSORetur
+    };
+
+    if (!ALLOWED[action]) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ sukses: false, pesan: "Aksi tidak diizinkan: " + action }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Panggil fungsi yang sesuai dengan args dari Vercel
+    var hasil = ALLOWED[action].apply(null, args);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: hasil }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ sukses: false, pesan: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// =========================================================================
 // HELPER KEAMANAN: HASH PASSWORD & SESI
 // =========================================================================
 

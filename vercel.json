@@ -20,27 +20,5 @@
         }
       ]
     }
-  ],
-  "redirects": [
-    {
-      "source": "/gas",
-      "destination": "https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec",
-      "permanent": false
-    },
-    {
-      "source": "/direct",
-      "destination": "https://script.google.com/macros/s/AKfycbynxqlpYro4mIOLqTizr6JYbFVXvVcJc7axlvuaz44DvSOTr8aORzNgaHSWuOp52smPYQ/exec",
-      "permanent": false
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/app.html"
-    },
-    {
-      "source": "/((?!app\\.html|favicon\\.ico).*)",
-      "destination": "/app.html"
-    }
   ]
 }

@@ -11,3 +11,8 @@ node_modules/
 
 # Logs
 *.log
+
+# Environment Variables — JANGAN PERNAH diupload ke GitHub!
+.env
+.env.local
+.env.production
