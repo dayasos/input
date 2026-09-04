@@ -215,9 +215,7 @@ function daftarLayananKemenagUpper_() {
 // =========================================================================
 // FUNGSI AUTENTIKASI LOGIN (DENGAN HASH & SESI)
 // =========================================================================
-// KEAMANAN: proteksi brute-force login. Maksimal percobaan gagal sebelum akun (per username)
-// dikunci sementara, dan berapa lama kuncinya (detik). Dilacak di CacheService (sama seperti
-// sesi) supaya tidak perlu tabel/sheet tambahan — otomatis kedaluwarsa sendiri.
+// Proteksi brute-force login via CacheService
 const BATAS_PERCOBAAN_LOGIN = 5;
 const JENDELA_KUNCI_LOGIN_DETIK = 15 * 60; // 15 menit
 
@@ -227,8 +225,6 @@ function loginPengguna(username, password) {
     const cache = CacheService.getScriptCache();
     const kunciPercobaan = "loginfail_" + usernameInput.toUpperCase();
 
-    // Sebelumnya TIDAK ada batas percobaan sama sekali — password bisa ditebak berulang kali
-    // tanpa hambatan apa pun dari sisi server. Cek dulu sebelum baca sheet sama sekali.
     const percobaanSaatIni = Number(cache.get(kunciPercobaan) || 0);
     if (percobaanSaatIni >= BATAS_PERCOBAAN_LOGIN) {
       return { sukses: false, pesan: "Terlalu banyak percobaan login gagal untuk akun ini. Coba lagi dalam beberapa menit." };
@@ -341,9 +337,6 @@ function getMasterLayanan() {
 }
 
 function getKelurahanByKecamatan(token, kecamatanTerpilih) {
-  // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — data referensi kelurahan (bukan
-  // PII) tetap wajib login supaya konsisten dengan pola akses seluruh sistem (mencegah scraping
-  // tanpa akun). Tidak dipakai fungsi lain secara internal, jadi aman ditambah token di sini.
   wajibSesi_(token);
   try {
     const cache = CacheService.getScriptCache();
@@ -405,12 +398,9 @@ function rapikanTeks_(s) {
 
 function validasiDataBaru_(token, nikBaru, layananBaru, tempatTugasBaru, instansiBaru, noRekBaru, kecamatanBaru, alamatTugasBaru) {
   try {
-    // KEAMANAN: wajib sesi sah. cekDomisiliCapil_/cekStatusTahunLalu_ di bawah membocorkan
-    // nama+alamat+status warga berdasarkan NIK — token diteruskan ke keduanya supaya tidak ada
-    // jalur baca data itu yang lolos tanpa login (lihat catatan di definisi masing-masing fungsi).
     wajibSesi_(token);
 
-    // ── CEK DOMISILI CAPIL (hard-block, prioritas tertinggi) ──
+    // 1. Cek domisili Capil (warga luar Kota Medan ditolak)
     var cekCapil = cekDomisiliCapil_(token, nikBaru);
     if (cekCapil.ditemukan) {
       return {
@@ -425,82 +415,68 @@ function validasiDataBaru_(token, nikBaru, layananBaru, tempatTugasBaru, instans
       };
     }
 
-    // ── CEK STATUS TAHUN LALU (hard-block) ──
+    // 2. Cek status arsip tahun sebelumnya
     var cek2026 = cekStatusTahunLalu_(token, nikBaru);
     if (cek2026.ditemukan && !cek2026.aktif) {
       return {
-        valid: false, tolakStatus2026: true,
-        status2026: cek2026.status, nama2026: cek2026.nama,
-        layanan2026: cek2026.layanan, tahun2026: cek2026.tahun || "",
+        valid: false,
+        tolakStatus2026: true,
+        status2026: cek2026.status,
+        nama2026: cek2026.nama,
+        layanan2026: cek2026.layanan,
+        tahun2026: cek2026.tahun || "",
         pesan: "NIK INI TERDAFTAR DI DATA " + (cek2026.tahun || "SEBELUMNYA") + " DENGAN STATUS: " + cek2026.status
       };
     }
 
-    const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
-
-    const nikTarget         = nikBaru.toString().trim();
-    const layananTarget     = layananBaru.toString().trim().toUpperCase();
+    const nikTarget         = (nikBaru || "").toString().trim();
+    const layananTarget     = (layananBaru || "").toString().trim().toUpperCase();
     const tempatTugasTarget = rapikanTeks_(tempatTugasBaru);
     const alamatTugasTarget = rapikanTeks_(alamatTugasBaru);
-    const noRekTarget       = noRekBaru.toString().trim();
-    const kecamatanTarget   = kecamatanBaru.toString().trim().toUpperCase();
+    const noRekTarget       = (noRekBaru || "").toString().trim();
+    const kecamatanTarget   = (kecamatanBaru || "").toString().trim().toUpperCase();
 
     const temuan = [];
-    let nikGanda = false, rekGanda = false, tempatGanda = false;
-    let jumlahTerpakaiKuota = 0; // dihitung sekalian di loop yang sama (hindari baca sheet 2x)
+    const indeks = getIndeksTerdaftar_();
 
-    if (sheet && sheet.getLastRow() > 1) {
-      // Baca hanya kolom A–N (14 kolom pertama yang dipakai validasi ini),
-      // bukan seluruh kolom (yang sekarang sudah sampai ~32, berisi link berkas & koordinat
-      // yang tidak relevan untuk cek duplikasi). Ini mempercepat pembacaan seiring data bertambah.
-      const lastRow = sheet.getLastRow();
-      const data = sheet.getRange(2, 1, lastRow - 1, 14).getValues();
-      for (let i = 0; i < data.length; i++) {
-        if (data[i].length < 14) continue;
+    // Validasi duplikasi NIK via cache
+    if (indeks.nik && indeks.nik[nikTarget]) {
+      temuan.push({
+        jenis: "NIK",
+        ikon: "🪪",
+        detail: "NIK " + nikTarget + " sudah terdaftar atas nama " + indeks.nik[nikTarget] + "."
+      });
+    }
 
-        const nikTerdaftar     = data[i][2].toString().trim();
-        const namaTerdaftar    = data[i][1].toString().trim();
-        const layananTerdaftar = data[i][7].toString().trim().toUpperCase();
-        const tempatTerdaftar  = rapikanTeks_(data[i][8]);  // nama tempat tugas
-        const alamatTerdaftar  = rapikanTeks_(data[i][9]);  // alamat tugas
-        const noRekTerdaftar   = data[i][13].toString().trim();
-        const kecTerdaftar     = data[i][10].toString().trim().toUpperCase();
+    // Validasi duplikasi Nomor Rekening via cache
+    if (indeks.rek && indeks.rek[noRekTarget]) {
+      temuan.push({
+        jenis: "REKENING",
+        ikon: "🏦",
+        detail: "Nomor rekening " + noRekTarget + " sudah digunakan oleh " + indeks.rek[noRekTarget] + "."
+      });
+    }
 
-        if (!nikGanda && nikTerdaftar === nikTarget) {
-          nikGanda = true;
-          temuan.push({ jenis: "NIK", ikon: "🪪",
-            detail: "NIK " + nikTarget + " sudah terdaftar atas nama " + namaTerdaftar + "." });
-        }
-        if (!rekGanda && noRekTerdaftar === noRekTarget) {
-          rekGanda = true;
-          temuan.push({ jenis: "REKENING", ikon: "🏦",
-            detail: "Nomor rekening " + noRekTarget + " sudah digunakan oleh " + namaTerdaftar + "." });
-        }
-        // Cek 1 penerima per rumah ibadah — LINTAS SEMUA KECAMATAN.
-        // Identitas rumah ibadah = NAMA TEMPAT TUGAS + ALAMAT TUGAS, bukan kecamatan/kelurahan domisili.
-        if (!tempatGanda && LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(layananTarget) !== -1) {
-          if (tempatTerdaftar === tempatTugasTarget
-              && alamatTerdaftar === alamatTugasTarget
-              && layananTerdaftar === layananTarget) {
-            tempatGanda = true;
-            temuan.push({ jenis: "TEMPAT TUGAS", ikon: ikonRumahIbadah_(layananTarget),
-              detail: tempatTugasBaru + " sudah memiliki penerima untuk layanan " + layananTarget
-                      + " atas nama " + namaTerdaftar + " (Kec. " + kecTerdaftar + ")." });
-          }
-        }
-
-        // Hitung sekalian pemakaian kuota kecamatan+layanan ini, supaya tidak perlu baca ulang
-        // seluruh sheet lagi nanti di cekKuotaTersedia.
-        if (kecTerdaftar === kecamatanTarget && layananTerdaftar === layananTarget) {
-          jumlahTerpakaiKuota++;
-        }
+    // Validasi Tempat Tugas (1 penerima per rumah ibadah) via cache
+    if (LAYANAN_BATASI_TEMPAT_TUGAS.indexOf(layananTarget) !== -1) {
+      const tKey = layananTarget + "||" + tempatTugasTarget + "||" + alamatTugasTarget;
+      if (indeks.tempat && indeks.tempat[tKey]) {
+        const tInfo = indeks.tempat[tKey];
+        temuan.push({
+          jenis: "TEMPAT TUGAS",
+          ikon: ikonRumahIbadah_(layananTarget),
+          detail: tempatTugasBaru + " sudah memiliki penerima untuk layanan " + layananTarget + " atas nama " + tInfo.nama + " (Kec. " + tInfo.kecamatan + ")."
+        });
       }
     }
 
     if (temuan.length > 0) {
       return { valid: false, temuan: temuan, pesan: "Ditemukan " + temuan.length + " masalah duplikasi data." };
     }
+
+    // Hitung pemakaian kuota via cache
+    const kKey = layananTarget + "||" + kecamatanTarget;
+    const jumlahTerpakaiKuota = (indeks.kuota && typeof indeks.kuota[kKey] === "number") ? indeks.kuota[kKey] : 0;
 
     const hasilKuota = cekKuotaTersedia(kecamatanBaru, layananBaru, jumlahTerpakaiKuota);
     if (!hasilKuota.tersedia) {
@@ -760,34 +736,18 @@ function simpanDataKeSheet(token, formObject) {
       instansiEfektif = (daftarLayananKemenagUpper_().indexOf(layanan) !== -1) ? "KEMENAG" : "KECAMATAN";
     }
 
-    // ---- OTORISASI (KEAMANAN): kecamatan & layanan yang DISIMPAN harus konsisten dengan sesi ----
-    // Sebelumnya nilai `kecamatan`/`layanan` di atas (dari formObject/browser) dipakai apa adanya
-    // tanpa dicocokkan ke akun yang login — akun non-UTAMA bisa mengirim kecamatan/layanan siapa
-    // saja lewat request langsung (bukan lewat form biasa), memakai kuota kecamatan lain atau
-    // menembus batas layanan akun Kemenag. Untuk peran UTAMA, nilai dari form tetap dipercaya
-    // (admin pusat memang berwenang input untuk kecamatan/layanan mana pun).
+    // Otorisasi server-side: kecamatan & layanan yang disimpan harus sesuai dengan sesi
     if (peranSesi !== "UTAMA") {
       if (peranSesi === "KECAMATAN") {
         if (daftarLayananKemenagUpper_().indexOf(layanan) !== -1) {
           return { sukses: false, pesan: "GAGAL: Akun Kecamatan tidak berwenang mengisi layanan Kemenag." };
         }
-        // Akun KECAMATAN wajib punya kecamatan terisi di db_admin (beda dari akun Kemenag "bebas"
-        // yang kolom Kecamatan-nya memang sengaja kosong). Kalau kosong (data akun salah input),
-        // TOLAK alih-alih membiarkan akun ini bebas mengisi kecamatan mana pun (fail-closed, bukan
-        // fail-open) — dicek eksplisit di sini karena guard umum di bawah hanya berlaku jika
-        // kecSesi tidak kosong.
         if (!(sesi.kecamatan || "").toString().trim()) {
           return { sukses: false, pesan: "GAGAL: Akun Anda belum terdaftar untuk kecamatan mana pun. Hubungi admin utama." };
         }
       } else if (layanan !== peranSesi) {
-        // Akun Kemenag: peran akun (mis. "GURU MAGHRIB MENGAJI") adalah satu-satunya
-        // layanan yang berwenang diisi oleh akun ini.
         return { sukses: false, pesan: "GAGAL: Akun Anda hanya berwenang mengisi layanan \"" + sesi.role + "\"." };
       }
-      // Kalau akun terikat ke satu kecamatan spesifik (kolom Kecamatan akun di db_admin terisi —
-      // berlaku untuk akun KECAMATAN maupun akun Kemenag yang "terikat" satu kecamatan), kecamatan
-      // yang disimpan wajib sama dengan kecamatan akun tsb. Akun Kemenag "bebas" (kolom Kecamatan
-      // kosong di db_admin) tetap boleh memilih kecamatan mana pun, sesuai desain form.
       const kecSesi = (sesi.kecamatan || "").toString().trim().toUpperCase();
       if (kecSesi && kecamatan !== kecSesi) {
         return { sukses: false, pesan: "GAGAL: Akun Anda hanya berwenang mengisi data untuk Kecamatan " + kecSesi + "." };
@@ -829,12 +789,8 @@ function simpanDataKeSheet(token, formObject) {
     // Sumber berkas: objek base64 dari frontend (formObject.__berkas).
     const B = formObject.__berkas || {};
 
-    // KEAMANAN: batas ukuran GABUNGAN semua berkas dalam satu submit — sebelumnya hanya ada
-    // batas per-file (di blobDariBerkas_/front-end), tidak ada batas total. Formulir ini punya
-    // sampai 13 field upload; tanpa batas gabungan, payload base64 bisa membengkak sangat besar
-    // sebelum sampai ke titik ini. Estimasi ukuran dari panjang string base64 (~3/4 dari panjang
-    // string = perkiraan byte asli) supaya bisa ditolak SEBELUM proses decode/upload yang mahal.
-    const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024; // 60 MB gabungan per submit
+    // Batas total ukuran seluruh berkas (maksimal 60 MB gabungan per submit)
+    const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
     let totalPerkiraanByte = 0;
     Object.keys(B).forEach(function(k) {
       const item = B[k];
@@ -844,11 +800,7 @@ function simpanDataKeSheet(token, formObject) {
       return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar (maksimal 60 MB gabungan). Perkecil ukuran file lalu coba lagi." };
     }
 
-    // KEAMANAN/INTEGRITAS DATA: validasi TIAP berkas (tipe file & ukuran) SEBELUM upload dimulai.
-    // Sebelumnya berkas yang ditolak blobDariBerkas_/uploadBerkasPenerima_ (tipe tidak didukung atau
-    // kelewat besar) akan tersimpan sebagai link KOSONG secara diam-diam, sementara submit tetap
-    // dilaporkan "SUKSES" ke petugas — berisiko data bansos tersimpan tanpa lampiran KTP/rekening/
-    // surat tanpa ada yang sadar. Sekarang submit digagalkan lebih dulu dengan pesan jelas.
+    // Validasi format dan ukuran tiap berkas sebelum proses upload dimulai
     const LABEL_FIELD_BERKAS = {
       fileKtp: "KTP", fileBukuRekening: "Buku Rekening", fileSuratPermohon: "Surat Permohonan",
       filePernyataan: "Surat Pernyataan", fileDomisili: "Domisili Kelurahan",
@@ -915,15 +867,11 @@ function simpanDataKeSheet(token, formObject) {
 
 // Ubah objek berkas {namaFile, mimeType, dataBase64} dari frontend menjadi Blob.
 // Mengembalikan null bila kosong/tidak valid.
-// KEAMANAN: sebelumnya blobDariBerkas_ tidak memvalidasi ukuran maupun tipe file sama sekali —
-// front-end punya batas 25MB/file (lihat MAKS_BYTE di Index.html), tapi itu bisa dilewati kalau
-// simpanDataKeSheet dipanggil langsung lewat request buatan sendiri (bukan lewat form). File yang
-// lolos di sini langsung diupload ke Drive dan otomatis dibagikan publik (ANYONE_WITH_LINK) oleh
-// uploadBerkasPenerima_, jadi validasi di titik ini adalah lapisan pertahanan terakhir sebelum itu.
-const MAKS_BYTE_PER_BERKAS = 25 * 1024 * 1024; // 25 MB — disamakan dengan batas di front-end
+// Batas ukuran dan tipe file yang diizinkan untuk upload
+const MAKS_BYTE_PER_BERKAS = 25 * 1024 * 1024; // 25 MB per file
 const MIME_BERKAS_DIIZINKAN = [
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif',
-  'image/bmp', 'image/gif', // format lama dari scanner/kamera lawas — tetap diizinkan sebagai jaring pengaman
+  'image/bmp', 'image/gif',
   'application/pdf'
 ];
 
@@ -943,15 +891,7 @@ function blobDariBerkas_(berkas) {
   }
 }
 
-// KEAMANAN/INTEGRITAS DATA: blobDariBerkas_ di atas menolak berkas yang tidak lolos ukuran/tipe
-// dengan mengembalikan `null` secara DIAM-DIAM (dipakai luas, termasuk saat edit — di sana memang
-// wajar dilewati begitu saja). Tapi kalau dipakai apa adanya saat SUBMIT BARU, berkas yang ditolak
-// akan membuat kolom link-nya kosong sementara `simpanDataKeSheet` tetap melapor "SUKSES" ke user —
-// petugas tidak akan pernah tahu KTP/rekening/surat gagal terupload. Fungsi ini dipakai
-// `simpanDataKeSheet` untuk memvalidasi SEMUA berkas SEBELUM upload dimulai, supaya berkas yang
-// ditolak menggagalkan submit dengan pesan jelas (bukan tersimpan senyap dengan link kosong).
-// Mengembalikan pesan error (string) kalau berkas ada tapi tidak valid, atau null kalau valid/tidak
-// ada berkas dikirim (field opsional yang memang tidak diisi untuk layanan ini).
+// Validasi ukuran dan format berkas sebelum diupload ke Drive
 function validasiBerkasSebelumUpload_(berkas, labelField) {
   if (!berkas || !berkas.dataBase64) return null;
   const namaTampil = berkas.namaFile || 'tanpa nama';
@@ -960,8 +900,6 @@ function validasiBerkasSebelumUpload_(berkas, labelField) {
     return 'Berkas "' + labelField + '" (' + namaTampil + ') memakai format file yang tidak didukung' +
       (mime ? ' (' + mime + ')' : '') + '. Gunakan JPG, PNG, WEBP, HEIC, atau PDF.';
   }
-  // Estimasi ukuran dari panjang base64 (~3/4 dari panjang string = perkiraan byte asli),
-  // konsisten dengan cara MAKS_TOTAL_BYTE_BERKAS dihitung di simpanDataKeSheet.
   const perkiraanByte = berkas.dataBase64.length * 0.75;
   if (perkiraanByte > MAKS_BYTE_PER_BERKAS) {
     return 'Berkas "' + labelField + '" (' + namaTampil + ') ukurannya melebihi 25 MB.';
@@ -976,7 +914,7 @@ function dapatkanOrBuatSubfolder_(folderIndukObj, namaSubfolder) {
   return folderIndukObj.createFolder(namaSubfolder);
 }
 
-// Dapatkan (atau buat baru) folder khusus 1 pendaftar: Induk > KECAMATAN > LAYANAN > "NAMA (4 digit NIK)"
+// Dapatkan (atau buat baru) folder khusus 1 pendaftar: Induk > KECAMATAN > LAYANAN > "NAMA (NIK)"
 function dapatkanFolderPendaftar_(kecamatan, layanan, nama, nik) {
   const folderInduk = DriveApp.getFolderById(FOLDER_ID_INDUK);
   const kecClean = (kecamatan || "").toString().trim().toUpperCase();
@@ -986,11 +924,6 @@ function dapatkanFolderPendaftar_(kecamatan, layanan, nama, nik) {
   const folderLayanan = dapatkanOrBuatSubfolder_(folderKec, layClean || "(TANPA LAYANAN)");
 
   const namaClean = (nama || "").toString().trim().toUpperCase();
-  // Pakai NIK PENUH (bukan hanya 4 digit terakhir) sebagai identifier folder — dua pendaftar
-  // berbeda dengan nama sama persis dan 4 digit akhir NIK yang kebetulan sama dulu bisa tertimpa/
-  // tercampur ke satu folder yang sama. NIK penuh membuat nama folder unik per orang (NIK sendiri
-  // sudah divalidasi tidak boleh ganda di validasiDataBaru_). Ini tidak menambah paparan data baru —
-  // KTP dengan NIK penuh sudah ikut tersimpan di dalam folder yang sama.
   const nikBersih = String(nik || "").replace(/[^0-9]/g, '');
   const namaFolderPendaftar = namaClean + " (" + (nikBersih || "TANPA-NIK") + ")";
 
@@ -1030,9 +963,6 @@ function getSheetName(kategori) {
 }
 
 function getDataRumahIbadah(token, kategori) {
-  // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — data referensi rumah ibadah
-  // (nama+alamat) bukan PII penerima dana, tapi tetap wajib login supaya konsisten dengan
-  // pola akses seluruh sistem (dan mencegah scraping data referensi tanpa akun).
   try { wajibSesi_(token); } catch (e) { return []; }
 
   const sheetName = getSheetName(kategori);
@@ -1043,7 +973,6 @@ function getDataRumahIbadah(token, kategori) {
 }
 
 function getKemenagData(token, sheetName) {
-  // KEAMANAN: sama seperti getDataRumahIbadah — wajib login dulu.
   try { wajibSesi_(token); } catch (e) { return { error: "Sesi tidak sah. Silakan login ulang." }; }
 
   const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
@@ -1257,9 +1186,6 @@ function ambilDetailPenerimaPerBaris(token, nomorBarisAsli) {
 // =========================================================================
 // EKSPOR DATA (DENGAN OTORISASI)
 // =========================================================================
-// Fungsi formatBarisDalamEkspor_ telah dioptimasi dengan pendekatan Bulk Insert 
-// dan logikanya digabung langsung ke dalam fungsi eksporDataKeSpreadsheet.
-
 function eksporDataKeSpreadsheet(token, dataRows, namaFile) {
   try {
     wajibSesi_(token);
@@ -1377,10 +1303,6 @@ function getSemuaKuotaInternal_() {
 }
 
 function getSemuaKuota(token) {
-  // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — siapa pun (termasuk yang belum
-  // login) bisa menarik data kuota seluruh kecamatan+layanan lewat google.script.run langsung.
-  // Kedua pemanggil (getSemuaKuotaDenganPemakaian, getProgresKuota) sudah tervalidasi sesi
-  // sendiri, jadi ini murni defense-in-depth agar fungsi ini tidak bisa dipanggil telanjang.
   try { wajibSesi_(token); } catch (e) { return []; }
   return getSemuaKuotaInternal_();
 }
@@ -1467,7 +1389,6 @@ function cekKuotaTersedia(kecamatan, layanan, jumlahTerpakaiOverride) {
     let jumlahTerpakai;
 
     if (typeof jumlahTerpakaiOverride === "number") {
-      // Sudah dihitung sebelumnya (oleh validasiDataBaru_ dalam loop yang sama) — tidak perlu baca ulang sheet.
       jumlahTerpakai = jumlahTerpakaiOverride;
     } else {
       // Cek dari cache indeks terdaftar terlebih dahulu (0 API call)
@@ -1513,9 +1434,6 @@ function getSemuaKuotaDenganPemakaian(token) {
   } catch (e) {
     return { kecamatanList: [], layananList: [], matriksData: {}, pesan: e.message };
   }
-  // KEAMANAN: sebelumnya hanya mensyaratkan sesi valid (login apa pun), tanpa cek role — akun
-  // KECAMATAN/KEMENAG mana pun bisa melihat kuota+pemakaian SEMUA kecamatan lain, bukan hanya
-  // miliknya sendiri. Disamakan dengan getProgresKuota yang sudah benar membatasi ke UTAMA.
   if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
     return { kecamatanList: [], layananList: [], matriksData: {}, pesan: "Fitur ini khusus Admin Utama." };
   }
@@ -1806,23 +1724,8 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
   }
 }
 
-// #########################################################################
-// ## TAMBAHAN: CHAT GRUP
-// #########################################################################
 // =========================================================================
-// FITUR CHAT GRUP (admin utama <-> kecamatan / kemenag)
-// =========================================================================
-// Ruang obrolan TUNGGAL yang dilihat semua admin. Pesan & status baca
-// disimpan di file MASTER DROPDOWN (SS_ID_MASTER_DROPDOWN).
-//
-// Sheet yang dipakai (dibuat otomatis bila belum ada):
-//   db_chat       : A=ID | B=Waktu(ISO) | C=Username | D=Role | E=Kecamatan | F=Pesan
-//   db_chat_baca  : A=Username | B=WaktuBacaTerakhir(ISO)
-//
-// PENTING — PRASYARAT:
-// Sesi harus memuat "username". Tambahkan username ke sesi di loginPengguna
-// (lihat INSTRUKSI di bawah). Tanpa itu, pengirim akan tampil "TANPA NAMA".
-//
+// FITUR CHAT GRUP (db_chat & db_chat_baca)
 // =========================================================================
 
 const NAMA_SHEET_CHAT = "db_chat";
@@ -2049,21 +1952,10 @@ function hapusPesanChat(token, idPesan) {
   }
 }
 
-// #########################################################################
-// ## TAMBAHAN: SAKELAR SETELAN (buka/tutup input)
-// #########################################################################
 // =========================================================================
-// SAKELAR BUKA/TUTUP HALAMAN INPUT (untuk KECAMATAN & KEMENAG)
-// =========================================================================
-// Disimpan di sheet "db_setelan" pada file MASTER DROPDOWN, format key-value:
-//   Kolom A = Key | Kolom B = Value
-//   Baris key "INPUT_KECAMATAN_KEMENAG" bernilai "BUKA" atau "TUTUP".
-//
-// - "BUKA"  : kecamatan/kemenag boleh mengakses halaman Input (default).
-// - "TUTUP" : kecamatan/kemenag TIDAK boleh input; tab Input disembunyikan,
-//             mereka langsung mendarat di Lihat Data. Admin UTAMA tetap bebas.
-//
-// Sheet db_setelan dibuat otomatis bila belum ada (default BUKA).
+// SAKELAR SETELAN (Buka/Tutup Akses Input)
+// Format db_setelan: Kolom A = Key, Kolom B = Value
+// Key: INPUT_KECAMATAN_KEMENAG ("BUKA" / "TUTUP")
 // =========================================================================
 
 const NAMA_SHEET_SETELAN = "db_setelan";
@@ -2274,28 +2166,10 @@ function ambilStatusDetailSetelan(token) {
 // =========================================================================
 // FUNGSI SEKALI-JALAN: HASH SEMUA PASSWORD POLOS DI db_admin
 // =========================================================================
-// Gunakan untuk setup awal banyak akun (mis. 50 user) TANPA perlu Run satu
-// per satu. Langkah:
-//   1. Isi db_admin: kolom A=Username, B=Password (ketik POLOS/biasa dulu),
-//      C=Role, D=Kecamatan. Lakukan untuk semua user.
-//   2. Di editor Apps Script, pilih fungsi: hashSemuaPasswordAwal
-//   3. Klik Run. Selesai — semua password polos di kolom B berubah jadi hash.
-//
-// PENGAMAN:
-//   - Sel yang SUDAH berupa hash (64 karakter heksadesimal) DILEWATI, sehingga
-//     aman dijalankan lebih dari sekali tanpa merusak password yang sudah benar.
-//   - Baris tanpa username atau tanpa password DILEWATI.
-//   - Hasil ringkasan dicatat di Logger (Lihat > Execution log).
-//
-// TAMBAHKAN fungsi ini ke Kode.gs (boleh diletakkan di mana saja dalam proyek).
-//
-// KEAMANAN: fungsi ini top-level tanpa parameter/token dan tidak dipanggil dari front-end
-// manapun (murni utilitas setup manual), sehingga tetap bisa dipanggil siapa pun dari browser
-// lewat google.script.run.hashSemuaPasswordAwal() tanpa login. Risikonya rendah — operasi ini
-// idempotent (baris yang sudah ter-hash dilewati, lihat PENGAMAN di atas) dan tidak membocorkan
-// apa pun, hanya menulis ulang db_admin. Tetap didokumentasikan di sini sebagai pengingat: jangan
-// tambahkan logika baru di fungsi ini yang bergantung pada asumsi "hanya developer yang bisa
-// memanggil" tanpa menambahkan wajibSesi_ terlebih dahulu.
+/**
+ * Utilitas sekali-jalan untuk men-hash password polos di db_admin secara massal.
+ * Baris kosong atau password yang sudah ter-hash SHA-256 otomatis dilewati.
+ */
 
 function hashSemuaPasswordAwal() {
   const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
@@ -2339,21 +2213,8 @@ function hashSemuaPasswordAwal() {
 
 
 // =========================================================================
-// UBAH AKUN SENDIRI (semua role) — ganti USERNAME dan/atau PASSWORD
+// UBAH AKUN SENDIRI (Ganti Username / Password)
 // =========================================================================
-// Dipanggil frontend:
-//   ubahAkunSendiri(token, passwordVerifikasi, usernameBaru, passwordBaru, konfirmasiBaru)
-//
-// Aturan:
-//   - passwordVerifikasi WAJIB & harus cocok (kunci pembuka).
-//   - usernameBaru (opsional): jika diisi -> min 4 karakter, hanya huruf/angka/
-//     garis bawah, dan harus UNIK (tidak dipakai akun lain).
-//   - passwordBaru (opsional): jika diisi -> min 6 karakter, mengandung huruf &
-//     angka, tidak sama dengan password lama; konfirmasi harus cocok.
-//   - Minimal salah satu (username atau password) harus diisi.
-//
-// Mengembalikan { sukses, pesan, usernameBaru? } — usernameBaru dikembalikan
-// bila username berubah, agar frontend bisa memberi tahu user login ulang.
 function ubahAkunSendiri(token, passwordVerifikasi, usernameBaru, passwordBaru, konfirmasiBaru) {
   let sesi;
   try { sesi = wajibSesi_(token); }
@@ -2477,11 +2338,8 @@ function ubahAkunSendiri(token, passwordVerifikasi, usernameBaru, passwordBaru, 
 
 
 // =========================================================================
-// RESET PASSWORD OLEH ADMIN UTAMA (tanpa menyimpan password asli)
+// MANAJEMEN AKUN & RESET PASSWORD (KHUSUS ADMIN UTAMA)
 // =========================================================================
-// Admin utama memilih user, lalu menetapkan password sementara. Password
-// di-hash sebelum disimpan (tidak ada password asli tersimpan di sheet).
-// User memakai password sementara untuk login, lalu menggantinya sendiri.
 
 // Ambil daftar akun (username, role, kecamatan) — KHUSUS admin utama.
 function ambilDaftarAkun(token) {
@@ -2561,14 +2419,9 @@ function resetPasswordUser(token, usernameTarget, passwordSementara) {
 
 
 // =========================================================================
-// PROFIL USER — identitas nyata di balik akun
+// PROFIL PENGGUNA
+// db_admin: A=Username, B=Password, C=Role, D=Kecamatan, E=Nama, F=HP, G=Jabatan, H=USER_ID
 // =========================================================================
-// db_admin kolom: A=Username, B=Password, C=Role, D=Kecamatan,
-//                 E=Nama Lengkap, F=Nomor HP, G=Jabatan
-//
-// Profil dianggap belum diisi bila kolom E (Nama Lengkap) masih kosong.
-// Saat pertama login, frontend menampilkan form profil (wajib diisi).
-// Hanya admin utama yang bisa mengubah profil user lain.
 
 // Dipanggil user sendiri saat pertama login. Sekaligus wajib ganti password.
 function simpanProfilUser(token, namaLengkap, nomorHp, jabatan, passwordBaru) {
@@ -2643,11 +2496,7 @@ function ubahProfilUser(token, usernameTarget, namaLengkap, nomorHp, jabatan) {
 
 // Helper internal: tulis E/F/G di baris username yang dimaksud.
 function simpanProfilKeSheet_(token, usernameTarget, nama, hp, jabatan) {
-  // KEAMANAN: sebelumnya fungsi ini tidak mengecek sesi/kepemilikan sama sekali — proteksi
-  // "hanya admin utama boleh ubah profil ORANG LAIN" hanya ada di fungsi wrapper ubahProfilUser,
-  // tapi karena ini fungsi top-level, tetap bisa dipanggil langsung untuk mengubah profil akun
-  // MANA PUN (nama/HP/jabatan) tanpa login sama sekali. Izinkan hanya kalau: (a) pelaku mengedit
-  // profilnya sendiri (dipakai simpanProfilUser), atau (b) pelaku admin UTAMA (dipakai ubahProfilUser).
+  // Validasi sesi: hanya pemilik akun atau Admin UTAMA yang boleh mengubah profil
   let sesi;
   try { sesi = wajibSesi_(token); } catch (e) { return { sukses: false, pesan: e.message }; }
   const peran = (sesi.role || "").toString().trim().toUpperCase();
@@ -2776,12 +2625,7 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
     const teks = editData.teks || {};
     const berkas = editData.berkas || {};
 
-    // ── VALIDASI ULANG: NIK ganda / Rekening ganda / Tempat-tugas ganda / Umur ──
-    // Sebelumnya kolom-kolom ini bisa diedit tanpa validasi ulang sama sekali — berbeda dari alur
-    // submit data baru (simpanDataKeSheet/validasiDataBaru_) yang memang mengecek semua ini. Admin
-    // yang mengedit bisa tanpa sadar mengubah NIK/rekening jadi sama dengan milik orang lain, atau
-    // mengubah tanggal lahir jadi <18 tahun, dan tetap tersimpan tanpa penolakan. Dicek di sini
-    // SEBELUM baris mana pun ditimpa.
+    // Validasi ulang jika ada perubahan NIK, Rekening, Tempat Tugas, atau Umur (<18 tahun)
     const nikBaruEdit = (teks[2] !== undefined) ? teks[2].toString().trim() : (rowLama[2] || "").toString().trim();
     const rekBaruEdit = (teks[13] !== undefined) ? teks[13].toString().trim() : (rowLama[13] || "").toString().trim();
     const tempatTugasBaruEdit = rapikanTeks_(teks[8] !== undefined ? teks[8] : rowLama[8]);
@@ -2912,11 +2756,7 @@ function verifikasiSatuData(token, nomorBarisAsli, statusBaru, keterangan, batas
     if (!batasWaktuBersih) return { sukses: false, pesan: "Batas waktu perbaikan wajib diisi untuk status Berkas Tidak Lengkap." };
   }
 
-  // INTEGRITAS DATA: sebelumnya tidak ada LockService maupun pengecekan status sebelum menimpa —
-  // kalau dua admin UTAMA membuka baris yang sama nyaris bersamaan, verifikasi terakhir yang
-  // tersimpan akan menimpa yang pertama tanpa peringatan apa pun. Sekarang dikunci + status
-  // TERKINI di sheet dibandingkan dengan status yang terakhir dimuat di layar admin (dikirim
-  // front-end sebagai statusSebelumnyaDiharapkan); kalau sudah berubah, tolak dan minta muat ulang.
+  // LockService & validasi status terkini untuk mencegah race condition antar verifikator
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
@@ -2969,9 +2809,7 @@ function laporkanPerbaikanBerkas(token, nomorBarisAsli) {
   const baris = Number(nomorBarisAsli);
   if (!baris || baris < 2) return { sukses: false, pesan: "Nomor baris tidak valid." };
 
-  // INTEGRITAS DATA: baca status lalu tulis tanpa LockService berpotensi race condition ringan
-  // kalau dua tab/pengguna melapor untuk baris yang sama nyaris bersamaan — dikunci konsisten
-  // dengan pola yang sama di verifikasiSatuData/tandaiSudahDiperbaiki.
+  // Kunci dengan LockService untuk mencegah race condition
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
@@ -2984,10 +2822,7 @@ function laporkanPerbaikanBerkas(token, nomorBarisAsli) {
     const sheet = ss.getSheetByName(NAMA_SHEET_INPUT);
     if (!sheet || baris > sheet.getLastRow()) return { sukses: false, pesan: "Baris tidak ditemukan." };
 
-    // KEAMANAN (IDOR): sebelumnya fungsi ini hanya mensyaratkan sesi valid (login apa pun) tanpa
-    // mencocokkan kepemilikan baris — akun kecamatan/kemenag mana pun bisa menandai baris milik
-    // kecamatan/layanan lain sebagai "sudah dilaporkan diperbaiki". Cek kepemilikan memakai pola
-    // yang sama persis dengan editDataPenerima/ambilDetailPenerimaPerBaris.
+    // Validasi otorisasi kepemilikan data (RBAC) berdasarkan peran dan kecamatan
     const rowCek = sheet.getRange(baris, 1, 1, 11).getValues()[0];
     const listLayananKemenag = daftarLayananKemenagUpper_();
     const layananSheet = (rowCek[7] || "").toString().trim().toUpperCase();
@@ -3035,10 +2870,7 @@ function tandaiSudahDiperbaiki(token, nomorBarisAsli) {
   const baris = Number(nomorBarisAsli);
   if (!baris || baris < 2) return { sukses: false, pesan: "Nomor baris tidak valid." };
 
-  // INTEGRITAS DATA: sebelumnya tidak ada LockService maupun pengecekan status sebelum menimpa —
-  // dua admin UTAMA bisa saling menimpa hasil tanpa peringatan. Sekarang dikunci + wajib status
-  // TERKINI di sheet masih "Berkas Tidak Lengkap" (sesuai maksud fungsi ini, lihat komentar di atas)
-  // sebelum direset ke "Memenuhi Syarat".
+  // Kunci dengan LockService dan pastikan status terkini masih "Berkas Tidak Lengkap"
   const lock = LockService.getScriptLock();
   try {
     lock.waitLock(20000);
@@ -3290,11 +3122,7 @@ function ambilRiwayatEdit(token, nomorBarisAsli) {
 
     const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
 
-    // KEAMANAN (IDOR): sebelumnya fungsi ini hanya mensyaratkan sesi valid (login apa pun)
-    // tanpa mencocokkan kepemilikan baris — akun kecamatan/kemenag mana pun bisa mengintip
-    // riwayat edit (termasuk NIK/rekening/no.kontak "sebelum"/"sesudah") milik kecamatan/
-    // layanan lain hanya dengan menebak nomor baris berurutan. Cek kepemilikan di bawah ini
-    // memakai pola yang sama persis dengan ambilDetailPenerimaPerBaris.
+    // Validasi otorisasi baris (RBAC) sebelum mengambil data riwayat edit
     const sheetData = ss.getSheetByName(NAMA_SHEET_INPUT);
     if (!sheetData || baris > sheetData.getLastRow()) {
       return { sukses: false, riwayat: [], pesan: "Baris tidak ditemukan." };
@@ -3384,11 +3212,7 @@ function ambilDataTahunHakAkses(token, tahun) {
     var listKemenag = daftarLayananKemenagUpper_();
     var lastRow     = sheet.getLastRow();
 
-    // KEAMANAN: sebelumnya endpoint data tahun sebelumnya ini TIDAK menerapkan pembatasan
-    // kelurahan-terkunci maupun sub-filter GSM Katolik/Kristen yang sudah diterapkan dengan benar
-    // di ambilDataLihatDataHakAkses (data tahun berjalan) — akun yang harusnya hanya boleh lihat
-    // satu kelurahan/sub-kelompok bisa melihat seluruh kecamatan/gabungan Katolik+Kristen untuk
-    // data tahun-tahun sebelumnya. Diterapkan pola yang identik di sini.
+    // Terapkan pembatasan kelurahan-terkunci dan sub-filter GSM Katolik/Kristen
     var userIdSesi = (sesi.userId || "").toString().toUpperCase().trim();
     var kelurahanTerkunci = userIdSesi.indexOf("KELURAHAN ") === 0
       ? userIdSesi.substring("KELURAHAN ".length).trim()
@@ -3458,8 +3282,7 @@ function ambilDataTahunHakAkses(token, tahun) {
 // luar Kota Medan → tolak. Jika TIDAK ditemukan, dianggap warga Kota Medan.
 function cekDomisiliCapil_(token, nik) {
   try {
-    // KEAMANAN: fungsi ini membocorkan nama+alamat domisili+status seseorang berdasarkan NIK.
-    // Sesi wajib divalidasi dulu; kalau tidak sah, kembalikan hasil "tidak ditemukan".
+    // Validasi sesi pengguna sebelum memeriksa domisili
     try { wajibSesi_(token); } catch (eSesi) { return { ditemukan: false }; }
 
     const nikTarget = (nik || "").toString().trim();
@@ -3520,8 +3343,7 @@ function cekDomisiliCapil_(token, nik) {
 // Update cekStatus2026_ → cekStatusTahunLalu_ (cek dari semua sheet db_XXXX kecuali tahun aktif)
 function cekStatusTahunLalu_(token, nik) {
   try {
-    // KEAMANAN: sama seperti cekDomisiliCapil_ — fungsi ini membocorkan nama+status+layanan
-    // seseorang di tahun-tahun sebelumnya berdasarkan NIK. Wajib sesi sah dulu.
+    // Validasi sesi pengguna sebelum memeriksa status tahun sebelumnya
     try { wajibSesi_(token); } catch (eSesi) { return { ditemukan: false }; }
 
     const nikTarget = (nik || "").toString().trim();
@@ -3606,12 +3428,7 @@ function cekStatusTahunLalu_(token, nik) {
 // PropertiesService > Script Properties > VERSI_APLIKASI
 
 function setVersiAplikasi() {
-  // Jalankan fungsi ini sekali dari editor setiap kali deploy versi baru.
-  // KEAMANAN: fungsi ini top-level sehingga tetap bisa dipanggil siapa pun dari browser tanpa
-  // login (juga dipakai sebagai fallback oleh getVersiAplikasi() saat property belum pernah
-  // diisi, sehingga tidak bisa disyaratkan token di sini tanpa merusak alur itu). Untuk membatasi
-  // potensi disalahgunakan memicu modal "update paksa" ke semua user berulang-ulang, perubahan
-  // nilai dibatasi maksimal sekali per 5 menit — cukup longgar untuk pemakaian deploy normal.
+  // Batasi pembaruan versi maksimal sekali per 5 menit
   const props = PropertiesService.getScriptProperties();
   const terakhirDiubah = Number(props.getProperty('VERSI_APLIKASI_TS') || 0);
   const sekarang = Date.now();
@@ -3672,9 +3489,7 @@ function setHeaderUserId() {
 // Ambil User ID (kolom H) dari sebuah username.
 // Return string kosong "" kalau username tidak ditemukan atau User ID kosong.
 function ambilUserIdDariUsername_(token, username) {
-  // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — fungsi ini jadi oracle
-  // enumerasi username → User ID internal tanpa login. Saat ini tidak dipanggil dari
-  // manapun (dead code), tapi tetap dijaga sebagai defense-in-depth kalau dipakai nanti.
+  // Validasi sesi pengguna
   try { wajibSesi_(token); } catch (e) { return ""; }
   try {
     if (!username) return "";
@@ -3700,9 +3515,7 @@ function ambilUserIdDariUsername_(token, username) {
 }
 
 function cekAksesInputUser_(token, userId) {
-  // KEAMANAN: sebelumnya tidak mensyaratkan sesi sama sekali — siapa pun (termasuk yang belum
-  // login) bisa memanggil langsung untuk mengintip status buka/tutup akses seorang user. Ketiga
-  // pemanggil sudah tervalidasi sesi sendiri sebelum sampai ke sini; ini defense-in-depth.
+  // Validasi sesi pengguna
   try { wajibSesi_(token); } catch (e) { return { ditutup: true, sumber: "MASTER", nilai: "" }; }
   try {
     // Cek sakelar khusus untuk user ini
@@ -3732,11 +3545,7 @@ function cekAksesInputUser_(token, userId) {
 // Kalau nilai baru sama dengan master saat ini, sakelar khusus DIHAPUS
 // (auto-cleanup redundant entries, sesuai Detail 3 Pilihan X).
 function setSakelarUser_(token, userId, nilaiBaru) {
-  // KEAMANAN: sebelumnya fungsi ini (dan hapusSakelarUser_) tidak mengecek sesi/role sama sekali —
-  // proteksi "hanya admin utama" hanya ada di fungsi wrapper (setSakelarUserByAdmin dkk). Karena ini
-  // fungsi top-level, Apps Script tetap mengeksposnya ke google.script.run dari browser terlepas dari
-  // akhiran "_", sehingga wrapper itu bisa dilewati begitu saja dengan memanggil fungsi ini langsung
-  // tanpa login sama sekali. Sesi + role UTAMA sekarang divalidasi di sini juga (defense-in-depth).
+  // Validasi otorisasi: hanya Admin Utama yang dapat mengatur sakelar per user
   const sesiPelaku = wajibSesi_(token);
   if ((sesiPelaku.role || "").toString().trim().toUpperCase() !== "UTAMA") {
     throw new Error("Hanya admin utama yang boleh mengubah sakelar user.");
@@ -3781,8 +3590,7 @@ function setSakelarUser_(token, userId, nilaiBaru) {
 
 // Hapus sakelar khusus untuk seorang user (kembali ikuti master).
 function hapusSakelarUser_(token, userId) {
-  // KEAMANAN: lihat catatan di setSakelarUser_ — proteksi ditegakkan lagi di sini, bukan
-  // hanya mengandalkan fungsi wrapper.
+  // Validasi otorisasi: hanya Admin Utama yang dapat menghapus sakelar user
   const sesiPelaku = wajibSesi_(token);
   if ((sesiPelaku.role || "").toString().trim().toUpperCase() !== "UTAMA") {
     throw new Error("Hanya admin utama yang boleh mengubah sakelar user.");
@@ -4048,14 +3856,10 @@ function bulkSakelarPerKecamatan(token, namaKecamatan, action) {
   }
 }
 
-// Jalankan SEKALI dari editor Apps Script untuk membuat kunci rahasia SSO.
-// PENTING (KEAMANAN): fungsi ini SENGAJA tidak mengembalikan (return) kunci ke pemanggil,
-// supaya tidak bisa dipanggil lewat google.script.run dari browser untuk membocorkan kunci
-// (di Apps Script, SEMUA fungsi top-level otomatis bisa dipanggil client, terlepas dari
-// niat "jalankan manual dari editor" — akhiran/komentar bukan proteksi runtime).
-// Lihat hasilnya HANYA lewat Executions/Log di editor Apps Script (butuh akses editor project).
-// Setelah dijalankan, salin nilai dari Log ke Script Properties app RETUR
-// dengan nama Property yang SAMA PERSIS: SSO_SECRET_KEY
+/**
+ * Buat atau ambil kunci rahasia SSO. Dicatat hanya ke Logger untuk keamanan.
+ * Salin nilai kunci ke Script Properties app RETUR (SSO_SECRET_KEY).
+ */
 function generateDanTampilkanKunciSSO() {
   const props = PropertiesService.getScriptProperties();
   let kunci = props.getProperty('SSO_SECRET_KEY');
@@ -4065,7 +3869,6 @@ function generateDanTampilkanKunciSSO() {
   }
   Logger.log('SALIN KUNCI INI KE APP RETUR (Project Settings > Script Properties, nama: SSO_SECRET_KEY):');
   Logger.log(kunci);
-  // TIDAK return kunci — lihat catatan keamanan di atas.
 }
 
 // =========================================================================
@@ -4081,12 +3884,7 @@ function buatTokenSSORetur(token) {
   try { sesi = wajibSesi_(token); }
   catch (e) { return { sukses: false, pesan: e.message }; }
 
-  // KEAMANAN: pengambil kunci rahasia SSO SENGAJA dijadikan fungsi LOKAL (nested) di sini,
-  // bukan fungsi top-level terpisah (dulu bernama ambilKunciSSO_). Di Apps Script, fungsi
-  // top-level apa pun — termasuk yang diberi akhiran "_" — tetap bisa dipanggil langsung
-  // dari browser lewat google.script.run tanpa melalui wajibSesi_ di atas. Dengan menaruhnya
-  // sebagai fungsi lokal di dalam sini, kunci rahasia HANYA bisa diakses lewat jalur ini,
-  // setelah token divalidasi.
+  // Helper lokal agar kunci rahasia tidak diekspos sebagai fungsi global
   function ambilKunciSSOLokal_() {
     return PropertiesService.getScriptProperties().getProperty('SSO_SECRET_KEY') || "";
   }
@@ -4133,23 +3931,9 @@ function buatTokenSSORetur(token) {
   }
 }
 
-// ------------------------------------------------------------
-// [2] simpanUrlRetur_ — JALANKAN SEKALI dari editor (pilih fungsi
-//     ini di dropdown atas -> Run) untuk mengisi Script Properties.
-//     Kalau nanti URL Retur berubah lagi, ubah nilai di baris
-//     ANGKA_URL_BARU di bawah, lalu jalankan fungsi ini lagi -
-//     ATAU (lebih cepat) langsung edit lewat Project Settings
-//     seperti dijelaskan di atas, tanpa perlu sentuh kode ini.
-//
-// KEAMANAN: fungsi ini top-level tanpa parameter/token (tidak ada pemanggil dari front-end
-// maupun fungsi lain — murni utilitas setup manual), sehingga tetap bisa dipanggil siapa pun
-// dari browser lewat google.script.run.simpanUrlRetur_(). Saat ini AMAN karena ANGKA_URL_BARU
-// adalah konstanta tetap (memanggilnya berulang hanya menulis ulang nilai yang sama). JANGAN
-// pernah mengubah ANGKA_URL_BARU menjadi parameter dinamis — SSO_URL_RETUR dipakai buatTokenSSORetur
-// untuk membentuk URL redirect berisi token sesi user; kalau nilainya bisa ditimpa jadi URL
-// server pihak lain, token SSO milik user (termasuk admin UTAMA) akan otomatis terkirim ke
-// server tersebut saat mereka klik menu "Retur & Kematian".
-// ------------------------------------------------------------
+/**
+ * Utilitas untuk menyimpan URL endpoint Retur 2027 ke Script Properties.
+ */
 function simpanUrlRetur_() {
   const ANGKA_URL_BARU = "https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec";
   PropertiesService.getScriptProperties().setProperty('SSO_URL_RETUR', ANGKA_URL_BARU);
