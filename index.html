@@ -936,7 +936,7 @@
     </div>
 
     <div id="modal-login"
-      class="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+      class="hidden fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
 
         <div class="px-6 py-5 text-center" style="background: linear-gradient(135deg, #004999 0%, #0066CC 100%);">
@@ -1778,17 +1778,21 @@
       // lalu dicoba dipulihkan di sini setiap kali skrip dimuat — otomatis hilang saat tab/browser ditutup.
       // =========================================================================
       (function cobaPulihkanSesi() {
+        // Modal login TERSEMBUNYI secara default di HTML (lihat class="hidden" di elemennya) —
+        // supaya tidak sempat kedip muncul sebelum kita tahu apakah ada sesi tersimpan atau tidak.
+        // Di sinilah satu-satunya tempat ia ditampilkan kalau memang tidak ada sesi untuk dipulihkan.
+        const modalLoginEl = document.getElementById('modal-login');
+
         let sesiTersimpan = null;
         try {
           const raw = sessionStorage.getItem('dana_jasa_sesi');
           if (raw) sesiTersimpan = JSON.parse(raw);
         } catch (e) { sesiTersimpan = null; }
 
-        if (!sesiTersimpan || !sesiTersimpan.token) return;
-
-        // Sembunyikan modal login lebih dulu supaya tidak sempat "kedip" sebelum sesi dipastikan.
-        const modalLoginEl = document.getElementById('modal-login');
-        if (modalLoginEl) modalLoginEl.classList.add('hidden');
+        if (!sesiTersimpan || !sesiTersimpan.token) {
+          if (modalLoginEl) modalLoginEl.classList.remove('hidden');
+          return;
+        }
 
         google.script.run
           .withSuccessHandler(function (res) {
