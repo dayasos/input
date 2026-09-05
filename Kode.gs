@@ -3929,8 +3929,13 @@ function generateDanTampilkanKunciSSO() {
 // SSO KE APLIKASI RETUR 2027 (token bertanda tangan, berlaku 60 detik)
 // =========================================================================
 function ambilUrlRetur_() {
-  const DEFAULT_URL_RETUR = "https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec";
-  return PropertiesService.getScriptProperties().getProperty('SSO_URL_RETUR') || DEFAULT_URL_RETUR;
+  const DEFAULT_URL_RETUR = "https://retur2027.vercel.app";
+  const propUrl = PropertiesService.getScriptProperties().getProperty('SSO_URL_RETUR');
+  // Jika Script Property masih menyimpan URL lama script.google.com, prioritaskan DEFAULT_URL_RETUR
+  if (propUrl && propUrl.indexOf("script.google.com") !== -1) {
+    return DEFAULT_URL_RETUR;
+  }
+  return propUrl || DEFAULT_URL_RETUR;
 }
 
 function buatTokenSSORetur(token) {
@@ -3979,7 +3984,12 @@ function buatTokenSSORetur(token) {
     }).join("");
 
     const ssoToken = payloadStr + "." + sig;
-    return { sukses: true, url: ambilUrlRetur_() + "?sso=" + encodeURIComponent(ssoToken) };
+    let baseUrl = ambilUrlRetur_().trim();
+    if (/^https?:\/\/[^\/]+$/.test(baseUrl)) {
+      baseUrl += "/";
+    }
+    const separator = baseUrl.indexOf("?") === -1 ? "?" : "&";
+    return { sukses: true, url: baseUrl + separator + "sso=" + encodeURIComponent(ssoToken) };
   } catch (e) {
     return { sukses: false, pesan: e.toString() };
   }
@@ -3989,7 +3999,7 @@ function buatTokenSSORetur(token) {
  * Utilitas untuk menyimpan URL endpoint Retur 2027 ke Script Properties.
  */
 function simpanUrlRetur_() {
-  const ANGKA_URL_BARU = "https://script.google.com/macros/s/AKfycbxc4hH7MWBYYk8RpMmiD_oUT0PdqLxqbL0iOPkTXm4a3BuFQRvUcGgfQqCpbP4Uw2y3Ug/exec";
+  const ANGKA_URL_BARU = "https://retur2027.vercel.app";
   PropertiesService.getScriptProperties().setProperty('SSO_URL_RETUR', ANGKA_URL_BARU);
   Logger.log("URL Retur 2027 berhasil disimpan ke Script Properties:\n" + ANGKA_URL_BARU);
 }
