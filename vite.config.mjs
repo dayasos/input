@@ -24,7 +24,7 @@ export default defineConfig({
             });
             req.on('end', async () => {
               try {
-                const gasUrl = process.env.GAS_API_URL || 'https://script.google.com/macros/s/AKfycbx2DAtU6e3ZWH0sZbi2JAKjpp_cLWV0LfVoAmsWLuUGzEp_KGOjv1xZ9QL6yHCrb8ypCw/exec';
+                const gasUrl = process.env.GAS_API_URL || 'https://script.google.com/macros/s/AKfycbwQvkJ_6McDWi6erkIfP6CAnRu0L1f8ipIk18k7SltwQS-xhXyd-atnbaTNBdq0hjHyVg/exec';
                 const resp = await fetch(gasUrl, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
