@@ -1,5 +1,5 @@
-// Port dari pola format tanggal berulang di Kode.gs (getSnapshotSheetInput_, getSnapshotDataDetail_,
-// ambilDetailPenerimaPerBaris — ketiganya menulis loop `("0"+d.getDate()).slice(-2)` yang sama persis).
+// Port dari pola format tanggal berulang di Kode.gs (getSnapshotSheetInput_,
+// ambilDetailPenerimaPerBaris — keduanya menulis loop `("0"+d.getDate()).slice(-2)` yang sama persis).
 // Di sini cukup satu fungsi, dipakai di semua tempat yang butuh format dd-MM-yyyy.
 export function formatTanggalDDMMYYYY(nilai: Date | string | null | undefined): string {
   if (!nilai) return "";

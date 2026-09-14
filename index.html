@@ -805,64 +805,6 @@
       </div>
     </div>
 
-    <!-- Modal: daftar ringkas "Data Detail" (dari sheet Data Detail, NIK-matched) -->
-    <div id="modal-data-detail-list"
-      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-      <div class="bg-white rounded-2xl max-w-4xl w-full shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
-        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
-          <h3 id="judul-modal-data-detail-list" class="text-base font-bold text-slate-800 tracking-wide uppercase">Data
-            Detail</h3>
-          <button onclick="document.getElementById('modal-data-detail-list').classList.add('hidden')"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
-        </div>
-        <div class="p-6 overflow-y-auto text-sm text-slate-700">
-          <div class="overflow-x-auto rounded-lg border border-slate-200">
-            <table class="w-full text-left border-collapse bg-white">
-              <thead>
-                <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
-                  <th class="px-3 py-2 text-center border-b border-slate-200">No</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Nama</th>
-                  <th class="px-3 py-2 border-b border-slate-200">NIK</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Layanan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Kecamatan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Kelurahan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Status</th>
-                  <th class="px-3 py-2 border-b border-slate-200 text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="body-tabel-data-detail" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center rounded-b-2xl">
-          <button onclick="document.getElementById('modal-data-detail-list').classList.add('hidden')"
-            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
-            Tutup
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal: seluruh data mentah (kolom A-S) satu baris Data Detail -->
-    <div id="modal-data-detail-full"
-      class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-      <div class="bg-white rounded-2xl max-w-2xl w-full shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
-        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
-          <h3 class="text-base font-bold text-slate-800 tracking-wide uppercase">Data Lengkap (Data Detail)</h3>
-          <button onclick="document.getElementById('modal-data-detail-full').classList.add('hidden')"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
-        </div>
-        <div id="isi-modal-data-detail-full" class="p-6 overflow-y-auto text-sm text-slate-700 space-y-2"></div>
-        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end items-center rounded-b-2xl">
-          <button onclick="document.getElementById('modal-data-detail-full').classList.add('hidden')"
-            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
-            Tutup
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div id="loading-overlay"
       class="hidden fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-sm flex flex-col items-center justify-center transition-all">
       <div class="loader mb-4"></div>
@@ -3804,7 +3746,6 @@
     <td class="px-4 py-3 text-center">
       <div class="flex flex-col items-center gap-1.5">
         <button onclick="tampilkanDetailKeModalOnDemand(${row[0]})" class="w-full px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200 rounded-md font-semibold text-xs transition">Detail</button>
-        <button onclick="tampilkanDataDetailKeModal(${row[0]})" class="w-full px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-xs transition whitespace-nowrap">🔎 Data Detail</button>
       </div>
     </td>
   </tr>`;
@@ -3824,102 +3765,6 @@
         }
         return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-full">⏳ Proses Verifikasi</span>`;
       }
-
-      // ===================== TOMBOL "DATA DETAIL" PER BARIS (sheet terpisah 'Data Detail') =====================
-      let dataDetailAktif = { header: [], rows: [] }; // hasil fetch terakhir, dipakai modal "Lihat" bertumpuk
-      // Token permintaan terbaru — dipakai menolak respons basi kalau modal "Data Detail" dibuka
-      // dua kali cepat berturutan (klik baris A lalu B sebelum respons A kembali) dan respons A
-      // ternyata tiba BELAKANGAN daripada respons B; tanpa ini, data A bisa menimpa tampilan B
-      // padahal judul modal sudah terlanjur menampilkan nama B. Diperbaiki saat code review.
-      let dataDetailRequestId = 0;
-
-      // Badge status generik: hanya pakai tampilan badge kalau nilainya salah satu dari 4 status
-      // verifikasi yang dikenal aplikasi ini — di luar itu (sheet 'Data Detail' bisa punya kosakata
-      // status sendiri) tampilkan sebagai teks polos supaya tidak menyesatkan.
-      // Catatan: sheet "Data Detail" TIDAK punya kolom tanggal-lapor-perbaikan tersendiri (hanya
-      // STATUS + TGL STATUS) — beda dari tabel "Lihat Data" — jadi badge "Sudah Dilaporkan" yang
-      // butuh info itu tidak bisa diterapkan di sini, sengaja selalu badge status polos.
-      function badgeAtauTeksStatus(status) {
-        const s = (status || "").toString().trim();
-        const dikenal = ["Memenuhi Syarat", "Tidak Memenuhi Syarat", "Berkas Tidak Lengkap", "Proses Verifikasi"];
-        if (dikenal.indexOf(s) !== -1) return badgeStatusVerifikasi(s);
-        return s ? esc(s) : '-';
-      }
-
-      window.tampilkanDataDetailKeModal = function (nomorBaris) {
-        if (!pastikanLogin()) return;
-        const row = masterDataLihat.find(function (r) { return r[0] === nomorBaris; });
-        if (!row) { tampilkanToast('Data tidak ditemukan.', 'gagal'); return; }
-        const nik = row[2];
-        const nama = row[1] || '-';
-
-        const requestIdSaatIni = ++dataDetailRequestId;
-
-        document.getElementById('judul-modal-data-detail-list').textContent = 'Data Detail — ' + nama;
-        document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(8, 3);
-        document.getElementById('modal-data-detail-list').classList.remove('hidden');
-
-        google.script.run
-          .withSuccessHandler(function (res) {
-            if (requestIdSaatIni !== dataDetailRequestId) return; // respons basi (sudah ada klik baris lain setelah ini) — abaikan
-            if (!res || !res.sukses) {
-              document.getElementById('body-tabel-data-detail').innerHTML =
-                '<tr><td colspan="8" class="px-4 py-6 text-center text-red-500">' + esc(res ? res.pesan : 'Gagal memuat data') + '</td></tr>';
-              return;
-            }
-            dataDetailAktif = res;
-            renderTabelDataDetail();
-          })
-          .withFailureHandler(function (err) {
-            if (requestIdSaatIni !== dataDetailRequestId) return;
-            document.getElementById('body-tabel-data-detail').innerHTML =
-              '<tr><td colspan="8" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
-          })
-          .ambilDataDetailByNik(dataPengguna.token, nik);
-      };
-
-      function renderTabelDataDetail() {
-        const tbody = document.getElementById('body-tabel-data-detail');
-        if (!dataDetailAktif.rows || dataDetailAktif.rows.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-slate-400 italic">Tidak ada Data Detail untuk NIK ini.</td></tr>';
-          return;
-        }
-        let html = '';
-        dataDetailAktif.rows.forEach(function (r, idx) {
-          html += `
-  <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-    <td class="px-3 py-2 text-center font-medium text-slate-400">${idx + 1}</td>
-    <td class="px-3 py-2 font-semibold text-slate-800 break-words">${esc(r.nama) || '-'}</td>
-    <td class="px-3 py-2 font-mono text-xs text-slate-600 break-words">${esc(r.nik) || '-'}</td>
-    <td class="px-3 py-2 text-xs text-slate-600 break-words">${esc(r.layanan) || '-'}</td>
-    <td class="px-3 py-2 text-xs text-slate-600 break-words">${esc(r.kecamatan) || '-'}</td>
-    <td class="px-3 py-2 text-xs text-slate-600 break-words">${esc(r.kelurahan) || '-'}</td>
-    <td class="px-3 py-2 text-center">${badgeAtauTeksStatus(r.status)}</td>
-    <td class="px-3 py-2 text-center">
-      <button onclick="tampilkanFullDataDetail(${idx})" class="text-emerald-600 hover:text-emerald-800 font-semibold text-xs transition">👁 Lihat</button>
-    </td>
-  </tr>`;
-        });
-        tbody.innerHTML = html;
-      }
-
-      window.tampilkanFullDataDetail = function (idx) {
-        const r = dataDetailAktif.rows[idx];
-        if (!r) return;
-        const header = dataDetailAktif.header || [];
-        let html = '<dl class="divide-y divide-slate-100">';
-        r.mentah.forEach(function (nilai, i) {
-          const label = header[i] ? header[i] : ('Kolom ' + (i + 1));
-          html += `
-    <div class="py-2 grid grid-cols-3 gap-2">
-      <dt class="col-span-1 text-xs font-semibold text-slate-500 uppercase tracking-wide">${esc(label)}</dt>
-      <dd class="col-span-2 text-sm text-slate-800 break-words">${esc(nilai) || '-'}</dd>
-    </div>`;
-        });
-        html += '</dl>';
-        document.getElementById('isi-modal-data-detail-full').innerHTML = html;
-        document.getElementById('modal-data-detail-full').classList.remove('hidden');
-      };
 
       function perbaruiElemenNavigasi(sekarang, total) {
         const infoHal = document.getElementById('info-halaman');

@@ -1,10 +1,9 @@
-// =========================================================================
+﻿// =========================================================================
 // KONFIGURASI SPREADSHEET & FOLDER GOOGLE DRIVE
 // =========================================================================
 const SS_ID_MASTER_DROPDOWN = "1wB2xHthdlMzZWG80jkmIPDNkCwtu_9p1zplF8yePGk4";
 const SS_ID_PENYIMPANAN     = "1FqXYvce8wvFtWgDmMgXlWhX3AQ_9teHCa_WpftTrJSU";
 const NAMA_SHEET_INPUT      = "Data Input 2027";
-const NAMA_SHEET_DATA_DETAIL = "Data Detail"; // sheet lain di SS_ID_PENYIMPANAN yang sama, kolom A..S
 // Layanan yang hanya boleh ada 1 penerima per tempat tugas.
 // Layanan lain (Khatib Jumat, Guru Maghrib Mengaji, Guru Sekolah, Penatua Gereja, dsb.)
 // tidak dibatasi — satu tempat tugas boleh memiliki lebih dari 1 penerima.
@@ -81,7 +80,6 @@ function doPost(e) {
       "getKemenagData"                   : getKemenagData,
       "ambilDataLihatDataHakAkses"       : ambilDataLihatDataHakAkses,
       "ambilDetailPenerimaPerBaris"      : ambilDetailPenerimaPerBaris,
-      "ambilDataDetailByNik"             : ambilDataDetailByNik,
       "eksporDataKeSpreadsheet"          : eksporDataKeSpreadsheet,
       "getSemuaKuota"                    : getSemuaKuota,
       "simpanKuota"                      : simpanKuota,
@@ -215,11 +213,12 @@ function daftarLayananKemenagUpper_() {
 }
 
 // Cascade otorisasi baris (instansi+layanan+kecamatan -> lapis kelurahan-terkunci -> lapis
-// sub-filter GSM Katolik/Kristen), dipakai bersama oleh ambilDataLihatDataHakAkses,
-// ambilDataDetailByNik, dan ambilDataTahunHakAkses. Diekstrak jadi satu fungsi (bukan disalin-
-// tempel tiap kali dipakai) supaya fungsi baru tidak berisiko "lupa" menerapkan salah satu lapis —
-// persis kelas bug yang pernah ditemukan di ambilDataDetailByNik (sub-filter GSM sempat tidak
-// diterapkan sama sekali). Port 1:1 dari lolosAksesBarisLihatData() di
+// sub-filter GSM Katolik/Kristen), dipakai bersama oleh ambilDataLihatDataHakAkses dan
+// ambilDataTahunHakAkses. Diekstrak jadi satu fungsi (bukan disalin-tempel tiap kali dipakai)
+// supaya fungsi baru tidak berisiko "lupa" menerapkan salah satu lapis — persis kelas bug yang
+// pernah ditemukan di ambilDataDetailByNik (fungsi ini sudah dihapus bersama fitur "Data Detail",
+// tapi kelas bugnya tetap relevan sebagai alasan cascade ini diekstrak). Port 1:1 dari
+// lolosAksesBarisLihatData() di
 // supabase/functions/api/_shared/akses.ts (versi Deno, sudah direview & diverifikasi sebelumnya) —
 // logikanya disamakan persis supaya kedua backend (GAS & Supabase) tidak diam-diam berbeda perilaku.
 function lolosAksesBarisLihatData_(p) {
@@ -706,201 +705,6 @@ function getSnapshotSheetInput_() {
 function invalidateSemuaCacheData_() {
   invalidateIndeksTerdaftar_();
   CacheService.getScriptCache().remove(KUNCI_CACHE_SNAPSHOT_INPUT);
-}
-
-// =========================================================================
-// SNAPSHOT & AKSES SHEET "Data Detail" (dipakai oleh tombol "Data Detail" per baris
-// di tab Lihat Data) — sheet TERPISAH dari NAMA_SHEET_INPUT, di spreadsheet yang sama.
-// TIDAK ditulis dari aplikasi ini, jadi cache-nya lebih panjang (5 menit) daripada
-// snapshot data transaksi.
-// =========================================================================
-const KUNCI_CACHE_DATA_DETAIL = "DATA_DETAIL_SNAPSHOT_V1";
-const TTL_CACHE_DATA_DETAIL_DETIK = 300; // 5 menit
-
-// Ambil {header, baris} mentah (kolom A..S) dari sheet "Data Detail", pakai script cache.
-function getSnapshotDataDetail_() {
-  const cache = CacheService.getScriptCache();
-  const cached = cache.get(KUNCI_CACHE_DATA_DETAIL);
-  if (cached) {
-    try { return JSON.parse(cached); } catch (e) {}
-  }
-
-  const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
-  const sheet = ss.getSheetByName(NAMA_SHEET_DATA_DETAIL);
-  const hasil = { header: [], baris: [] };
-
-  if (sheet && sheet.getLastRow() >= 1) {
-    // Dibatasi Math.min(19, getLastColumn()) — bukan langsung getRange(...,19) — supaya tidak error
-    // "Range specified is outside the dimensions of the sheet" kalau sheet eksternal ini (dikelola
-    // pihak lain, di luar kendali app) suatu saat kolomnya menyusut dari 19. Hasil selalu diratakan
-    // (padding "") jadi tepat 19 elemen supaya IDX_DD_* (indeks tetap s/d 18) tidak pernah undefined.
-    const jumlahKolomAda = Math.min(19, sheet.getLastColumn());
-    const headerMentah = jumlahKolomAda > 0 ? sheet.getRange(1, 1, 1, jumlahKolomAda).getValues()[0] : [];
-    for (let c = 0; c < 19; c++) {
-      const h = headerMentah[c];
-      hasil.header.push((h === null || h === undefined) ? "" : h.toString().trim());
-    }
-
-    if (sheet.getLastRow() >= 2) {
-      const n = sheet.getLastRow() - 1;
-      const data = jumlahKolomAda > 0 ? sheet.getRange(2, 1, n, jumlahKolomAda).getValues() : [];
-
-      // Kolom NIK (IDX_DD_NIK) dibaca ULANG terpisah lewat getDisplayValues() (teks apa adanya
-      // yang tampil di sheet), bukan diambil dari getValues() di atas — sheet "Data Detail"
-      // dikelola pihak eksternal, kalau sel NIK di sana kebetulan diformat sebagai Number
-      // (bukan Text), getValues() mengembalikan angka JS yang presisinya SUDAH HILANG untuk
-      // NIK 16 digit (melebihi Number.MAX_SAFE_INTEGER, ~9 kuadriliun) — pencarian NIK jadi
-      // gagal total tanpa pesan error apa pun. getDisplayValues() selalu memberi teks utuh
-      // sesuai yang terlihat di layar, terlepas dari format selnya.
-      const kolomNik1Based = IDX_DD_NIK + 1;
-      const nikDisplayValues = (jumlahKolomAda >= kolomNik1Based)
-        ? sheet.getRange(2, kolomNik1Based, n, 1).getDisplayValues()
-        : [];
-
-      for (let i = 0; i < n; i++) {
-        const rMentah = data[i] || [];
-        const r = [];
-        for (let c = 0; c < 19; c++) {
-          if (c === IDX_DD_NIK && nikDisplayValues[i]) {
-            r.push(nikDisplayValues[i][0].toString().trim());
-            continue;
-          }
-          const v = rMentah[c];
-          if (v instanceof Date) {
-            const d = ("0" + v.getDate()).slice(-2);
-            const m = ("0" + (v.getMonth() + 1)).slice(-2);
-            const y = v.getFullYear();
-            r.push(d + "-" + m + "-" + y);
-          } else {
-            r.push((v === null || v === undefined) ? "" : v);
-          }
-        }
-        hasil.baris.push(r);
-      }
-    }
-  }
-
-  try {
-    cache.put(KUNCI_CACHE_DATA_DETAIL, JSON.stringify(hasil), TTL_CACHE_DATA_DETAIL_DETIK);
-  } catch (e) {} // payload melebihi batas 100KB CacheService -> lewati cache, tetap kembalikan data langsung
-
-  return hasil;
-}
-
-// Posisi kolom tetap di sheet "Data Detail" (dikonfirmasi langsung oleh pemilik sheet):
-// A = No (dibuat sistem, tidak dipakai), B = Nama, C = NIK, H = Layanan, K = Kecamatan,
-// L = Kelurahan, S = Status. Indeks di bawah ini 0-based (A=0).
-const IDX_DD_NAMA      = 1;  // B
-const IDX_DD_NIK       = 2;  // C
-const IDX_DD_LAYANAN   = 7;  // H
-const IDX_DD_KECAMATAN = 10; // K
-const IDX_DD_KELURAHAN = 11; // L
-const IDX_DD_STATUS    = 18; // S
-
-// Ambil baris-baris sheet "Data Detail" yang NIK-nya cocok dengan `nik`, dibatasi hak akses
-// yang SAMA dengan ambilDataLihatDataHakAkses (KECAMATAN/KEMENAG/UTAMA + kunci kelurahan +
-// sub-filter GSM Katolik/Kristen).
-function ambilDataDetailByNik(token, nik) {
-  let sesi;
-  try {
-    sesi = wajibSesi_(token);
-  } catch (e) {
-    return { sukses: false, pesan: e.message };
-  }
-
-  try {
-    const nikTarget = (nik || "").toString().replace(/^'+/, "").trim();
-    if (!nikTarget) return { sukses: false, pesan: "NIK tidak valid." };
-
-    const snapshot = getSnapshotDataDetail_();
-    const header = snapshot.header;
-    if (!header.length) return { sukses: true, header: [], rows: [] };
-
-    // Tentukan instansi & filter layanan dari peran tepercaya di sesi — pola sama dengan
-    // ambilDataLihatDataHakAkses.
-    const role = sesi.role;
-    const namaKecamatanPengguna = sesi.kecamatan || "";
-    const userIdSesi = (sesi.userId || "").toString().toUpperCase().trim();
-    const kelurahanTerkunci = userIdSesi.indexOf("KELURAHAN ") === 0
-      ? userIdSesi.substring("KELURAHAN ".length).trim()
-      : "";
-    // Khusus GURU SEKOLAH MINGGU: pisah Katolik vs Kristen — SAMA seperti lapis di
-    // ambilDataLihatDataHakAkses (baris ~1306-1308). Diperbaiki: sebelumnya fungsi ini TIDAK
-    // menerapkan lapis ini sama sekali, sehingga akun BIMAS KATOLIK/KRISTEN bisa melihat Data
-    // Detail milik denominasi lain untuk NIK yang sama-sama layanan GSM.
-    const subFilterGsm = userIdSesi === "BIMAS KATOLIK" ? "KATOLIK"
-                        : userIdSesi === "BIMAS KRISTEN" ? "BUKAN_KATOLIK"
-                        : "";
-    // Sheet "Data Detail" dikelola pihak eksternal — TIDAK ada kolom "Tempat Tugas" di posisi
-    // tetap yang dikonfirmasi pemilik sheet (lihat komentar IDX_DD_* di atas, hanya 7 kolom yang
-    // dikonfirmasi). Jadi posisi kolomnya dicari dinamis dari header baris 1, bukan ditebak.
-    const idxTempatTugasDD = subFilterGsm
-      ? header.findIndex(function (h) { return (h || "").toString().trim().toUpperCase().indexOf("TEMPAT TUGAS") !== -1; })
-      : -1;
-    const listLayananKemenag = daftarLayananKemenagUpper_();
-    let instansiPengguna;
-    let layananPengguna = "";
-
-    if (role === "UTAMA") {
-      instansiPengguna = "SUPERADMIN";
-    } else if (role === "KECAMATAN") {
-      instansiPengguna = "KECAMATAN";
-    } else if (listLayananKemenag.indexOf(role) !== -1) {
-      instansiPengguna = "KEMENAG";
-      layananPengguna = role;
-    } else {
-      return { sukses: false, pesan: "Peran tidak dikenali." };
-    }
-
-    const rows = [];
-    for (let i = 0; i < snapshot.baris.length; i++) {
-      const row = snapshot.baris[i];
-      const nikSheet = (row[IDX_DD_NIK] || "").toString().replace(/^'+/, "").trim();
-      if (nikSheet !== nikTarget) continue;
-
-      const layananSheet = (row[IDX_DD_LAYANAN] || "").toString().trim().toUpperCase();
-      const kecamatanSheet = (row[IDX_DD_KECAMATAN] || "").toString().trim().toUpperCase();
-      const kelurahanSheet = (row[IDX_DD_KELURAHAN] || "").toString().trim().toUpperCase();
-
-      // Kalau sub-filter GSM aktif tapi kolom Tempat Tugas tidak ditemukan di sheet eksternal ini,
-      // GAGALKAN akses baris ini (bukan lewati filter) — lebih aman menolak daripada berisiko
-      // membocorkan data lintas denominasi karena tidak bisa memverifikasi (dipertahankan dari
-      // perilaku sebelum diekstrak ke lolosAksesBarisLihatData_).
-      if (subFilterGsm && idxTempatTugasDD === -1) continue;
-      const tempatTugasSheet = idxTempatTugasDD !== -1
-        ? (row[idxTempatTugasDD] || "").toString().trim().toUpperCase()
-        : "";
-
-      const lolosAkses = lolosAksesBarisLihatData_({
-        instansiPengguna: instansiPengguna,
-        layananPengguna: layananPengguna,
-        namaKecamatanPengguna: namaKecamatanPengguna,
-        kelurahanTerkunci: kelurahanTerkunci,
-        subFilterGsm: subFilterGsm,
-        listLayananKemenag: listLayananKemenag,
-        layananSheet: layananSheet,
-        kecamatanSheet: kecamatanSheet,
-        kelurahanSheet: kelurahanSheet,
-        tempatTugasSheet: tempatTugasSheet,
-      });
-
-      if (!lolosAkses) continue;
-
-      rows.push({
-        nama: (row[IDX_DD_NAMA] || "").toString(),
-        nik: (row[IDX_DD_NIK] || "").toString().replace(/^'+/, "").trim(),
-        layanan: (row[IDX_DD_LAYANAN] || "").toString(),
-        kecamatan: (row[IDX_DD_KECAMATAN] || "").toString(),
-        kelurahan: (row[IDX_DD_KELURAHAN] || "").toString(),
-        status: (row[IDX_DD_STATUS] || "").toString(),
-        mentah: row
-      });
-    }
-
-    return { sukses: true, header: header, rows: rows };
-  } catch (error) {
-    return { sukses: false, pesan: error.toString() };
-  }
 }
 
 // Cek 3 hal berbasis NIK sekaligus secara real-time: Domisili Capil, Status Tahun Lalu, NIK Ganda.

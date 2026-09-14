@@ -156,7 +156,7 @@ export default async function handler(req, res) {
     'getSheetName', 'getVersiAplikasi',
     'cekNikRealtime', 'cekRekeningRealtime', 'cekTempatTugasGandaRealtime', 'cekKuotaRealtime',
     'cekKuotaTersedia', 'validasiDataBaru',
-    'ambilDataLihatDataHakAkses', 'ambilDetailPenerimaPerBaris', 'ambilDataDetailByNik',
+    'ambilDataLihatDataHakAkses', 'ambilDetailPenerimaPerBaris',
     'ambilTahunTersedia', 'ambilDataTahunHakAkses', 'ambilRiwayatEdit',
     'getDashboardProgresVerifikasi', 'getSemuaKuota', 'getProgresKuota',
     'getDaftarBerkasTidakLengkapUntukWA',

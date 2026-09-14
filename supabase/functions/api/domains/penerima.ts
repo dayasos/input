@@ -722,19 +722,3 @@ export async function editDataPenerima(
     return { sukses: false, pesan: "Gagal mengedit data: " + String(e) };
   }
 }
-
-// ---------------------------------------------------------------------------
-// ambilDataDetailByNik — SENGAJA TIDAK DIPORTING (Fase 4).
-//
-// Sheet "Data Detail" dikelola pihak eksternal dan belum ada di Postgres (tabel detail_berkas
-// ada tapi kosong — job sinkronisasi belum dibangun). Fungsi ini di ALLOWED Kode.gs tetap
-// aktif; proxy Vercel (api/gas.js) akan meneruskan ke GAS untuk aksi ini selama masa transisi.
-// Ketika nanti sheet Data Detail sudah tersinkron ke Postgres, port fungsi ini ke sini dan
-// tambahkan ke ALLOWED index.ts.
-// ---------------------------------------------------------------------------
-export function ambilDataDetailByNik(_token: string, _nik: string): string {
-  return JSON.stringify({
-    sukses: false,
-    pesan: "ambilDataDetailByNik belum dimigrasikan ke Supabase. Masih dilayani oleh Google Apps Script.",
-  });
-}

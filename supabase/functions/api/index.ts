@@ -19,7 +19,6 @@
 // - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
 //
 // Yang TIDAK diporting (sengaja):
-// - ambilDataDetailByNik: tabel detail_berkas belum tersinkron (sheet "Data Detail" pihak eksternal)
 // - setHeaderUserId: utilitas sekali-jalan yang tidak dipanggil frontend (lihat setelan.ts)
 // - chat: fitur dihapus total 2026-09-12
 // Upload berkas ke Drive tetap di GAS sebagai microservice (personal Drive tidak bisa via SA).
@@ -42,7 +41,6 @@ import {
   validasiDataBaru,
 } from "./domains/validasi.ts";
 import {
-  ambilDataDetailByNik,
   ambilDataLihatDataHakAkses,
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
@@ -101,7 +99,6 @@ const ALLOWED: Record<string, Handler> = {
   validasiDataBaru,
   ambilDataLihatDataHakAkses,
   ambilDetailPenerimaPerBaris,
-  ambilDataDetailByNik,
   simpanDataKeSheet,
   editDataPenerima,
   ambilTahunTersedia,
