@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export default defineConfig({
   server: {
@@ -7,6 +9,18 @@ export default defineConfig({
     host: true,
   },
   plugins: [
+    {
+      name: 'copy-static-assets',
+      closeBundle() {
+        // Salin folder js/ dan aset statis ke dist/ agar tersedia di deployment produksi
+        if (fs.existsSync('js')) {
+          fs.cpSync('js', 'dist/js', { recursive: true });
+        }
+        if (fs.existsSync('logo-medan.png')) {
+          fs.copyFileSync('logo-medan.png', 'dist/logo-medan.png');
+        }
+      },
+    },
     {
       name: 'gas-api-dev-proxy',
       configureServer(server) {
