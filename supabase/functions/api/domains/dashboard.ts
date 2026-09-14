@@ -34,56 +34,17 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
     const kecUser = (sesi.kecamatan || "").toString().trim().toUpperCase();
     const kecFilterInput = (kecamatanFilter || "").toString().trim().toUpperCase();
 
-    // Optimasi Supabase free-tier (Tahap 1b, sama pola dengan ambilDataLihatDataHakAkses Tahap 1a
-    // di domains/penerima.ts): dorong syarat kecamatan/layanan yang SUDAH dipakai di loop `continue`
-    // di bawah (baris ~140-142 setelah edit ini) ke WHERE SQL, supaya baris yang pasti tidak akan
-    // dihitung ke kartu manapun tidak usah ditarik dari Postgres. kelurahanTerkunci & subFilterGsm
-    // SENGAJA TETAP dievaluasi di loop bawah (hanya mempersempit lebih lanjut dari kondisi ini,
-    // tidak pernah melonggarkan — jadi tidak aman/perlu didorong ke SQL). role/kecUser/kecFilterInput
-    // di atas SUDAH di-trim+uppercase, jadi cukup upper() di sisi kolom saja supaya tetap
-    // case-insensitive terhadap data lama hasil backfill yang tidak dijamin konsisten uppercase.
-    let queryPenerima;
-    if (role === "KECAMATAN") {
-      queryPenerima = sql`
-        select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
-        from penerima
-        where tahun = ${TAHUN_AKTIF} and upper(kecamatan) = ${kecUser}
-      `;
-    } else if (role === "UTAMA") {
-      queryPenerima = kecFilterInput
-        ? sql`
-            select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
-            from penerima
-            where tahun = ${TAHUN_AKTIF} and upper(kecamatan) = ${kecFilterInput}
-          `
-        : sql`
-            select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
-            from penerima
-            where tahun = ${TAHUN_AKTIF}
-          `;
-    } else if (kecUser) {
-      // Akun Kemenag dengan kecamatan tetap.
-      queryPenerima = sql`
-        select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
-        from penerima
-        where tahun = ${TAHUN_AKTIF} and upper(layanan) = ${role} and upper(kecamatan) = ${kecUser}
-      `;
-    } else {
-      // Akun Kemenag TANPA kecamatan tetap (modeKecamatanPisah) -> butuh semua kecamatan utk 1 layanan.
-      queryPenerima = sql`
-        select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
-        from penerima
-        where tahun = ${TAHUN_AKTIF} and upper(layanan) = ${role}
-      `;
-    }
-
     // 4 query di bawah tidak saling bergantung -> jalankan paralel (Promise.all), bukan berurutan
     // (ditemukan saat code review — hasil akhir identik, cuma latensi dashboard ~4x lebih cepat).
     const [rowsKuota, rowsKuotaKatolik, master, barisSnapshot] = await Promise.all([
       sql`select kecamatan, layanan, kuota_maks from kuota`,
       sql`select kecamatan, layanan, kuota_maks from kuota_katolik`,
       getMasterLayanan(),
-      queryPenerima,
+      sql`
+        select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
+        from penerima
+        where tahun = ${TAHUN_AKTIF}
+      `,
     ]);
 
     // Kuota gabungan (semua layanan) -> map "LAYANAN||KECAMATAN" -> angka.

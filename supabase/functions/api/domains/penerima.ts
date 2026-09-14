@@ -53,63 +53,14 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
       return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
     }
 
-    // Optimasi Supabase free-tier (Tahap 1a): dorong lapis TERLUAR dari cascade akses
-    // (instansi+layanan+kecamatan) ke WHERE SQL, supaya Postgres tidak perlu mengirim baris yang
-    // PASTI akan dibuang oleh lolosAksesBarisLihatData di loop bawah. Lapis kelurahan-lock & sub-
-    // filter GSM Katolik/Kristen SENGAJA TIDAK didorong ke sini — keduanya cuma MEMPERSEMPIT lebih
-    // lanjut dari lapis terluar (tidak pernah melonggarkan), jadi loop di bawah tetap satu-satunya
-    // sumber kebenaran untuk lapis itu (defense-in-depth, bukan diganti). upper() dipakai di kedua
-    // sisi karena data lama hasil backfill dari Sheets tidak dijamin konsisten uppercase — sama
-    // seperti perbandingan case-insensitive yang sudah dilakukan lolosAksesBarisLihatData.
-    //
-    // Ditulis sbg 4 cabang literal (bukan compose sql`` dinamis) karena postgres.js di sini belum
-    // pernah dipakai dengan fragment-composition di codebase ini — meniru pola tagged-template biasa
-    // yang sudah terbukti aman dipakai di semua domain lain, bukan fitur library yang belum diuji.
-    let rows;
-    if (instansiPengguna === "KECAMATAN") {
-      rows = await sql`
-        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
-               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
-        from penerima
-        where tahun = ${TAHUN_AKTIF}
-          and upper(kecamatan) = ${namaKecamatanPengguna.toUpperCase()}
-          and upper(layanan) <> all(${listLayananKemenag})
-        order by nomor_urut
-      `;
-    } else if (instansiPengguna === "KEMENAG" && namaKecamatanPengguna) {
-      rows = await sql`
-        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
-               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
-        from penerima
-        where tahun = ${TAHUN_AKTIF}
-          and upper(layanan) = ${layananPengguna.toUpperCase()}
-          and upper(kecamatan) = ${namaKecamatanPengguna.toUpperCase()}
-        order by nomor_urut
-      `;
-    } else if (instansiPengguna === "KEMENAG") {
-      rows = await sql`
-        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
-               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
-        from penerima
-        where tahun = ${TAHUN_AKTIF}
-          and upper(layanan) = ${layananPengguna.toUpperCase()}
-        order by nomor_urut
-      `;
-    } else {
-      // SUPERADMIN (satu-satunya kemungkinan lain yang lolos guard instansiPengguna di atas) ->
-      // tidak ada batasan tambahan, identik perilaku sebelum optimasi ini.
-      rows = await sql`
-        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
-               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
-        from penerima
-        where tahun = ${TAHUN_AKTIF}
-        order by nomor_urut
-      `;
-    }
+    const rows = await sql`
+      select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+             tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+             kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+      from penerima
+      where tahun = ${TAHUN_AKTIF}
+      order by nomor_urut
+    `;
 
     const resultRows: unknown[][] = [];
     for (const row of rows) {
