@@ -420,36 +420,48 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     `;
     const nomorUrut = Number(rowsNomor[0]?.next_nomor) || 1;
 
-    // ── INSERT ke Postgres ──
-    await sql`
-      insert into penerima (
-        tahun, nomor_urut,
-        nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
-        layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan,
-        nama_rekening, nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
-        link_ktp, link_buku_rekening, link_surat_permohonan, link_pernyataan_satu_bantuan,
-        link_domisili_kelurahan, link_formulir_pendataan, link_berkas_pendukung,
-        link_foto_plank_rumah_ibadah, link_foto_lokasi_ibadah, link_foto_kegiatan_belajar,
-        link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah,
-        id_folder_berkas, link_koordinat_lokasi,
-        status_verifikasi, catatan_perbedaan_nama,
-        dibuat_oleh_akun_id, sync_status
-      ) values (
-        ${TAHUN_AKTIF}, ${nomorUrut},
-        ${nama}, ${nik}, ${jenisKelamin}, ${tempatLahir}, ${tanggalLahirISO}, ${alamat},
-        ${layanan}, ${rapikanTeks(tempatTugas)}, ${rapikanTeks(alamatTugas)},
-        ${kecamatan}, ${kelurahan},
-        ${namaRekening}, ${nomorRekening}, ${kantorCabang}, ${noKontak}, ${statusBpjs},
-        ${umurHitung},
-        ${linkKtp}, ${linkBukuRekening}, ${linkSuratPermohon}, ${linkPernyataan},
-        ${linkDomisili}, ${linkFormulirPendataan}, ${linkBerkasPendukung},
-        ${linkFotoPlank}, ${linkFotoIbadah}, ${linkFotoKegiatan},
-        ${linkRekomendasiBkm}, ${linkRekomendasiRi},
-        ${idFolderBerkas}, ${koordinatLink},
-        'Proses Verifikasi', ${catatanPerbedaanNama},
-        ${sesi.akunId}, 'PENDING'
-      )
-    `;
+    // ── INSERT ke Postgres + enqueue sinkronisasi ke Sheets, SATU transaksi ──
+    // (sync_worker memproses `sync_outbox` async, baca ULANG baris ini fresh saat diproses —
+    // lihat catatan desain di supabase/functions/sync-worker/index.ts — jadi payload outbox di
+    // sini sengaja kosong `{}`, cukup entity_ref utk sync-worker tahu baris mana yang harus dibaca.)
+    // deno-lint-ignore no-explicit-any
+    await sql.begin(async (trx: any) => {
+      const rows = await trx`
+        insert into penerima (
+          tahun, nomor_urut,
+          nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
+          layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan,
+          nama_rekening, nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
+          link_ktp, link_buku_rekening, link_surat_permohonan, link_pernyataan_satu_bantuan,
+          link_domisili_kelurahan, link_formulir_pendataan, link_berkas_pendukung,
+          link_foto_plank_rumah_ibadah, link_foto_lokasi_ibadah, link_foto_kegiatan_belajar,
+          link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah,
+          id_folder_berkas, link_koordinat_lokasi,
+          status_verifikasi, catatan_perbedaan_nama,
+          dibuat_oleh_akun_id, sync_status
+        ) values (
+          ${TAHUN_AKTIF}, ${nomorUrut},
+          ${nama}, ${nik}, ${jenisKelamin}, ${tempatLahir}, ${tanggalLahirISO}, ${alamat},
+          ${layanan}, ${rapikanTeks(tempatTugas)}, ${rapikanTeks(alamatTugas)},
+          ${kecamatan}, ${kelurahan},
+          ${namaRekening}, ${nomorRekening}, ${kantorCabang}, ${noKontak}, ${statusBpjs},
+          ${umurHitung},
+          ${linkKtp}, ${linkBukuRekening}, ${linkSuratPermohon}, ${linkPernyataan},
+          ${linkDomisili}, ${linkFormulirPendataan}, ${linkBerkasPendukung},
+          ${linkFotoPlank}, ${linkFotoIbadah}, ${linkFotoKegiatan},
+          ${linkRekomendasiBkm}, ${linkRekomendasiRi},
+          ${idFolderBerkas}, ${koordinatLink},
+          'Proses Verifikasi', ${catatanPerbedaanNama},
+          ${sesi.akunId}, 'PENDING'
+        )
+        returning id
+      `;
+      const idBaru = rows[0].id;
+      await trx`
+        insert into sync_outbox (jenis_operasi, sheet_tujuan, entity_ref, payload)
+        values ('INSERT_PENERIMA', ${"Data Input " + TAHUN_AKTIF}, ${sql.json({ tabel: "penerima", id: idBaru, tahun: TAHUN_AKTIF })}, '{}'::jsonb)
+      `;
+    });
 
     return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
   } catch (error) {
@@ -675,10 +687,20 @@ export async function editDataPenerima(
     const setVals = setCols.map((k) => setValues[k]);
     const setParts = setCols.map((col, i) => `${col} = $${i + 1}`).join(", ");
     const whereIdx = setCols.length + 1;
-    await sql.unsafe(
-      `update penerima set ${setParts} where id = $${whereIdx} and tahun = $${whereIdx + 1}`,
-      [...setVals, id, TAHUN_AKTIF],
-    );
+
+    // UPDATE + enqueue sinkronisasi ke Sheets, SATU transaksi (sama pola dengan simpanDataKeSheet —
+    // payload outbox kosong, sync-worker baca ulang baris fresh saat diproses).
+    // deno-lint-ignore no-explicit-any
+    await sql.begin(async (trx: any) => {
+      await trx.unsafe(
+        `update penerima set ${setParts} where id = $${whereIdx} and tahun = $${whereIdx + 1}`,
+        [...setVals, id, TAHUN_AKTIF],
+      );
+      await trx`
+        insert into sync_outbox (jenis_operasi, sheet_tujuan, entity_ref, payload)
+        values ('UPDATE_PENERIMA', ${"Data Input " + TAHUN_AKTIF}, ${sql.json({ tabel: "penerima", id, tahun: TAHUN_AKTIF })}, '{}'::jsonb)
+      `;
+    });
 
     // ── Catat riwayat edit (port catatRiwayatEdit_ Kode.gs baris 3129-3146) ──
     if (riwayat.length > 0) {

@@ -9,6 +9,11 @@
 //   2. Set env var TAHUN_AKTIF=2028 di Supabase secrets, lalu deploy ulang Edge Function.
 export const TAHUN_AKTIF = Number(Deno.env.get("TAHUN_AKTIF")) || 2027;
 
+// ID spreadsheet Penyimpanan (SS_ID_PENYIMPANAN di Kode.gs baris 5) — dipakai sync-worker untuk
+// menulis mirror "Data Input <tahun>" ke Google Sheets. Bukan rahasia (sama seperti env.js skrip
+// backfill), aman hardcode dengan fallback env var kalau suatu saat perlu dialihkan ke salinan lain.
+export const SS_ID_PENYIMPANAN = Deno.env.get("SS_ID_PENYIMPANAN") || "1FqXYvce8wvFtWgDmMgXlWhX3AQ_9teHCa_WpftTrJSU";
+
 // 21 kecamatan Kota Medan, urutan tetap (sama persis KECAMATAN_MEDAN_URUT di Kode.gs baris
 // 1712-1717) — dipakai getDashboardProgresVerifikasi untuk mode "kemenag tanpa kecamatan tetap"
 // (pecah jadi 1 kartu per kecamatan) dan untuk mengurutkan kartu hasil akhir.

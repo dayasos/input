@@ -9,6 +9,9 @@ ehthumbs.db
 # Node
 node_modules/
 
+# Hasil build Vite (dibuat otomatis saat `vercel deploy`, bukan sumber)
+dist/
+
 # Logs
 *.log
 
