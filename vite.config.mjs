@@ -1,7 +1,11 @@
 import { defineConfig } from 'vite';
-import fs from 'node:fs';
-import path from 'node:path';
 
+// js/ dan logo-medan.png dipindah ke public/ (konvensi bawaan Vite: semua isi public/ disalin
+// apa adanya ke dist/ tanpa perlu plugin custom) -- sebelumnya pakai plugin closeBundle() manual
+// yang PERNAH GAGAL SENYAP di build Vercel (js/api-bridge.js tidak tersalin, 404 di Production,
+// seluruh aplikasi tidak bisa dipakai karena `google` shim tidak termuat). public/ jauh lebih
+// andal karena ditangani langsung oleh Vite, bukan kode custom yang bisa salah asumsi soal
+// working directory / urutan hook saat build di lingkungan Vercel.
 export default defineConfig({
   server: {
     port: 3000,
@@ -9,18 +13,6 @@ export default defineConfig({
     host: true,
   },
   plugins: [
-    {
-      name: 'copy-static-assets',
-      closeBundle() {
-        // Salin folder js/ dan aset statis ke dist/ agar tersedia di deployment produksi
-        if (fs.existsSync('js')) {
-          fs.cpSync('js', 'dist/js', { recursive: true });
-        }
-        if (fs.existsSync('logo-medan.png')) {
-          fs.copyFileSync('logo-medan.png', 'dist/logo-medan.png');
-        }
-      },
-    },
     {
       name: 'gas-api-dev-proxy',
       configureServer(server) {
