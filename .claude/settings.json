@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git ls-remote *)",
+      "Bash(grep -v \"^\\\\./\\\\.git\")",
+      "Bash(git rm *)",
+      "Bash(cd \"d:/DJPM/DJPM 2027/Input 2027\" && grep -oE '^function [a-zA-Z0-9_]+' Kode.gs | sed 's/^function //' | sort -u > /tmp/fns.txt 2>/dev/null || grep -oE '^function [a-zA-Z0-9_]+' Kode.gs | sed 's/^function //' | sort -u > fns.txt *)",
+      "Read(//tmp/**)"
+    ]
+  }
+}

@@ -4,6 +4,7 @@
 const SS_ID_MASTER_DROPDOWN = "1wB2xHthdlMzZWG80jkmIPDNkCwtu_9p1zplF8yePGk4";
 const SS_ID_PENYIMPANAN     = "1FqXYvce8wvFtWgDmMgXlWhX3AQ_9teHCa_WpftTrJSU";
 const NAMA_SHEET_INPUT      = "Data Input 2027";
+const NAMA_SHEET_DATA_DETAIL = "Data Detail"; // sheet lain di SS_ID_PENYIMPANAN yang sama, kolom A..S
 // Layanan yang hanya boleh ada 1 penerima per tempat tugas.
 // Layanan lain (Khatib Jumat, Guru Maghrib Mengaji, Guru Sekolah, Penatua Gereja, dsb.)
 // tidak dibatasi — satu tempat tugas boleh memiliki lebih dari 1 penerima.
@@ -80,17 +81,13 @@ function doPost(e) {
       "getKemenagData"                   : getKemenagData,
       "ambilDataLihatDataHakAkses"       : ambilDataLihatDataHakAkses,
       "ambilDetailPenerimaPerBaris"      : ambilDetailPenerimaPerBaris,
+      "ambilDataDetailByNik"             : ambilDataDetailByNik,
       "eksporDataKeSpreadsheet"          : eksporDataKeSpreadsheet,
       "getSemuaKuota"                    : getSemuaKuota,
       "simpanKuota"                      : simpanKuota,
       "cekKuotaTersedia"                 : cekKuotaTersedia,
       "getProgresKuota"                  : getProgresKuota,
       "getDashboardProgresVerifikasi"    : getDashboardProgresVerifikasi,
-      "kirimPesanChat"                   : kirimPesanChat,
-      "ambilPesanChat"                   : ambilPesanChat,
-      "tandaiChatDibaca"                 : tandaiChatDibaca,
-      "hitungChatBelumDibaca"            : hitungChatBelumDibaca,
-      "hapusPesanChat"                   : hapusPesanChat,
       "statusInputKecKem"                : statusInputKecKem,
       "setInputKecKem"                   : setInputKecKem,
       "ambilStatusDetailSetelan"         : ambilStatusDetailSetelan,
@@ -115,7 +112,8 @@ function doPost(e) {
       "resetSakelarUserByAdmin"          : resetSakelarUserByAdmin,
       "ambilDaftarUserDenganStatus"      : ambilDaftarUserDenganStatus,
       "bulkSakelarPerKecamatan"          : bulkSakelarPerKecamatan,
-      "buatTokenSSORetur"                : buatTokenSSORetur
+      "buatTokenSSORetur"                : buatTokenSSORetur,
+      "uploadSemuaBerkasKeDrive"         : uploadSemuaBerkasKeDrive
     };
 
     if (!ALLOWED[action]) {
@@ -214,6 +212,45 @@ function wajibSesi_(token) {
 function daftarLayananKemenagUpper_() {
   const master = getMasterLayanan();
   return master.kemenag.map(function(v) { return v.toUpperCase(); });
+}
+
+// Cascade otorisasi baris (instansi+layanan+kecamatan -> lapis kelurahan-terkunci -> lapis
+// sub-filter GSM Katolik/Kristen), dipakai bersama oleh ambilDataLihatDataHakAkses,
+// ambilDataDetailByNik, dan ambilDataTahunHakAkses. Diekstrak jadi satu fungsi (bukan disalin-
+// tempel tiap kali dipakai) supaya fungsi baru tidak berisiko "lupa" menerapkan salah satu lapis —
+// persis kelas bug yang pernah ditemukan di ambilDataDetailByNik (sub-filter GSM sempat tidak
+// diterapkan sama sekali). Port 1:1 dari lolosAksesBarisLihatData() di
+// supabase/functions/api/_shared/akses.ts (versi Deno, sudah direview & diverifikasi sebelumnya) —
+// logikanya disamakan persis supaya kedua backend (GAS & Supabase) tidak diam-diam berbeda perilaku.
+function lolosAksesBarisLihatData_(p) {
+  var lolos = false;
+  if (p.instansiPengguna === "KECAMATAN") {
+    lolos = (p.kecamatanSheet === p.namaKecamatanPengguna.toUpperCase()) && (p.listLayananKemenag.indexOf(p.layananSheet) === -1);
+  } else if (p.instansiPengguna === "KEMENAG") {
+    if (p.listLayananKemenag.indexOf(p.layananSheet) !== -1) {
+      if (p.layananPengguna) {
+        if (p.layananSheet === p.layananPengguna.toUpperCase()) {
+          lolos = p.namaKecamatanPengguna ? (p.kecamatanSheet === p.namaKecamatanPengguna.toUpperCase()) : true;
+        }
+      } else {
+        lolos = true;
+      }
+    }
+  } else if (p.instansiPengguna === "SUPERADMIN") {
+    lolos = true;
+  }
+
+  if (lolos && p.kelurahanTerkunci) {
+    lolos = (p.kelurahanSheet === p.kelurahanTerkunci);
+  }
+
+  if (lolos && p.subFilterGsm === "KATOLIK") {
+    lolos = p.tempatTugasSheet.indexOf("KATOLIK") !== -1;
+  } else if (lolos && p.subFilterGsm === "BUKAN_KATOLIK") {
+    lolos = p.tempatTugasSheet.indexOf("KATOLIK") === -1;
+  }
+
+  return lolos;
 }
 
 // =========================================================================
@@ -671,6 +708,201 @@ function invalidateSemuaCacheData_() {
   CacheService.getScriptCache().remove(KUNCI_CACHE_SNAPSHOT_INPUT);
 }
 
+// =========================================================================
+// SNAPSHOT & AKSES SHEET "Data Detail" (dipakai oleh tombol "Data Detail" per baris
+// di tab Lihat Data) — sheet TERPISAH dari NAMA_SHEET_INPUT, di spreadsheet yang sama.
+// TIDAK ditulis dari aplikasi ini, jadi cache-nya lebih panjang (5 menit) daripada
+// snapshot data transaksi.
+// =========================================================================
+const KUNCI_CACHE_DATA_DETAIL = "DATA_DETAIL_SNAPSHOT_V1";
+const TTL_CACHE_DATA_DETAIL_DETIK = 300; // 5 menit
+
+// Ambil {header, baris} mentah (kolom A..S) dari sheet "Data Detail", pakai script cache.
+function getSnapshotDataDetail_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(KUNCI_CACHE_DATA_DETAIL);
+  if (cached) {
+    try { return JSON.parse(cached); } catch (e) {}
+  }
+
+  const ss = SpreadsheetApp.openById(SS_ID_PENYIMPANAN);
+  const sheet = ss.getSheetByName(NAMA_SHEET_DATA_DETAIL);
+  const hasil = { header: [], baris: [] };
+
+  if (sheet && sheet.getLastRow() >= 1) {
+    // Dibatasi Math.min(19, getLastColumn()) — bukan langsung getRange(...,19) — supaya tidak error
+    // "Range specified is outside the dimensions of the sheet" kalau sheet eksternal ini (dikelola
+    // pihak lain, di luar kendali app) suatu saat kolomnya menyusut dari 19. Hasil selalu diratakan
+    // (padding "") jadi tepat 19 elemen supaya IDX_DD_* (indeks tetap s/d 18) tidak pernah undefined.
+    const jumlahKolomAda = Math.min(19, sheet.getLastColumn());
+    const headerMentah = jumlahKolomAda > 0 ? sheet.getRange(1, 1, 1, jumlahKolomAda).getValues()[0] : [];
+    for (let c = 0; c < 19; c++) {
+      const h = headerMentah[c];
+      hasil.header.push((h === null || h === undefined) ? "" : h.toString().trim());
+    }
+
+    if (sheet.getLastRow() >= 2) {
+      const n = sheet.getLastRow() - 1;
+      const data = jumlahKolomAda > 0 ? sheet.getRange(2, 1, n, jumlahKolomAda).getValues() : [];
+
+      // Kolom NIK (IDX_DD_NIK) dibaca ULANG terpisah lewat getDisplayValues() (teks apa adanya
+      // yang tampil di sheet), bukan diambil dari getValues() di atas — sheet "Data Detail"
+      // dikelola pihak eksternal, kalau sel NIK di sana kebetulan diformat sebagai Number
+      // (bukan Text), getValues() mengembalikan angka JS yang presisinya SUDAH HILANG untuk
+      // NIK 16 digit (melebihi Number.MAX_SAFE_INTEGER, ~9 kuadriliun) — pencarian NIK jadi
+      // gagal total tanpa pesan error apa pun. getDisplayValues() selalu memberi teks utuh
+      // sesuai yang terlihat di layar, terlepas dari format selnya.
+      const kolomNik1Based = IDX_DD_NIK + 1;
+      const nikDisplayValues = (jumlahKolomAda >= kolomNik1Based)
+        ? sheet.getRange(2, kolomNik1Based, n, 1).getDisplayValues()
+        : [];
+
+      for (let i = 0; i < n; i++) {
+        const rMentah = data[i] || [];
+        const r = [];
+        for (let c = 0; c < 19; c++) {
+          if (c === IDX_DD_NIK && nikDisplayValues[i]) {
+            r.push(nikDisplayValues[i][0].toString().trim());
+            continue;
+          }
+          const v = rMentah[c];
+          if (v instanceof Date) {
+            const d = ("0" + v.getDate()).slice(-2);
+            const m = ("0" + (v.getMonth() + 1)).slice(-2);
+            const y = v.getFullYear();
+            r.push(d + "-" + m + "-" + y);
+          } else {
+            r.push((v === null || v === undefined) ? "" : v);
+          }
+        }
+        hasil.baris.push(r);
+      }
+    }
+  }
+
+  try {
+    cache.put(KUNCI_CACHE_DATA_DETAIL, JSON.stringify(hasil), TTL_CACHE_DATA_DETAIL_DETIK);
+  } catch (e) {} // payload melebihi batas 100KB CacheService -> lewati cache, tetap kembalikan data langsung
+
+  return hasil;
+}
+
+// Posisi kolom tetap di sheet "Data Detail" (dikonfirmasi langsung oleh pemilik sheet):
+// A = No (dibuat sistem, tidak dipakai), B = Nama, C = NIK, H = Layanan, K = Kecamatan,
+// L = Kelurahan, S = Status. Indeks di bawah ini 0-based (A=0).
+const IDX_DD_NAMA      = 1;  // B
+const IDX_DD_NIK       = 2;  // C
+const IDX_DD_LAYANAN   = 7;  // H
+const IDX_DD_KECAMATAN = 10; // K
+const IDX_DD_KELURAHAN = 11; // L
+const IDX_DD_STATUS    = 18; // S
+
+// Ambil baris-baris sheet "Data Detail" yang NIK-nya cocok dengan `nik`, dibatasi hak akses
+// yang SAMA dengan ambilDataLihatDataHakAkses (KECAMATAN/KEMENAG/UTAMA + kunci kelurahan +
+// sub-filter GSM Katolik/Kristen).
+function ambilDataDetailByNik(token, nik) {
+  let sesi;
+  try {
+    sesi = wajibSesi_(token);
+  } catch (e) {
+    return { sukses: false, pesan: e.message };
+  }
+
+  try {
+    const nikTarget = (nik || "").toString().replace(/^'+/, "").trim();
+    if (!nikTarget) return { sukses: false, pesan: "NIK tidak valid." };
+
+    const snapshot = getSnapshotDataDetail_();
+    const header = snapshot.header;
+    if (!header.length) return { sukses: true, header: [], rows: [] };
+
+    // Tentukan instansi & filter layanan dari peran tepercaya di sesi — pola sama dengan
+    // ambilDataLihatDataHakAkses.
+    const role = sesi.role;
+    const namaKecamatanPengguna = sesi.kecamatan || "";
+    const userIdSesi = (sesi.userId || "").toString().toUpperCase().trim();
+    const kelurahanTerkunci = userIdSesi.indexOf("KELURAHAN ") === 0
+      ? userIdSesi.substring("KELURAHAN ".length).trim()
+      : "";
+    // Khusus GURU SEKOLAH MINGGU: pisah Katolik vs Kristen — SAMA seperti lapis di
+    // ambilDataLihatDataHakAkses (baris ~1306-1308). Diperbaiki: sebelumnya fungsi ini TIDAK
+    // menerapkan lapis ini sama sekali, sehingga akun BIMAS KATOLIK/KRISTEN bisa melihat Data
+    // Detail milik denominasi lain untuk NIK yang sama-sama layanan GSM.
+    const subFilterGsm = userIdSesi === "BIMAS KATOLIK" ? "KATOLIK"
+                        : userIdSesi === "BIMAS KRISTEN" ? "BUKAN_KATOLIK"
+                        : "";
+    // Sheet "Data Detail" dikelola pihak eksternal — TIDAK ada kolom "Tempat Tugas" di posisi
+    // tetap yang dikonfirmasi pemilik sheet (lihat komentar IDX_DD_* di atas, hanya 7 kolom yang
+    // dikonfirmasi). Jadi posisi kolomnya dicari dinamis dari header baris 1, bukan ditebak.
+    const idxTempatTugasDD = subFilterGsm
+      ? header.findIndex(function (h) { return (h || "").toString().trim().toUpperCase().indexOf("TEMPAT TUGAS") !== -1; })
+      : -1;
+    const listLayananKemenag = daftarLayananKemenagUpper_();
+    let instansiPengguna;
+    let layananPengguna = "";
+
+    if (role === "UTAMA") {
+      instansiPengguna = "SUPERADMIN";
+    } else if (role === "KECAMATAN") {
+      instansiPengguna = "KECAMATAN";
+    } else if (listLayananKemenag.indexOf(role) !== -1) {
+      instansiPengguna = "KEMENAG";
+      layananPengguna = role;
+    } else {
+      return { sukses: false, pesan: "Peran tidak dikenali." };
+    }
+
+    const rows = [];
+    for (let i = 0; i < snapshot.baris.length; i++) {
+      const row = snapshot.baris[i];
+      const nikSheet = (row[IDX_DD_NIK] || "").toString().replace(/^'+/, "").trim();
+      if (nikSheet !== nikTarget) continue;
+
+      const layananSheet = (row[IDX_DD_LAYANAN] || "").toString().trim().toUpperCase();
+      const kecamatanSheet = (row[IDX_DD_KECAMATAN] || "").toString().trim().toUpperCase();
+      const kelurahanSheet = (row[IDX_DD_KELURAHAN] || "").toString().trim().toUpperCase();
+
+      // Kalau sub-filter GSM aktif tapi kolom Tempat Tugas tidak ditemukan di sheet eksternal ini,
+      // GAGALKAN akses baris ini (bukan lewati filter) — lebih aman menolak daripada berisiko
+      // membocorkan data lintas denominasi karena tidak bisa memverifikasi (dipertahankan dari
+      // perilaku sebelum diekstrak ke lolosAksesBarisLihatData_).
+      if (subFilterGsm && idxTempatTugasDD === -1) continue;
+      const tempatTugasSheet = idxTempatTugasDD !== -1
+        ? (row[idxTempatTugasDD] || "").toString().trim().toUpperCase()
+        : "";
+
+      const lolosAkses = lolosAksesBarisLihatData_({
+        instansiPengguna: instansiPengguna,
+        layananPengguna: layananPengguna,
+        namaKecamatanPengguna: namaKecamatanPengguna,
+        kelurahanTerkunci: kelurahanTerkunci,
+        subFilterGsm: subFilterGsm,
+        listLayananKemenag: listLayananKemenag,
+        layananSheet: layananSheet,
+        kecamatanSheet: kecamatanSheet,
+        kelurahanSheet: kelurahanSheet,
+        tempatTugasSheet: tempatTugasSheet,
+      });
+
+      if (!lolosAkses) continue;
+
+      rows.push({
+        nama: (row[IDX_DD_NAMA] || "").toString(),
+        nik: (row[IDX_DD_NIK] || "").toString().replace(/^'+/, "").trim(),
+        layanan: (row[IDX_DD_LAYANAN] || "").toString(),
+        kecamatan: (row[IDX_DD_KECAMATAN] || "").toString(),
+        kelurahan: (row[IDX_DD_KELURAHAN] || "").toString(),
+        status: (row[IDX_DD_STATUS] || "").toString(),
+        mentah: row
+      });
+    }
+
+    return { sukses: true, header: header, rows: rows };
+  } catch (error) {
+    return { sukses: false, pesan: error.toString() };
+  }
+}
+
 // Cek 3 hal berbasis NIK sekaligus secara real-time: Domisili Capil, Status Tahun Lalu, NIK Ganda.
 function cekNikRealtime(token, nik) {
   try { wajibSesi_(token); } catch (e) { return { blokir: false }; }
@@ -896,59 +1128,92 @@ function simpanDataKeSheet(token, formObject) {
     const lastRow = sheet.getLastRow();
     const nomorUrut = lastRow <= 1 ? 1 : Number(sheet.getRange(lastRow, 1).getValue()) + 1;
 
-    // Sumber berkas: objek base64 dari frontend (formObject.__berkas).
-    const B = formObject.__berkas || {};
+    // Sumber berkas: DUA jalur didukung sekaligus (aditif, tidak saling menghapus):
+    // 1. formObject.__linkBerkas — dict URL Drive yang SUDAH di-upload lebih dulu lewat aksi
+    //    terpisah uploadSemuaBerkasKeDrive (dipakai backend Supabase yang tidak bisa upload
+    //    Drive sendiri, dan bisa juga dipakai GAS langsung kalau frontend memilih jalur ini).
+    // 2. formObject.__berkas — objek base64 mentah, GAS upload sendiri inline (JALUR LAMA,
+    //    dipertahankan apa adanya supaya tidak ada regresi kalau __linkBerkas belum terisi).
+    const linkSiapPakai = (formObject.__linkBerkas && typeof formObject.__linkBerkas === "object")
+      ? formObject.__linkBerkas
+      : null;
 
-    // Batas total ukuran seluruh berkas (maksimal 60 MB gabungan per submit)
-    const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
-    let totalPerkiraanByte = 0;
-    Object.keys(B).forEach(function(k) {
-      const item = B[k];
-      if (item && item.dataBase64) totalPerkiraanByte += item.dataBase64.length * 0.75;
-    });
-    if (totalPerkiraanByte > MAKS_TOTAL_BYTE_BERKAS) {
-      return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar (maksimal 60 MB gabungan). Perkecil ukuran file lalu coba lagi." };
-    }
+    let linkKtp, linkBukuRekening, linkSuratPermohon, linkPernyataan, linkDomisili,
+        linkFormulirPendataan, linkBerkasPendukung, linkFotoPlank, linkFotoIbadah,
+        linkFotoKegiatan, linkRekomendasiBkm, linkRekomendasiRi, idFolderBerkasFinal;
 
-    // Validasi format dan ukuran tiap berkas sebelum proses upload dimulai
-    const LABEL_FIELD_BERKAS = {
-      fileKtp: "KTP", fileBukuRekening: "Buku Rekening", fileSuratPermohon: "Surat Permohonan",
-      filePernyataan: "Surat Pernyataan", fileDomisili: "Domisili Kelurahan",
-      fileBerkasPendukung: "Formulir Pendataan", fileBerkasPendukung2: "Berkas Pendukung",
-      fileFotoPlank: "Foto Plank Rumah Ibadah", fileFotoIbadah: "Foto Lokasi Ibadah", fileFotoKegiatan: "Foto Kegiatan Belajar",
-      fileRekomendasiBkm: "Rekomendasi BKM", fileRekomendasiRi: "Rekomendasi Rumah Ibadah"
-    };
-    for (const kunciBerkas in LABEL_FIELD_BERKAS) {
-      const pesanErrorBerkas = validasiBerkasSebelumUpload_(B[kunciBerkas], LABEL_FIELD_BERKAS[kunciBerkas]);
-      if (pesanErrorBerkas) {
-        return { sukses: false, pesan: "GAGAL: " + pesanErrorBerkas };
+    if (linkSiapPakai) {
+      // ── Jalur baru: berkas sudah di-upload lebih dulu, tinggal pakai link-nya ──
+      linkKtp = linkSiapPakai.fileKtp || "";
+      linkBukuRekening = linkSiapPakai.fileBukuRekening || "";
+      linkSuratPermohon = linkSiapPakai.fileSuratPermohon || "";
+      linkPernyataan = linkSiapPakai.filePernyataan || "";
+      linkDomisili = linkSiapPakai.fileDomisili || "";
+      linkFormulirPendataan = linkSiapPakai.fileBerkasPendukung || "";
+      linkBerkasPendukung = linkSiapPakai.fileBerkasPendukung2 || "";
+      linkFotoPlank = linkSiapPakai.fileFotoPlank || "";
+      linkFotoIbadah = linkSiapPakai.fileFotoIbadah || "";
+      linkFotoKegiatan = linkSiapPakai.fileFotoKegiatan || "";
+      linkRekomendasiBkm = linkSiapPakai.fileRekomendasiBkm || "";
+      linkRekomendasiRi = linkSiapPakai.fileRekomendasiRi || "";
+      idFolderBerkasFinal = linkSiapPakai.idFolderBerkas || "";
+    } else {
+      // ── Jalur lama: upload inline dari base64 (formObject.__berkas), TIDAK DIUBAH ──
+      const B = formObject.__berkas || {};
+
+      // Batas total ukuran seluruh berkas (maksimal 60 MB gabungan per submit)
+      const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
+      let totalPerkiraanByte = 0;
+      Object.keys(B).forEach(function(k) {
+        const item = B[k];
+        if (item && item.dataBase64) totalPerkiraanByte += item.dataBase64.length * 0.75;
+      });
+      if (totalPerkiraanByte > MAKS_TOTAL_BYTE_BERKAS) {
+        return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar (maksimal 60 MB gabungan). Perkecil ukuran file lalu coba lagi." };
       }
+
+      // Validasi format dan ukuran tiap berkas sebelum proses upload dimulai
+      const LABEL_FIELD_BERKAS = {
+        fileKtp: "KTP", fileBukuRekening: "Buku Rekening", fileSuratPermohon: "Surat Permohonan",
+        filePernyataan: "Surat Pernyataan", fileDomisili: "Domisili Kelurahan",
+        fileBerkasPendukung: "Formulir Pendataan", fileBerkasPendukung2: "Berkas Pendukung",
+        fileFotoPlank: "Foto Plank Rumah Ibadah", fileFotoIbadah: "Foto Lokasi Ibadah", fileFotoKegiatan: "Foto Kegiatan Belajar",
+        fileRekomendasiBkm: "Rekomendasi BKM", fileRekomendasiRi: "Rekomendasi Rumah Ibadah"
+      };
+      for (const kunciBerkas in LABEL_FIELD_BERKAS) {
+        const pesanErrorBerkas = validasiBerkasSebelumUpload_(B[kunciBerkas], LABEL_FIELD_BERKAS[kunciBerkas]);
+        if (pesanErrorBerkas) {
+          return { sukses: false, pesan: "GAGAL: " + pesanErrorBerkas };
+        }
+      }
+
+      // Buat/ambil folder khusus pendaftar ini: Induk > KECAMATAN > "NAMA (4 digit NIK)"
+      const folderPendaftar = dapatkanFolderPendaftar_(kecamatan, layanan, nama, nik);
+
+      // A. UPLOAD BERKAS WAJIB UMUM
+      linkKtp = uploadBerkasPenerima_(blobDariBerkas_(B.fileKtp), folderPendaftar, "KTP");
+      linkBukuRekening = uploadBerkasPenerima_(blobDariBerkas_(B.fileBukuRekening), folderPendaftar, "BUKU REKENING");
+      linkSuratPermohon = uploadBerkasPenerima_(blobDariBerkas_(B.fileSuratPermohon), folderPendaftar, "SURAT PERMOHONAN");
+      // Surat Pernyataan digabung menjadi satu: Satu Jenis Tanda Jasa & Bukan ASN/BUMN/BUMD/TNI/POLRI
+      linkPernyataan = uploadBerkasPenerima_(blobDariBerkas_(B.filePernyataan), folderPendaftar, "SURAT PERNYATAAN");
+      linkDomisili = uploadBerkasPenerima_(blobDariBerkas_(B.fileDomisili), folderPendaftar, "DOMISILI KELURAHAN");
+
+      // Formulir Pendataan & Berkas Pendukung kini disimpan di kolom MASING-MASING.
+      linkFormulirPendataan = uploadBerkasPenerima_(blobDariBerkas_(B.fileBerkasPendukung), folderPendaftar, "FORMULIR PENDATAAN");
+      const labelBerkasPendukung2 = (layanan === "USTADZ" || layanan === "USTADZAH") ? "REKOMENDASI MUI" : "BERKAS PENDUKUNG";
+      linkBerkasPendukung = uploadBerkasPenerima_(blobDariBerkas_(B.fileBerkasPendukung2), folderPendaftar, labelBerkasPendukung2);
+
+      // B. UPLOAD 3 BERKAS TAMBAHAN KONDISIONAL KEMENAG
+      linkFotoPlank = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoPlank), folderPendaftar, "FOTO PLANK");
+      linkFotoIbadah = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoIbadah), folderPendaftar, "FOTO LOKASI IBADAH");
+      linkFotoKegiatan = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoKegiatan), folderPendaftar, "FOTO KEGIATAN");
+
+      // C. UPLOAD BERKAS REKOMENDASI (kondisional: GMM Masjid/Musholla & Kemenag Bebas)
+      linkRekomendasiBkm = uploadBerkasPenerima_(blobDariBerkas_(B.fileRekomendasiBkm), folderPendaftar, "REKOMENDASI BKM");
+      linkRekomendasiRi  = uploadBerkasPenerima_(blobDariBerkas_(B.fileRekomendasiRi), folderPendaftar, "REKOMENDASI RUMAH IBADAH");
+
+      idFolderBerkasFinal = folderPendaftar.getId();
     }
-
-    // Buat/ambil folder khusus pendaftar ini: Induk > KECAMATAN > "NAMA (4 digit NIK)"
-    const folderPendaftar = dapatkanFolderPendaftar_(kecamatan, layanan, nama, nik);
-
-    // A. UPLOAD BERKAS WAJIB UMUM
-    const linkKtp = uploadBerkasPenerima_(blobDariBerkas_(B.fileKtp), folderPendaftar, "KTP");
-    const linkBukuRekening = uploadBerkasPenerima_(blobDariBerkas_(B.fileBukuRekening), folderPendaftar, "BUKU REKENING");
-    const linkSuratPermohon = uploadBerkasPenerima_(blobDariBerkas_(B.fileSuratPermohon), folderPendaftar, "SURAT PERMOHONAN");
-    // Surat Pernyataan digabung menjadi satu: Satu Jenis Tanda Jasa & Bukan ASN/BUMN/BUMD/TNI/POLRI
-    const linkPernyataan = uploadBerkasPenerima_(blobDariBerkas_(B.filePernyataan), folderPendaftar, "SURAT PERNYATAAN");
-    const linkDomisili = uploadBerkasPenerima_(blobDariBerkas_(B.fileDomisili), folderPendaftar, "DOMISILI KELURAHAN");
-
-    // Formulir Pendataan & Berkas Pendukung kini disimpan di kolom MASING-MASING.
-    const linkFormulirPendataan = uploadBerkasPenerima_(blobDariBerkas_(B.fileBerkasPendukung), folderPendaftar, "FORMULIR PENDATAAN");
-    const labelBerkasPendukung2 = (layanan === "USTADZ" || layanan === "USTADZAH") ? "REKOMENDASI MUI" : "BERKAS PENDUKUNG";
-    const linkBerkasPendukung   = uploadBerkasPenerima_(blobDariBerkas_(B.fileBerkasPendukung2), folderPendaftar, labelBerkasPendukung2);
-
-    // B. UPLOAD 3 BERKAS TAMBAHAN KONDISIONAL KEMENAG
-    const linkFotoPlank = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoPlank), folderPendaftar, "FOTO PLANK");
-    const linkFotoIbadah = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoIbadah), folderPendaftar, "FOTO LOKASI IBADAH");
-    const linkFotoKegiatan = uploadBerkasPenerima_(blobDariBerkas_(B.fileFotoKegiatan), folderPendaftar, "FOTO KEGIATAN");
-
-    // C. UPLOAD BERKAS REKOMENDASI (kondisional: GMM Masjid/Musholla & Kemenag Bebas)
-    const linkRekomendasiBkm = uploadBerkasPenerima_(blobDariBerkas_(B.fileRekomendasiBkm), folderPendaftar, "REKOMENDASI BKM");
-    const linkRekomendasiRi  = uploadBerkasPenerima_(blobDariBerkas_(B.fileRekomendasiRi), folderPendaftar, "REKOMENDASI RUMAH IBADAH");
 
     sheet.appendRow([
       nomorUrut, nama, nik, jenisKelamin, tempatLahir, tanggalLahir, alamat,
@@ -958,7 +1223,7 @@ function simpanDataKeSheet(token, formObject) {
       linkDomisili, linkFormulirPendataan, linkBerkasPendukung,
       linkFotoPlank, linkFotoIbadah, linkFotoKegiatan,
       linkRekomendasiBkm, linkRekomendasiRi,
-      folderPendaftar.getId(),
+      idFolderBerkasFinal,
       (formObject.koordinatLink || ""),
       "Proses Verifikasi", "", "", "", "",
       (formObject.catatanPerbedaanNama || ""), "", ""
@@ -1058,6 +1323,79 @@ function uploadBerkasPenerima_(fileBlob, folderObj, jenisBerkas) {
   }
 }
 
+// Aksi microservice upload berkas ke Drive, berdiri sendiri (TIDAK menulis apa pun ke sheet).
+// Dibutuhkan sejak backend Supabase Edge Function aktif (Fase 4): Edge Function TIDAK BISA
+// menulis Drive baru di akun personal (lihat catatan Service Account di CLAUDE.md), jadi frontend
+// upload berkas ke sini DULU (selalu lewat GAS, dipaksa oleh proxy api/gas.js apa pun backend
+// utamanya), baru kirim URL hasilnya ke simpanDataKeSheet/editDataPenerima.
+//
+// Generik terhadap skema kunci (dipakai alur simpan-baru berkunci nama-field "fileKtp" dst,
+// maupun alur edit berkunci indeks kolom numerik) — supaya tidak menduplikasi tabel label
+// (LABEL_FIELD_BERKAS/KOLOM_BERKAS) di sini, pemanggil menyertakan label sendiri per berkas:
+//   berkasMap = { <kunci bebas>: { namaFile, mimeType, dataBase64, label } }
+//   konteks   = { kecamatan, layanan, nama, nik, folderId (opsional, dipakai alur edit) }
+// Return: { sukses:true, link: { <kunci>: urlDriveAtauPesanGagal, ..., idFolderBerkas } }
+function uploadSemuaBerkasKeDrive(token, konteks, berkasMap) {
+  let sesi;
+  try { sesi = wajibSesi_(token); }
+  catch (e) { return { sukses: false, pesan: e.message }; }
+
+  try {
+    const K = konteks || {};
+    const B = berkasMap || {};
+
+    // Batas total ukuran gabungan (sama seperti simpanDataKeSheet baris 1133-1141)
+    const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
+    let totalPerkiraanByte = 0;
+    Object.keys(B).forEach(function (k) {
+      const item = B[k];
+      if (item && item.dataBase64) totalPerkiraanByte += item.dataBase64.length * 0.75;
+    });
+    if (totalPerkiraanByte > MAKS_TOTAL_BYTE_BERKAS) {
+      return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar (maksimal 60 MB gabungan). Perkecil ukuran file lalu coba lagi." };
+    }
+
+    // Validasi format & ukuran tiap berkas SEBELUM upload dimulai (fail-fast, sama seperti
+    // simpanDataKeSheet baris 1152-1157) — supaya tidak ada berkas ter-upload sebagian kalau
+    // salah satu berkas lain di batch yang sama ternyata invalid.
+    for (const kunci in B) {
+      const item = B[kunci];
+      if (!item || !item.dataBase64) continue;
+      const labelUntukPesan = item.label || kunci;
+      const pesanErrorBerkas = validasiBerkasSebelumUpload_(item, labelUntukPesan);
+      if (pesanErrorBerkas) return { sukses: false, pesan: "GAGAL: " + pesanErrorBerkas };
+    }
+
+    // Tentukan folder pendaftar — pakai folder tersimpan kalau ada (alur edit, persis pola
+    // editDataPenerima baris 2739-2751), kalau tidak/invalid buat/ambil folder baru.
+    const folderIdTersimpan = (K.folderId || "").toString().trim();
+    let folderPendaftar;
+    if (folderIdTersimpan) {
+      try {
+        folderPendaftar = DriveApp.getFolderById(folderIdTersimpan);
+      } catch (eFolder) {
+        folderPendaftar = dapatkanFolderPendaftar_(K.kecamatan, K.layanan, K.nama, K.nik);
+      }
+    } else {
+      folderPendaftar = dapatkanFolderPendaftar_(K.kecamatan, K.layanan, K.nama, K.nik);
+    }
+
+    const hasil = {};
+    for (const kunci in B) {
+      const item = B[kunci];
+      if (!item || !item.dataBase64) continue;
+      const blob = blobDariBerkas_(item);
+      if (!blob) continue; // sudah lolos validasi di atas, tapi jaga-jaga (format/ukuran berubah di antara validasi & upload)
+      hasil[kunci] = uploadBerkasPenerima_(blob, folderPendaftar, item.label || kunci);
+    }
+    hasil.idFolderBerkas = folderPendaftar.getId();
+
+    return { sukses: true, link: hasil };
+  } catch (e) {
+    return { sukses: false, pesan: "Gagal upload berkas: " + e.toString() };
+  }
+}
+
 // =========================================================================
 // 6. FUNGSI PEMETAAN RUMAH IBADAH (MODAL KECAMATAN & KEMENAG)
 // =========================================================================
@@ -1067,12 +1405,14 @@ function getSheetName(kategori) {
     case "NAZIR MUSHOLLA": return "db_musholla";
     case "PENGURUS GEREJA": return "db_gereja";
     case "PENGURUS VIHARA/KLENTENG/KUIL": return "db_vihara_klenteng_kuil";
+    case "GURU SEKOLAH BUDDHA": return "db_vihara";
+    case "GURU SEKOLAH HINDU": return "db_kuil";
     case "PETUGAS GEREJA KATOLIK": return "db_pgk";
     default: return null;
   }
 }
 
-// Data master rumah ibadah (db_masjid/db_musholla/db_gereja/db_pgk/db_vihara_klenteng_kuil) jarang berubah —
+// Data master rumah ibadah (db_masjid/db_musholla/db_gereja/db_pgk/db_vihara_klenteng_kuil/db_vihara/db_kuil) jarang berubah —
 // di-cache 6 jam (pola sama seperti getMasterLayanan) supaya modal pilih rumah ibadah di form input
 // tidak membaca ulang sheet dari nol setiap kali dibuka.
 function getDataRumahIbadah(token, kategori) {
@@ -1088,7 +1428,11 @@ function getDataRumahIbadah(token, kategori) {
     try { return JSON.parse(cached); } catch (e) {}
   }
 
-  const sheet = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN).getSheetByName(sheetName);
+  const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet && (sheetName === "db_vihara" || sheetName === "db_kuil")) {
+    sheet = ss.getSheetByName("db_vihara_klenteng_kuil");
+  }
   const data = (!sheet || sheet.getLastRow() < 2) ? [] : sheet.getRange(2, 1, sheet.getLastRow() - 1, 4).getValues();
 
   try { cache.put(cacheKey, JSON.stringify(data), 21600); } catch (e) {} // lewati cache kalau >100KB
@@ -1099,7 +1443,7 @@ function getDataRumahIbadah(token, kategori) {
 function getKemenagData(token, sheetName) {
   try { wajibSesi_(token); } catch (e) { return { error: "Sesi tidak sah. Silakan login ulang." }; }
 
-  const allowedSheets = ["db_gereja", "db_pgk", "db_masjid", "db_musholla", "db_vihara_klenteng_kuil"];
+  const allowedSheets = ["db_gereja", "db_pgk", "db_masjid", "db_musholla", "db_vihara_klenteng_kuil", "db_vihara", "db_kuil"];
   if (!allowedSheets.includes(sheetName)) return { error: "Akses ditolak" };
 
   const cache = CacheService.getScriptCache();
@@ -1110,7 +1454,11 @@ function getKemenagData(token, sheetName) {
   }
 
   const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-  const sheet = ss.getSheetByName(sheetName);
+  let sheet = ss.getSheetByName(sheetName);
+  // Fallback aman jika tab sheet terpisah db_vihara / db_kuil belum dibuat di Google Spreadsheet:
+  if (!sheet && (sheetName === "db_vihara" || sheetName === "db_kuil")) {
+    sheet = ss.getSheetByName("db_vihara_klenteng_kuil");
+  }
   if (!sheet) return { error: "Sheet tidak ditemukan" };
   if (sheet.getLastRow() < 2) return [];
   const data = sheet.getDataRange().getValues();
@@ -1188,40 +1536,18 @@ function ambilDataLihatDataHakAkses(token) {
       const kelurahanSheet = row[INDEKS_KELURAHAN] ? row[INDEKS_KELURAHAN].toString().trim().toUpperCase() : "";
       const tempatTugasSheet = row[7] ? row[7].toString().trim().toUpperCase() : "";
 
-      let lolosAkses = false;
-      if (instansiPengguna === "KECAMATAN") {
-        if (kecamatanSheet === namaKecamatanPengguna.toUpperCase() && listLayananKemenag.indexOf(layananSheet) === -1) {
-          lolosAkses = true;
-        }
-      } else if (instansiPengguna === "KEMENAG") {
-        if (listLayananKemenag.indexOf(layananSheet) !== -1) {
-          if (layananPengguna) {
-            if (layananSheet === layananPengguna.toUpperCase()) {
-              if (namaKecamatanPengguna) {
-                if (kecamatanSheet === namaKecamatanPengguna.toUpperCase()) lolosAkses = true;
-              } else {
-                lolosAkses = true;
-              }
-            }
-          } else {
-            lolosAkses = true;
-          }
-        }
-      } else {
-        lolosAkses = true; // SUPERADMIN
-      }
-
-      // Lapis tambahan: kalau akun ini terikat 1 kelurahan spesifik, wajib cocok juga kelurahannya.
-      if (lolosAkses && kelurahanTerkunci) {
-        lolosAkses = (kelurahanSheet === kelurahanTerkunci);
-      }
-
-      // Lapis tambahan: khusus GSM, pisah berdasarkan kata "KATOLIK" di Tempat Tugas.
-      if (lolosAkses && subFilterGsm === "KATOLIK") {
-        lolosAkses = tempatTugasSheet.indexOf("KATOLIK") !== -1;
-      } else if (lolosAkses && subFilterGsm === "BUKAN_KATOLIK") {
-        lolosAkses = tempatTugasSheet.indexOf("KATOLIK") === -1;
-      }
+      const lolosAkses = lolosAksesBarisLihatData_({
+        instansiPengguna: instansiPengguna,
+        layananPengguna: layananPengguna,
+        namaKecamatanPengguna: namaKecamatanPengguna,
+        kelurahanTerkunci: kelurahanTerkunci,
+        subFilterGsm: subFilterGsm,
+        listLayananKemenag: listLayananKemenag,
+        layananSheet: layananSheet,
+        kecamatanSheet: kecamatanSheet,
+        kelurahanSheet: kelurahanSheet,
+        tempatTugasSheet: tempatTugasSheet,
+      });
 
       if (lolosAkses) {
         resultRows.push([
@@ -1770,234 +2096,6 @@ function getDashboardProgresVerifikasi(token, kecamatanFilter) {
     return { sukses: true, kartu: kartu, bisaFilterKecamatan: (role === "UTAMA") };
   } catch (e) {
     return { sukses: false, pesan: e.toString() };
-  }
-}
-
-// =========================================================================
-// FITUR CHAT GRUP (db_chat & db_chat_baca)
-// =========================================================================
-
-const NAMA_SHEET_CHAT = "db_chat";
-const NAMA_SHEET_CHAT_BACA = "db_chat_baca";
-const BATAS_PANJANG_PESAN = 1000; // karakter maksimum per pesan
-const MAKS_PESAN_DIMUAT = 300;    // ambil paling banyak N pesan terakhir
-
-// Pastikan sheet chat ada; buat header bila belum.
-function pastikanSheetChat_() {
-  const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-  let sheet = ss.getSheetByName(NAMA_SHEET_CHAT);
-  if (!sheet) {
-    sheet = ss.insertSheet(NAMA_SHEET_CHAT);
-    sheet.appendRow(["ID", "Waktu", "Username", "Role", "Kecamatan", "Pesan"]);
-  }
-  let sheetBaca = ss.getSheetByName(NAMA_SHEET_CHAT_BACA);
-  if (!sheetBaca) {
-    sheetBaca = ss.insertSheet(NAMA_SHEET_CHAT_BACA);
-    sheetBaca.appendRow(["Username", "WaktuBacaTerakhir"]);
-  }
-  return { sheet: sheet, sheetBaca: sheetBaca };
-}
-
-// Identitas pengirim dari sesi (tak bisa dipalsukan browser).
-function identitasDariSesi_(sesi) {
-  return {
-    username: (sesi.username || "TANPA NAMA").toString().trim().toUpperCase(),
-    role: (sesi.role || "").toString().trim().toUpperCase(),
-    kecamatan: (sesi.kecamatan || "").toString().trim().toUpperCase()
-  };
-}
-
-// ---- KIRIM PESAN ----
-function kirimPesanChat(token, teksPesan) {
-  let sesi;
-  try { sesi = wajibSesi_(token); }
-  catch (e) { return { sukses: false, pesan: e.message }; }
-
-  const teks = String(teksPesan || "").trim();
-  if (!teks) return { sukses: false, pesan: "Pesan kosong." };
-  if (teks.length > BATAS_PANJANG_PESAN) {
-    return { sukses: false, pesan: "Pesan terlalu panjang (maks " + BATAS_PANJANG_PESAN + " karakter)." };
-  }
-
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-    const { sheet } = pastikanSheetChat_();
-    // ID unik = (ID terbesar yang ada) + 1, agar tetap unik meski ada baris terhapus.
-    let id = 1;
-    const lastRowNow = sheet.getLastRow();
-    if (lastRowNow >= 2) {
-      const idVals = sheet.getRange(2, 1, lastRowNow - 1, 1).getValues();
-      let maxId = 0;
-      for (let i = 0; i < idVals.length; i++) {
-        const n = Number(idVals[i][0]);
-        if (!isNaN(n) && n > maxId) maxId = n;
-      }
-      id = maxId + 1;
-    }
-    const ident = identitasDariSesi_(sesi);
-    const waktuIso = new Date().toISOString();
-    sheet.appendRow([id, waktuIso, ident.username, ident.role, ident.kecamatan, teks]);
-    SpreadsheetApp.flush();
-    // Pengirim otomatis dianggap sudah membaca sampai pesannya sendiri.
-    tandaiSudahBaca_(ident.username, waktuIso);
-    return { sukses: true };
-  } catch (e) {
-    return { sukses: false, pesan: "Gagal mengirim: " + e.toString() };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// ---- AMBIL PESAN (paling banyak MAKS_PESAN_DIMUAT terakhir) ----
-function ambilPesanChat(token) {
-  let sesi;
-  try { sesi = wajibSesi_(token); }
-  catch (e) { return { sukses: false, pesan: e.message }; }
-
-  try {
-    const { sheet } = pastikanSheetChat_();
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return { sukses: true, pesan: "", daftar: [], usernameSaya: identitasDariSesi_(sesi).username };
-
-    const mulai = Math.max(2, lastRow - MAKS_PESAN_DIMUAT + 1);
-    const jml = lastRow - mulai + 1;
-    const data = sheet.getRange(mulai, 1, jml, 6).getValues();
-
-    const daftar = data.map(function(r) {
-      return {
-        id: r[0],
-        waktu: r[1] ? r[1].toString() : "",
-        username: r[2] ? r[2].toString() : "",
-        role: r[3] ? r[3].toString() : "",
-        kecamatan: r[4] ? r[4].toString() : "",
-        pesan: r[5] ? r[5].toString() : ""
-      };
-    });
-
-    return { sukses: true, daftar: daftar, usernameSaya: identitasDariSesi_(sesi).username };
-  } catch (e) {
-    return { sukses: false, pesan: e.toString() };
-  }
-}
-
-// ---- TANDAI SUDAH BACA (dipanggil saat user membuka chat) ----
-function tandaiChatDibaca(token) {
-  let sesi;
-  try { sesi = wajibSesi_(token); }
-  catch (e) { return { sukses: false, pesan: e.message }; }
-  try {
-    const ident = identitasDariSesi_(sesi);
-    tandaiSudahBaca_(ident.username, new Date().toISOString());
-    return { sukses: true };
-  } catch (e) {
-    return { sukses: false, pesan: e.toString() };
-  }
-}
-
-// Helper internal: simpan/update waktu baca terakhir untuk seorang username.
-function tandaiSudahBaca_(username, waktuIso) {
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-    const { sheetBaca } = pastikanSheetChat_();
-    const lastRow = sheetBaca.getLastRow();
-    let ditemukan = false;
-    if (lastRow >= 2) {
-      const data = sheetBaca.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = 0; i < data.length; i++) {
-        if (data[i][0] && data[i][0].toString().trim().toUpperCase() === username) {
-          sheetBaca.getRange(i + 2, 2).setValue(waktuIso);
-          ditemukan = true;
-          break;
-        }
-      }
-    }
-    if (!ditemukan) {
-      sheetBaca.appendRow([username, waktuIso]);
-    }
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-// ---- JUMLAH PESAN BELUM DIBACA (untuk badge) ----
-function hitungChatBelumDibaca(token) {
-  let sesi;
-  try { sesi = wajibSesi_(token); }
-  catch (e) { return { sukses: false, pesan: e.message, jumlah: 0 }; }
-
-  try {
-    const ss = SpreadsheetApp.openById(SS_ID_MASTER_DROPDOWN);
-    const sheet = ss.getSheetByName(NAMA_SHEET_CHAT);
-    const sheetBaca = ss.getSheetByName(NAMA_SHEET_CHAT_BACA);
-    if (!sheet || sheet.getLastRow() < 2) return { sukses: true, jumlah: 0 };
-
-    const ident = identitasDariSesi_(sesi);
-
-    // Ambil waktu baca terakhir user.
-    let waktuBaca = null;
-    if (sheetBaca && sheetBaca.getLastRow() >= 2) {
-      const dataBaca = sheetBaca.getRange(2, 1, sheetBaca.getLastRow() - 1, 2).getValues();
-      for (let i = 0; i < dataBaca.length; i++) {
-        if (dataBaca[i][0] && dataBaca[i][0].toString().trim().toUpperCase() === ident.username) {
-          waktuBaca = dataBaca[i][1] ? new Date(dataBaca[i][1].toString()) : null;
-          break;
-        }
-      }
-    }
-
-    const lastRow = sheet.getLastRow();
-    const data = sheet.getRange(2, 2, lastRow - 1, 2).getValues(); // kolom B(Waktu) & C(Username)
-    let jumlah = 0;
-    for (let i = 0; i < data.length; i++) {
-      const waktuPesan = data[i][0] ? new Date(data[i][0].toString()) : null;
-      const pengirim = data[i][1] ? data[i][1].toString().trim().toUpperCase() : "";
-      if (pengirim === ident.username) continue;       // pesan sendiri tidak dihitung
-      if (!waktuPesan) continue;
-      if (!waktuBaca || waktuPesan > waktuBaca) jumlah++;
-    }
-    return { sukses: true, jumlah: jumlah };
-  } catch (e) {
-    return { sukses: false, pesan: e.toString(), jumlah: 0 };
-  }
-}
-
-// ---- HAPUS PESAN (KHUSUS ADMIN UTAMA) ----
-function hapusPesanChat(token, idPesan) {
-  let sesi;
-  try { sesi = wajibSesi_(token); }
-  catch (e) { return { sukses: false, pesan: e.message }; }
-
-  // Otorisasi: hanya peran UTAMA.
-  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
-    return { sukses: false, pesan: "Hanya admin utama yang boleh menghapus pesan." };
-  }
-
-  const idTarget = String(idPesan || "").trim();
-  if (!idTarget) return { sukses: false, pesan: "ID pesan tidak valid." };
-
-  const lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-    const { sheet } = pastikanSheetChat_();
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return { sukses: false, pesan: "Tidak ada pesan." };
-
-    const idKolom = sheet.getRange(2, 1, lastRow - 1, 1).getValues(); // kolom A = ID
-    for (let i = 0; i < idKolom.length; i++) {
-      if (idKolom[i][0] !== "" && String(idKolom[i][0]).trim() === idTarget) {
-        sheet.deleteRow(i + 2);
-        SpreadsheetApp.flush();
-        return { sukses: true };
-      }
-    }
-    return { sukses: false, pesan: "Pesan tidak ditemukan (mungkin sudah dihapus)." };
-  } catch (e) {
-    return { sukses: false, pesan: "Gagal menghapus: " + e.toString() };
-  } finally {
-    lock.releaseLock();
   }
 }
 
@@ -2733,38 +2831,55 @@ function editDataPenerima(token, nomorBarisAsli, editData) {
       if (umurBaru !== null) sheet.getRange(baris, 18).setValue(umurBaru); // kolom 18 = Umur (1-based)
     }
 
-    // ── Perubahan berkas ──
+    // ── Perubahan berkas ── DUA jalur didukung sekaligus (aditif, sama seperti simpanDataKeSheet):
+    // 1. berkas[idx] berupa STRING — sudah di-upload lebih dulu lewat uploadSemuaBerkasKeDrive
+    //    (dipakai backend Supabase yang tidak bisa upload Drive sendiri), pakai langsung.
+    // 2. berkas[idx] berupa OBJEK {dataBase64,...} — JALUR LAMA, GAS upload sendiri inline
+    //    (dipertahankan apa adanya supaya tidak ada regresi kalau frontend belum pre-upload).
     for (const idxStr of Object.keys(berkas)) {
       const idx = Number(idxStr);
       if (!KOLOM_BERKAS[idx]) continue;
-      const berkasObj = berkas[idxStr];
-      if (!berkasObj || !berkasObj.dataBase64) continue;
-
-      const blob = blobDariBerkas_(berkasObj);
-      if (!blob) continue;
-
+      const berkasVal = berkas[idxStr];
       const labelBerkas = KOLOM_BERKAS[idx];
 
-      // Pakai folder pendaftar yang sudah tersimpan (kolom 31). Kalau kosong (data lama), buat baru.
-      const folderIdTersimpan = (rowLama[30] || "").toString().trim();
-      let folderPendaftar;
-      try {
-        folderPendaftar = folderIdTersimpan
-          ? DriveApp.getFolderById(folderIdTersimpan)
-          : dapatkanFolderPendaftar_(kecamatanSheet, layananSheet, (rowLama[1] || "").toString(), (rowLama[2] || "").toString());
-      } catch (eFolder) {
-        folderPendaftar = dapatkanFolderPendaftar_(kecamatanSheet, layananSheet, (rowLama[1] || "").toString(), (rowLama[2] || "").toString());
-      }
-      if (!folderIdTersimpan) {
-        sheet.getRange(baris, 31).setValue(folderPendaftar.getId());
-      }
+      let linkBaru;
+      if (typeof berkasVal === "string") {
+        linkBaru = berkasVal.trim();
+        if (!linkBaru) continue;
+      } else {
+        if (!berkasVal || !berkasVal.dataBase64) continue;
+        const blob = blobDariBerkas_(berkasVal);
+        if (!blob) continue;
 
-      const linkBaru = uploadBerkasPenerima_(blob, folderPendaftar, labelBerkas);
-      if (!linkBaru) continue;
+        // Pakai folder pendaftar yang sudah tersimpan (kolom 31). Kalau kosong (data lama), buat baru.
+        const folderIdTersimpan = (rowLama[30] || "").toString().trim();
+        let folderPendaftar;
+        try {
+          folderPendaftar = folderIdTersimpan
+            ? DriveApp.getFolderById(folderIdTersimpan)
+            : dapatkanFolderPendaftar_(kecamatanSheet, layananSheet, (rowLama[1] || "").toString(), (rowLama[2] || "").toString());
+        } catch (eFolder) {
+          folderPendaftar = dapatkanFolderPendaftar_(kecamatanSheet, layananSheet, (rowLama[1] || "").toString(), (rowLama[2] || "").toString());
+        }
+        if (!folderIdTersimpan) {
+          sheet.getRange(baris, 31).setValue(folderPendaftar.getId());
+        }
+
+        linkBaru = uploadBerkasPenerima_(blob, folderPendaftar, labelBerkas);
+        if (!linkBaru) continue;
+      }
 
       const linkLama = (rowLama[idx] || "").toString().trim();
       sheet.getRange(baris, idx + 1).setValue(linkBaru);
       riwayat.push({ kolom: idx, label: labelBerkas, sebelum: linkLama ? "[link lama]" : "-", sesudah: "[link baru]" });
+    }
+
+    // Kalau berkas di-upload lebih dulu lewat uploadSemuaBerkasKeDrive (jalur string di atas) dan
+    // baris ini belum punya folder tersimpan (data lama), simpan ID folder yang baru dibuat —
+    // menyamai perilaku jalur upload-inline lama (baris ~2857) supaya edit berikutnya reuse folder
+    // yang sama, bukan bikin folder baru tiap kali.
+    if (editData.idFolderBerkas && !(rowLama[30] || "").toString().trim()) {
+      sheet.getRange(baris, 31).setValue(editData.idFolderBerkas);
     }
 
     SpreadsheetApp.flush();
@@ -3275,6 +3390,20 @@ function ambilDataTahunHakAkses(token, tahun) {
                       : userIdSesi === "BIMAS KRISTEN" ? "BUKAN_KATOLIK"
                       : "";
 
+    // Tentukan instansi & layanan pengguna (peran tidak dikenal -> instansiPengguna null, yang
+    // membuat lolosAksesBarisLihatData_ selalu mengembalikan false, persis perilaku semula:
+    // tidak ada baris satu pun yang cocok, bukan error eksplisit).
+    var instansiPengguna = null;
+    var layananPengguna = "";
+    if (role === "UTAMA") {
+      instansiPengguna = "SUPERADMIN";
+    } else if (role === "KECAMATAN") {
+      instansiPengguna = "KECAMATAN";
+    } else if (listKemenag.indexOf(role) !== -1) {
+      instansiPengguna = "KEMENAG";
+      layananPengguna = role;
+    }
+
     // Kolom db_XXXX (0-based):
     // A=0(kosong) B=1=Nama C=2=NIK ... H=7=Layanan ... K=10=Kecamatan L=11=Kelurahan ... S=18=Status
     var data = sheet.getRange(2, 1, lastRow - 1, 19).getValues();
@@ -3291,29 +3420,18 @@ function ambilDataTahunHakAkses(token, tahun) {
 
       if (!nama && !nik) continue; // skip baris kosong
 
-      var lolos = false;
-      if (role === "UTAMA") {
-        lolos = true;
-      } else if (role === "KECAMATAN") {
-        lolos = (kec === kecPengguna && listKemenag.indexOf(layanan) === -1);
-      } else if (listKemenag.indexOf(role) !== -1) {
-        lolos = (layanan === role.toUpperCase()) &&
-                (!kecPengguna || kec === kecPengguna);
-      }
-
-      // Lapis tambahan: akun terikat 1 kelurahan spesifik wajib cocok juga kelurahannya.
-      if (lolos && kelurahanTerkunci) {
-        lolos = (kel === kelurahanTerkunci);
-      }
-      // Lapis tambahan: khusus GSM, pisah berdasarkan kata "KATOLIK" di Tempat Tugas (kolom I = idx 8).
-      if (lolos && subFilterGsm) {
-        var tempatTugasSheet = (r[8] || "").toString().trim().toUpperCase();
-        if (subFilterGsm === "KATOLIK") {
-          lolos = tempatTugasSheet.indexOf("KATOLIK") !== -1;
-        } else if (subFilterGsm === "BUKAN_KATOLIK") {
-          lolos = tempatTugasSheet.indexOf("KATOLIK") === -1;
-        }
-      }
+      var lolos = lolosAksesBarisLihatData_({
+        instansiPengguna: instansiPengguna,
+        layananPengguna: layananPengguna,
+        namaKecamatanPengguna: kecPengguna,
+        kelurahanTerkunci: kelurahanTerkunci,
+        subFilterGsm: subFilterGsm,
+        listLayananKemenag: listKemenag,
+        layananSheet: layanan,
+        kecamatanSheet: kec,
+        kelurahanSheet: kel,
+        tempatTugasSheet: (r[8] || "").toString().trim().toUpperCase(), // kolom I = idx 8
+      });
 
       if (lolos) rows.push([nama, nik, layanan, kec, kel, status]);
     }

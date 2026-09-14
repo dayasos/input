@@ -1,0 +1,22 @@
+-- ============================================================
+-- Perbaikan KRITIKAL: RLS tidak terwarisi ke partisi penerima_2027
+-- ============================================================
+-- 20260911090000_enable_rls.sql mengaktifkan RLS di tabel INDUK `penerima`
+-- (partitioned table), tapi partisi `penerima_2027` sudah dibuat lebih dulu
+-- (20260907090200_penerima_partitioned.sql, 4 hari sebelum migrasi RLS).
+-- Postgres TIDAK mewariskan status RLS ke partisi yang sudah ada saat RLS
+-- diaktifkan di induknya -- ENABLE ROW LEVEL SECURITY di induk hanya otomatis
+-- berlaku untuk partisi yang dibuat SETELAH RLS diaktifkan di induk.
+--
+-- Ditemukan lewat verifikasi langsung ke database live (2026-09-14, setelah
+-- db push pertama): pg_class.relrowsecurity = false untuk penerima_2027,
+-- padahal tabel ini berisi SELURUH data PII penerima tahun aktif (NIK, nomor
+-- rekening, alamat). Karena anon key tertanam publik di index.html (dipakai
+-- fitur Realtime), ini berarti data bisa diakses langsung lewat PostgREST API
+-- tanpa lewat RBAC Edge Function sama sekali -- kelas bug yang sama dengan
+-- temuan RLS awal, cuma di lapisan partisi.
+--
+-- PENTING untuk pergantian tahun berikutnya (mis. 2028): partisi tahun baru
+-- HARUS eksplisit di-ENABLE ROW LEVEL SECURITY dalam migrasi yang sama saat
+-- partisi itu dibuat -- jangan mengandalkan warisan dari tabel induk.
+alter table penerima_2027 enable row level security;
