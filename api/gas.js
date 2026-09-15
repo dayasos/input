@@ -125,22 +125,16 @@ export default async function handler(req, res) {
   const secretToken = process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET';
   payloadObj._secret = secretToken;
 
-  // simpanDataKeSheet/editDataPenerima/uploadSemuaBerkasKeDrive membawa berkas (base64) yang
-  // di-upload ke Drive — payload bisa besar & lambat di jaringan lemah. Meng-abort lalu me-retry
-  // hanya mengulang unggahan lambat yang sama (tidak mempercepat), jadi aksi ini diberi timeout
-  // lebih longgar tapi tanpa retry pada target yang sama.
-  const UPLOAD_ACTIONS = new Set(['simpanDataKeSheet', 'editDataPenerima', 'uploadSemuaBerkasKeDrive']);
+  // simpanDataKeSheet/editDataPenerima/uploadSemuaBerkasKeSupabase membawa berkas (base64) yang
+  // di-upload — payload bisa besar & lambat di jaringan lemah. Meng-abort lalu me-retry hanya
+  // mengulang unggahan lambat yang sama (tidak mempercepat), jadi aksi ini diberi timeout lebih
+  // longgar tapi tanpa retry pada target yang sama.
+  const UPLOAD_ACTIONS = new Set(['simpanDataKeSheet', 'editDataPenerima', 'uploadSemuaBerkasKeSupabase']);
   const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
 
-  // uploadSemuaBerkasKeDrive SELALU dipaksa ke GAS, apa pun target utama yang sedang aktif —
-  // upload Drive fisik cuma bisa lewat GAS (akun personal, Service Account tidak bisa menulis
-  // Drive baru, lihat catatan arsitektur CLAUDE.md). Kalau ini dibiarkan ikut target dinamis
-  // (SUPABASE_EDGE_FUNCTION_URL), aksi ini akan gagal "Aksi tidak diizinkan" di sana karena
-  // Edge Function memang tidak (dan tidak bisa) mendaftarkan aksi ini.
-  const FORCE_GAS_ACTIONS = new Set(['uploadSemuaBerkasKeDrive']);
-  if (FORCE_GAS_ACTIONS.has(payloadObj.action)) {
-    targetUrl = sanitizeUrl(process.env.GAS_API_URL || DEFAULT_GAS_URL);
-  }
+  // Upload berkas sekarang ke Supabase Storage (uploadSemuaBerkasKeSupabase, 2026-09-15) — tidak
+  // ada lagi aksi yang wajib dipaksa ke GAS apa pun target utama yang aktif. uploadSemuaBerkasKeDrive
+  // lama di Kode.gs dibiarkan ada (tidak dihapus, cadangan darurat) tapi tidak dipanggil lagi.
 
   // Fallback lintas-backend (GAS <-> Supabase Edge Function) HANYA aman untuk aksi baca murni.
   // GAS menulis ke Google Sheets, Supabase Edge Function menulis ke Postgres — dua penyimpanan

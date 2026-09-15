@@ -19,11 +19,13 @@
 // - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
 // - dataDetail (ambilDataDetail — 2026-09-15, fitur baru murni Supabase, bukan porting dari
 //   Kode.gs; pengganti sheet eksternal "Data Detail" + formula QUERY() yang sudah dihapus total)
+// - upload (uploadSemuaBerkasKeSupabase — 2026-09-15, pengganti uploadSemuaBerkasKeDrive: upload
+//   berkas sekarang ke Supabase Storage bucket privat + signed URL, BUKAN lagi ke Google Drive.
+//   Kode.gs TIDAK diubah/dihapus, fungsi lamanya cuma tidak dipanggil lagi dari index.html.)
 //
 // Yang TIDAK diporting (sengaja):
 // - setHeaderUserId: utilitas sekali-jalan yang tidak dipanggil frontend (lihat setelan.ts)
 // - chat: fitur dihapus total 2026-09-12
-// Upload berkas ke Drive tetap di GAS sebagai microservice (personal Drive tidak bisa via SA).
 
 import { loginPengguna, logoutPengguna, pulihkanSesi } from "./domains/auth.ts";
 import {
@@ -50,6 +52,7 @@ import {
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
+import { uploadSemuaBerkasKeSupabase } from "./domains/upload.ts";
 import { buatTokenSSORetur } from "./domains/sso.ts";
 import { ambilDataTahunHakAkses, ambilRiwayatEdit, ambilTahunTersedia } from "./domains/riwayat.ts";
 import { getDashboardProgresVerifikasi } from "./domains/dashboard.ts";
@@ -105,6 +108,7 @@ const ALLOWED: Record<string, Handler> = {
   simpanDataKeSheet,
   editDataPenerima,
   ambilDataDetail,
+  uploadSemuaBerkasKeSupabase,
   ambilTahunTersedia,
   ambilDataTahunHakAkses,
   ambilRiwayatEdit,

@@ -3325,9 +3325,9 @@
         return data;
       }
 
-      // Label tiap kunci berkas untuk aksi upload terpisah (uploadSemuaBerkasKeDrive) — dipakai
-      // sebagai nama file di Google Drive. Samakan persis dengan LABEL_FIELD_BERKAS di Kode.gs
-      // (baris ~1146), termasuk label kondisional fileBerkasPendukung2 tergantung layanan.
+      // Label tiap kunci berkas untuk aksi upload terpisah (uploadSemuaBerkasKeSupabase) — dipakai
+      // sebagai bagian nama path di Supabase Storage. Samakan persis dengan LABEL_FIELD_BERKAS di
+      // Kode.gs (baris ~1146), termasuk label kondisional fileBerkasPendukung2 tergantung layanan.
       function labelBerkasSimpanBaru(layanan) {
         const lay = (layanan || "").toString().toUpperCase().trim();
         return {
@@ -3340,10 +3340,9 @@
         };
       }
 
-      // Kirim data ke simpanDataKeSheet — kalau ada berkas terpilih, upload dulu ke Drive lewat
-      // aksi terpisah uploadSemuaBerkasKeDrive (backend Supabase tidak bisa upload Drive sendiri,
-      // lihat catatan arsitektur di CLAUDE.md), baru kirim link-nya. Kalau tidak ada berkas sama
-      // sekali, langsung simpan tanpa upload.
+      // Kirim data ke simpanDataKeSheet — kalau ada berkas terpilih, upload dulu ke Supabase
+      // Storage lewat aksi terpisah uploadSemuaBerkasKeSupabase, baru kirim link-nya. Kalau tidak
+      // ada berkas sama sekali, langsung simpan tanpa upload.
       function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
         function eksekusiSimpan() {
           google.script.run
@@ -3394,7 +3393,7 @@
             loadingOverlay.classList.add('hidden');
             tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
           })
-          .uploadSemuaBerkasKeDrive(
+          .uploadSemuaBerkasKeSupabase(
             dataPengguna.token,
             { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
             berkasBerlabel
@@ -4393,9 +4392,9 @@
             return;
           }
 
-          // Upload berkas lebih dulu ke Drive lewat aksi terpisah uploadSemuaBerkasKeDrive
-          // (backend Supabase tidak bisa upload Drive sendiri, lihat CLAUDE.md), baru kirim
-          // link-nya ke editDataPenerima. Label per kolom diambil dari getBerkasSesuaiLayanan
+          // Upload berkas lebih dulu ke Supabase Storage lewat aksi terpisah
+          // uploadSemuaBerkasKeSupabase, baru kirim link-nya ke editDataPenerima. Label per
+          // kolom diambil dari getBerkasSesuaiLayanan
           // (sumber label yang sudah ada, dipakai juga saat render form edit).
           btnSimpan.textContent = "⏳ Mengunggah berkas...";
           const labelPerIdx = {};
@@ -4427,7 +4426,7 @@
               btnSimpan.textContent = "💾 Simpan Perubahan";
               tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), "gagal", { durasi: 6000 });
             })
-            .uploadSemuaBerkasKeDrive(
+            .uploadSemuaBerkasKeSupabase(
               dataPengguna.token,
               { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },
               berkasBerlabel
