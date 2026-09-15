@@ -17,6 +17,8 @@
 // - akun (ubahAkunSendiri, ambilDaftarAkun, resetPasswordUser, simpanProfilUser, ubahProfilUser)
 // - ekspor (eksporDataKeSpreadsheet — Fase 4, via npm:xlsx)
 // - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
+// - dataDetail (ambilDataDetail — 2026-09-15, fitur baru murni Supabase, bukan porting dari
+//   Kode.gs; pengganti sheet eksternal "Data Detail" + formula QUERY() yang sudah dihapus total)
 //
 // Yang TIDAK diporting (sengaja):
 // - setHeaderUserId: utilitas sekali-jalan yang tidak dipanggil frontend (lihat setelan.ts)
@@ -47,6 +49,7 @@ import {
   editDataPenerima,
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
+import { ambilDataDetail } from "./domains/dataDetail.ts";
 import { buatTokenSSORetur } from "./domains/sso.ts";
 import { ambilDataTahunHakAkses, ambilRiwayatEdit, ambilTahunTersedia } from "./domains/riwayat.ts";
 import { getDashboardProgresVerifikasi } from "./domains/dashboard.ts";
@@ -101,6 +104,7 @@ const ALLOWED: Record<string, Handler> = {
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
   editDataPenerima,
+  ambilDataDetail,
   ambilTahunTersedia,
   ambilDataTahunHakAkses,
   ambilRiwayatEdit,

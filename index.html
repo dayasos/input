@@ -671,6 +671,11 @@
             title="Ekspor hanya data yang berstatus Memenuhi Syarat ke Excel">
             📥 Export Excel (✅ MS)
           </button>
+          <button id="btn-data-detail" onclick="tampilkanDataDetail()"
+            class="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5"
+            title="Rekap data Memenuhi Syarat, sumber untuk proses Pembayaran">
+            🔎 Data Detail
+          </button>
           <button id="btn-refresh-data"
             class="hidden bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5"
             title="Refresh Data">
@@ -800,6 +805,60 @@
           <button onclick="document.getElementById('modal-detail-penerima').classList.add('hidden')"
             class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
             Tutup Detail
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: rekap "Data Detail" (Memenuhi Syarat, sumber proses Pembayaran) -->
+    <div id="modal-data-detail"
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
+      <div class="bg-white rounded-2xl max-w-6xl w-full shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
+        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-bold text-slate-800 tracking-wide uppercase">Data Detail</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Rekap penerima Memenuhi Syarat sesuai hak akses Anda.</p>
+          </div>
+          <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
+            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+        </div>
+        <div class="p-6 overflow-y-auto text-sm text-slate-700">
+          <div class="overflow-x-auto rounded-lg border border-slate-200">
+            <table class="w-full text-left border-collapse bg-white whitespace-nowrap">
+              <thead>
+                <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
+                  <th class="px-3 py-2 text-center border-b border-slate-200">No</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Nama</th>
+                  <th class="px-3 py-2 border-b border-slate-200">NIK</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Jenis Kelamin</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Tempat Lahir</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Tanggal Lahir</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Alamat</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Layanan</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Tempat Tugas</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Alamat Tugas</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Kecamatan</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Kelurahan</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Nama Rekening</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Nomor Rekening</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Kantor Cabang</th>
+                  <th class="px-3 py-2 border-b border-slate-200">No. Kontak</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Status BPJS TK</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Umur</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Status</th>
+                  <th class="px-3 py-2 border-b border-slate-200">Tgl Status</th>
+                </tr>
+              </thead>
+              <tbody id="body-tabel-data-detail" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-2xl">
+          <span id="info-total-data-detail" class="text-xs text-slate-500"></span>
+          <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
+            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
+            Tutup
           </button>
         </div>
       </div>
@@ -3604,6 +3663,66 @@
           })
           .withFailureHandler(function (error) { tampilkanToast(pesanErrorRamah(error), "gagal", { durasi: 6000 }); })
           .ambilDataLihatDataHakAkses(dataPengguna.token);
+      }
+
+      // Rekap "Data Detail" (Memenuhi Syarat) — fitur murni Supabase, satu tombol untuk
+      // seluruh rekap (bukan per-baris/per-NIK seperti fitur lama yang sudah dihapus).
+      window.tampilkanDataDetail = function () {
+        if (!pastikanLogin()) return;
+        document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(20, 5);
+        document.getElementById('info-total-data-detail').innerText = '';
+        document.getElementById('modal-data-detail').classList.remove('hidden');
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              document.getElementById('body-tabel-data-detail').innerHTML =
+                '<tr><td colspan="20" class="px-4 py-6 text-center text-red-500">' + esc(res ? res.pesan : 'Gagal memuat data') + '</td></tr>';
+              return;
+            }
+            renderTabelDataDetail(res.rows);
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('body-tabel-data-detail').innerHTML =
+              '<tr><td colspan="20" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
+          })
+          .ambilDataDetail(dataPengguna.token);
+      };
+
+      function renderTabelDataDetail(rows) {
+        const tbody = document.getElementById('body-tabel-data-detail');
+        document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
+        if (!rows || rows.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
+          return;
+        }
+        let html = '';
+        rows.forEach(function (r, idx) {
+          html += `
+  <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+    <td class="px-3 py-2 text-center font-medium text-slate-400">${idx + 1}</td>
+    <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.nama) || '-'}</td>
+    <td class="px-3 py-2 font-mono text-xs text-slate-600">${esc(r.nik) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.jenisKelamin) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.tempatLahir) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.tanggalLahir) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.alamat) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.layanan) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.tempatTugas) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.alamatTugas) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.kecamatan) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.kelurahan) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.namaRekening) || '-'}</td>
+    <td class="px-3 py-2 font-mono text-xs">${esc(r.nomorRekening) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.kantorCabang) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.noKontak) || '-'}</td>
+    <td class="px-3 py-2">${esc(r.statusBpjsTk) || '-'}</td>
+    <td class="px-3 py-2 text-center">${esc(r.umur) || '-'}</td>
+    <td class="px-3 py-2"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">${esc(r.status) || '-'}</span></td>
+    <td class="px-3 py-2 text-xs text-slate-500">${esc(r.tglStatus) || '-'}</td>
+  </tr>`;
+        });
+        tbody.innerHTML = html;
       }
 
       function setupPencarianRealtime() {

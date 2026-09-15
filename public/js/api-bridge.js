@@ -32,6 +32,7 @@ const SWR_CONFIG = {
   ambilDataLihatDataHakAkses: { ttl: 3 * 60 * 1000, domain: 'penerima' },
   ambilDetailPenerimaPerBaris: { ttl: 2 * 60 * 1000, domain: 'penerima_detail' },
   getDashboardProgresVerifikasi: { ttl: 3 * 60 * 1000, domain: 'dashboard' },
+  ambilDataDetail: { ttl: 3 * 60 * 1000, domain: 'data_detail' },
 
   // Kuota: TTL 5 menit
   getSemuaKuota: { ttl: 5 * 60 * 1000, domain: 'kuota' },
@@ -51,10 +52,10 @@ const SWR_CONFIG = {
 const MUTATION_INVALIDATIONS = {
   simpanDataKeSheet: ['penerima', 'dashboard', 'kuota'],
   editDataPenerima: ['penerima', 'penerima_detail', 'dashboard', 'riwayat'],
-  verifikasiSatuData: ['penerima', 'penerima_detail', 'dashboard'],
+  verifikasiSatuData: ['penerima', 'penerima_detail', 'dashboard', 'data_detail'],
   laporkanPerbaikanBerkas: ['penerima', 'penerima_detail'],
-  tandaiSudahDiperbaiki: ['penerima', 'penerima_detail', 'dashboard'],
-  verifikasiMassalMemenuhiSyarat: ['penerima', 'dashboard'],
+  tandaiSudahDiperbaiki: ['penerima', 'penerima_detail', 'dashboard', 'data_detail'],
+  verifikasiMassalMemenuhiSyarat: ['penerima', 'dashboard', 'data_detail'],
   simpanKuota: ['kuota', 'dashboard'],
   setInputKecKem: ['setelan'],
   setSakelarUserByAdmin: ['setelan'],
