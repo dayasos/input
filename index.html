@@ -4046,10 +4046,15 @@
 
       function inisialisasiMenuTools() {
         if (!pastikanLogin()) return;
+        // Disebar (bukan ditembak bersamaan) -- backend cuma pakai 1 koneksi database per
+        // instance Edge Function (lihat db.ts: max:1), jadi 4 permintaan sekaligus saat halaman
+        // ini dibuka rawan antre & timeout, apalagi saat instance masih "dingin" (baru dideploy).
+        // Ditemukan dari pola log Vercel: request yang timeout selalu didahului beberapa
+        // permintaan yang datang di milidetik yang sama.
         toolsMuatDaftarBatch();
-        toolsMuatPejabat();
-        toolsMuatReferensiSk();
-        toolsMuatSkLayanan();
+        setTimeout(toolsMuatPejabat, 200);
+        setTimeout(toolsMuatReferensiSk, 400);
+        setTimeout(toolsMuatSkLayanan, 600);
       }
 
       function toolsMuatDaftarBatch() {
