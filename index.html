@@ -848,9 +848,48 @@
         </div>
       </div>
 
-      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Pejabat Penandatangan</h3>
         <div id="tools-form-pejabat" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Referensi SK Wali Kota</h3>
+        <p class="text-[11px] text-slate-400 mb-3">Dipakai di judul dokumen Excel pembayaran DJPM per layanan. Boleh
+          dikosongkan dulu jika SK belum terbit — akan tampil "(BELUM DITETAPKAN)".</p>
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Nomor SK</label>
+            <input type="text" id="tools-sk-nomor" placeholder="mis. 123/456.K/2027"
+              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 w-64" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Tanggal SK</label>
+            <input type="date" id="tools-sk-tanggal"
+              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
+          <button onclick="toolsSimpanReferensiSk()"
+            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">💾
+            Simpan</button>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Jumlah SK per Layanan</h3>
+        <p class="text-[11px] text-slate-400 mb-3">Angka ini permanen — diisi manual sekali saat SK terbit, tidak
+          dihitung ulang otomatis dari data penerima.</p>
+        <div class="overflow-x-auto rounded-lg border border-slate-200">
+          <table class="w-full text-left border-collapse bg-white">
+            <thead>
+              <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
+                <th class="px-3 py-2">Layanan</th>
+                <th class="px-3 py-2 w-40">Jumlah SK</th>
+                <th class="px-3 py-2 w-24"></th>
+              </tr>
+            </thead>
+            <tbody id="tools-body-sk-layanan" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 
@@ -4009,6 +4048,8 @@
         if (!pastikanLogin()) return;
         toolsMuatDaftarBatch();
         toolsMuatPejabat();
+        toolsMuatReferensiSk();
+        toolsMuatSkLayanan();
       }
 
       function toolsMuatDaftarBatch() {
@@ -4179,6 +4220,96 @@
             tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
           })
           .simpanPejabatTtd(dataPengguna.token, peran, nama, jabatan, nip);
+      };
+
+      function toolsMuatReferensiSk() {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) return;
+            document.getElementById('tools-sk-nomor').value = res.nomorSk || '';
+            document.getElementById('tools-sk-tanggal').value = res.tanggalSk || '';
+          })
+          .withFailureHandler(function () { /* diam saja, biarkan kosong */ })
+          .ambilReferensiSkWalikota(dataPengguna.token);
+      }
+
+      window.toolsSimpanReferensiSk = function () {
+        if (!pastikanLogin()) return;
+        const nomorSk = document.getElementById('tools-sk-nomor').value.trim();
+        const tanggalSk = document.getElementById('tools-sk-tanggal').value.trim();
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 });
+              return;
+            }
+            tampilkanToast('Referensi SK Wali Kota berhasil disimpan.', 'sukses');
+          })
+          .withFailureHandler(function (err) {
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .simpanReferensiSkWalikota(dataPengguna.token, nomorSk, tanggalSk);
+      };
+
+      function toolsMuatSkLayanan() {
+        const tbody = document.getElementById('tools-body-sk-layanan');
+        tbody.innerHTML = htmlSkeletonBaris(3, 3);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-6 text-center text-red-500">' + esc(res ? res.pesan : 'Gagal memuat data') + '</td></tr>';
+              return;
+            }
+            toolsRenderTabelSkLayanan(res.daftar);
+          })
+          .withFailureHandler(function (err) {
+            tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
+          })
+          .ambilSkLayanan(dataPengguna.token);
+      }
+
+      function toolsRenderTabelSkLayanan(daftar) {
+        const tbody = document.getElementById('tools-body-sk-layanan');
+        if (!daftar || daftar.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-6 text-center text-slate-400 italic">Tidak ada data.</td></tr>';
+          return;
+        }
+        let html = '';
+        daftar.forEach(function (r) {
+          html += `
+  <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+    <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.namaLengkap)}</td>
+    <td class="px-3 py-2">
+      <input type="number" min="0" id="tools-sk-jumlah-${esc(r.layananKode)}" value="${r.jumlahSk === null || r.jumlahSk === undefined ? '' : esc(r.jumlahSk)}"
+        placeholder="-" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
+    </td>
+    <td class="px-3 py-2">
+      <button onclick="toolsSimpanSkLayanan('${esc(r.layananKode)}')" class="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200 rounded-md font-semibold text-xs transition">💾 Simpan</button>
+    </td>
+  </tr>`;
+        });
+        tbody.innerHTML = html;
+      }
+
+      window.toolsSimpanSkLayanan = function (layananKode) {
+        if (!pastikanLogin()) return;
+        const input = document.getElementById('tools-sk-jumlah-' + layananKode);
+        const nilaiTeks = input.value.trim();
+        const jumlahSk = nilaiTeks === '' ? null : Number(nilaiTeks);
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 });
+              return;
+            }
+            tampilkanToast('Jumlah SK ' + layananKode + ' berhasil disimpan.', 'sukses');
+          })
+          .withFailureHandler(function (err) {
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .simpanSkLayanan(dataPengguna.token, layananKode, jumlahSk);
       };
 
       function perbaruiElemenNavigasi(sekarang, total) {

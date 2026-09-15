@@ -303,8 +303,11 @@ export async function ambilDetailBatchPembayaran(token: string, batchId: number)
 }
 
 // Blok tanda tangan 3 pejabat (kolom A/D/H, meniru posisi persis `ttd(...)` di
-// distribusiDataLayanan() Kode.gs) -- dipakai di sheet REKAP dan tiap sheet layanan (jenis DJPM
-// saja; BPJS TK tidak punya blok TTD di kode asli).
+// distribusiDataLayanan() Kode.gs) -- dipakai di TIAP SHEET LAYANAN (jenis DJPM saja; BPJS TK
+// tidak punya blok TTD di kode asli). Diverifikasi byte-per-byte terhadap contoh dokumen resmi
+// 2026 (baris 2673-2686 sheet "BILAL") -- termasuk 4 baris kosong (BUKAN 5) antara baris
+// "DINAS SOSIAL KOTA MEDAN" dan baris nama pejabat, yang sempat salah 1 baris lebih banyak
+// sebelum verifikasi ini.
 function bangunBlokTtd(
   teksTtd: string,
   tahun: number,
@@ -319,11 +322,56 @@ function bangunBlokTtd(
     ["KEPALA DINAS SOSIAL KOTA MEDAN", "", "", "PEJABAT PELAKSANA TEKNIS KEGIATAN", "", "", "", "YANG MEMBAYARKAN"],
     ["SELAKU PENGGUNA ANGGARAN", "", "", "TAHUN ANGGARAN " + tahun, "", "", "", "BENDAHARA PENGELUARAN"],
     ["", "", "", "", "", "", "", "DINAS SOSIAL KOTA MEDAN"],
-    [], [], [], [], [],
+    [], [], [], [],
     [kepala.nama, "", "", pptk.nama, "", "", "", bendahara.nama],
     [kepala.jabatan, "", "", pptk.jabatan, "", "", "", bendahara.jabatan],
     [kepala.nip, "", "", pptk.nip, "", "", "", bendahara.nip],
   ];
+}
+
+// Blok tanda tangan REKAP -- BEDA dari bangunBlokTtd() di atas: REKAP HANYA ditandatangani PPTK
+// sendiri (bukan 3 pejabat), semuanya di kolom H saja, TANPA baris "Setuju Dibayar". Ditemukan
+// lewat verifikasi langsung ke contoh dokumen resmi (baris 22-32 sheet "REKAP") -- kalau dugaan
+// awal (3 pejabat sama seperti sheet layanan) tidak diverifikasi ulang, dokumennya akan salah.
+function bangunBlokTtdRekap(
+  teksTtd: string,
+  tahun: number,
+  pptk: { nama: string; jabatan: string; nip: string },
+): unknown[][] {
+  return [
+    ["", "", "", "", "", "", "", teksTtd],
+    [],
+    ["", "", "", "", "", "", "", "PEJABAT PELAKSANA TEKNIS KEGIATAN"],
+    ["", "", "", "", "", "", "", "TAHUN ANGGARAN " + tahun],
+    [], [], [],
+    ["", "", "", "", "", "", "", pptk.nama],
+    ["", "", "", "", "", "", "", pptk.jabatan],
+    ["", "", "", "", "", "", "", pptk.nip],
+  ];
+}
+
+// Urutan TETAP 16 layanan di sheet REKAP -- BUKAN alfabetis (ditemukan lewat perbandingan
+// langsung dengan contoh dokumen resmi: urutannya PENATUA sebelum P. KUBUR/P. GEREJA/P. KUIL,
+// yang tidak alfabetis). Sama persis urutan baris 5-20 REKAP di kode Kode.gs asli
+// (mappingRekap: BILAL=5 ... USTADZAH=20).
+const URUTAN_LAYANAN_REKAP = [
+  "BILAL", "GMM", "GSB", "GSH", "GSM", "IMAM", "KHATIB", "N. MASJID", "N. MUSHOLLA",
+  "PENATUA", "P. KUBUR", "P. GEREJA", "P. KUIL", "PGK", "USTADZ", "USTADZAH",
+];
+
+// Nama layanan LENGKAP per kode -- REKAP menampilkan nama lengkap (mis. "BILAL JENAZAH"), bukan
+// kode singkat, di kolom LAYANAN. Kebalikan dari MAP_LAYANAN_KODE.
+const NAMA_LAYANAN_DARI_KODE: Record<string, string> = Object.fromEntries(
+  Object.entries(MAP_LAYANAN_KODE).map(([namaLengkap, kode]) => [kode, namaLengkap]),
+);
+
+function formatTanggalSkIndo(tanggal: string | Date | null | undefined): string {
+  if (!tanggal) return "(BELUM DITETAPKAN)";
+  const d = tanggal instanceof Date ? tanggal : new Date(tanggal);
+  if (isNaN(d.getTime())) return "(BELUM DITETAPKAN)";
+  const bulanIndo = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI",
+    "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"];
+  return `${d.getUTCDate()} ${bulanIndo[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
 // Generate .xlsx dari batch yang SUDAH TERSIMPAN (bukan hitung ulang dari data_detail) -- baca
@@ -378,10 +426,21 @@ export async function unduhExcelBatch(token: string, batchId: number) {
       XLSX.utils.book_append_sheet(wb, ws, "BPJS TK");
     } else {
       // Jenis DJPM: 1 sheet REKAP + 1 sheet per layanan yang ada datanya -- persis
-      // isiRekapOtomatis() + distribusiDataLayanan() di Kode.gs.
+      // isiRekapOtomatis() + distribusiDataLayanan() di Kode.gs, DIVERIFIKASI baris-per-baris
+      // terhadap contoh dokumen resmi 2026 (bukan cuma tebakan dari kode lama).
       const pejabatRows = await sql`select peran, nama, jabatan, nip from pejabat_ttd`;
       const pejabat: Record<string, { nama: string; jabatan: string; nip: string }> = {};
       for (const p of pejabatRows) pejabat[p.peran] = { nama: p.nama, jabatan: p.jabatan, nip: p.nip };
+      const pptk = pejabat["PPTK"] || { nama: "", jabatan: "", nip: "" };
+
+      const skRows = await sql`select layanan_kode, jumlah_sk from sk_layanan`;
+      const skMap: Record<string, number | null> = {};
+      for (const s of skRows) skMap[s.layanan_kode] = s.jumlah_sk;
+
+      const refRows = await sql`select nomor_sk, tanggal_sk from referensi_sk_walikota where id = 1`;
+      const nomorSk = refRows[0]?.nomor_sk || null;
+      const tanggalSk = refRows[0]?.tanggal_sk || null;
+      const baraSkWalikota = `BERDASARKAN SK WALI KOTA MEDAN NOMOR : ${nomorSk || "(BELUM DITETAPKAN)"} TGL ${formatTanggalSkIndo(tanggalSk)}`;
 
       const grup: Record<string, typeof baris> = {};
       for (const b of baris) {
@@ -389,31 +448,42 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         grup[b.layanan_kode].push(b);
       }
 
-      // ---- Sheet REKAP ----
+      // ---- Sheet REKAP -- SEMUA 16 layanan tetap muncul (bahkan yang 0 baris bulan ini),
+      // urutan TETAP (bukan alfabetis), kolom SK dari sk_layanan (bukan dihitung ulang). ----
       const rekapAoa: unknown[][] = [
-        [teksHeader], [],
-        ["LAYANAN", "TOTAL", "USIA < 65", "USIA >= 65", "TOTAL DITERIMA"],
+        [`REKAP PEMBAYARAN PENERIMA DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN ANGGARAN ${batch.tahun}`],
+        [],
+        [teksHeader],
+        ["NO", "LAYANAN", "SK", "JLH DATA BAYAR", "< 65", ">= 65",
+          "DIBAYARKAN KEPADA WARGA PELAYAN MASYARAKAT", "TOTAL DIBAYARKAN", "KETERANGAN"],
       ];
-      let totTotal = 0, totBwh = 0, totAts = 0, totUang = 0;
-      for (const kode of Object.keys(grup).sort()) {
-        const rows = grup[kode];
+      let totSk = 0, totBayar = 0, totBwh = 0, totAts = 0, totUang = 0;
+      URUTAN_LAYANAN_REKAP.forEach((kode, idx) => {
+        const rows = grup[kode] || [];
         const bwh65 = rows.filter((r) => r.umur < 65).length;
         const ats65 = rows.length - bwh65;
         const uang = rows.reduce((s, r) => s + r.jumlah_diterima, 0);
-        rekapAoa.push([kode, rows.length, bwh65, ats65, uang]);
-        totTotal += rows.length; totBwh += bwh65; totAts += ats65; totUang += uang;
-      }
-      rekapAoa.push(["TOTAL", totTotal, totBwh, totAts, totUang]);
+        const sk = skMap[kode] ?? null;
+        rekapAoa.push([
+          idx + 1, NAMA_LAYANAN_DARI_KODE[kode] || kode, sk === null ? "-" : sk,
+          rows.length, bwh65, ats65, uang, uang, "",
+        ]);
+        totSk += sk ?? 0; totBayar += rows.length; totBwh += bwh65; totAts += ats65; totUang += uang;
+      });
+      rekapAoa.push(["", "JUMLAH", totSk, totBayar, totBwh, totAts, totUang, totUang, ""]);
       rekapAoa.push([]);
-      rekapAoa.push(...bangunBlokTtd(teksTtd, batch.tahun, pejabat));
+      rekapAoa.push(...bangunBlokTtdRekap(teksTtd, batch.tahun, pptk));
       const wsRekap = XLSX.utils.aoa_to_sheet(rekapAoa);
-      wsRekap["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }];
+      wsRekap["!cols"] = [{ wch: 5 }, { wch: 30 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 20 }];
       XLSX.utils.book_append_sheet(wb, wsRekap, "REKAP");
 
-      // ---- Sheet per layanan ----
+      // ---- Sheet per layanan -- HANYA layanan yang ada datanya bulan ini, urutan TETAP ----
       const headerLayanan = ["NO", "NAMA", "NIK", "LAYANAN", "NO REK BANK SUMUT", "JLH KOTOR", "JKM", "JKK", "JLH JKK + JKM", "JUMLAH DITERIMA"];
-      for (const kode of Object.keys(grup).sort()) {
+      const judulSheetLayanan = `DAFTAR PEMBAYARAN DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN ${batch.tahun}`;
+      for (const kode of URUTAN_LAYANAN_REKAP) {
         const rows = grup[kode];
+        if (!rows || rows.length === 0) continue;
+
         const dataRows = rows.map((b, i) => [
           i + 1, b.nama, b.nik, b.layanan, b.nomor_rekening,
           b.jumlah_kotor, b.jkm, b.jkk, b.jumlah_potongan, b.jumlah_diterima,
@@ -426,7 +496,11 @@ export async function unduhExcelBatch(token: string, batchId: number) {
           rows.reduce((s, r) => s + r.jumlah_diterima, 0)];
 
         const aoa: unknown[][] = [
-          [teksHeader], [],
+          [judulSheetLayanan],
+          [baraSkWalikota],
+          [],
+          [teksHeader],
+          [NAMA_LAYANAN_DARI_KODE[kode] || kode],
           headerLayanan,
           ...dataRows,
           totalBaris,
@@ -501,6 +575,101 @@ export async function simpanPejabatTtd(token: string, peran: string, nama: strin
       where peran = ${peranUpper}
     `;
     return { sukses: true, pesan: "Data pejabat berhasil disimpan." };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
+// ---- Jumlah SK per layanan -- angka PERMANEN diisi manual sekali saat SK terbit, TIDAK
+// dihitung ulang otomatis (lihat catatan desain di migration 20260915140000). ----
+
+export async function ambilSkLayanan(token: string) {
+  try {
+    await wajibUtama(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const rows = await sql`select layanan_kode, jumlah_sk from sk_layanan order by layanan_kode`;
+    // Urutkan sesuai URUTAN_LAYANAN_REKAP (bukan alfabetis) supaya form di frontend konsisten
+    // dengan urutan yang dipakai di dokumen Excel.
+    const urut = URUTAN_LAYANAN_REKAP
+      .map((kode) => rows.find((r) => r.layanan_kode === kode))
+      .filter(Boolean)
+      .map((r) => ({ layananKode: r!.layanan_kode, namaLengkap: NAMA_LAYANAN_DARI_KODE[r!.layanan_kode] || r!.layanan_kode, jumlahSk: r!.jumlah_sk }));
+    return { sukses: true, daftar: urut };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
+export async function simpanSkLayanan(token: string, layananKode: string, jumlahSk: number | null) {
+  try {
+    await wajibUtama(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  const kode = (layananKode || "").toString().trim();
+  if (URUTAN_LAYANAN_REKAP.indexOf(kode) === -1) {
+    return { sukses: false, pesan: "Kode layanan tidak valid." };
+  }
+  let nilai: number | null = null;
+  if (jumlahSk !== null && jumlahSk !== undefined && jumlahSk !== ("" as unknown)) {
+    nilai = Number(jumlahSk);
+    if (!Number.isFinite(nilai) || nilai < 0) {
+      return { sukses: false, pesan: "Jumlah SK harus berupa angka 0 atau lebih." };
+    }
+  }
+
+  try {
+    await sql`
+      update sk_layanan set jumlah_sk = ${nilai}, diperbarui_at = now()
+      where layanan_kode = ${kode}
+    `;
+    return { sukses: true, pesan: "Jumlah SK berhasil disimpan." };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
+// ---- Referensi SK Wali Kota (nomor + tanggal) -- opsional, dipakai di judul dokumen Excel per
+// layanan. Placeholder "(BELUM DITETAPKAN)" dipakai saat generate Excel kalau masih kosong. ----
+
+export async function ambilReferensiSkWalikota(token: string) {
+  try {
+    await wajibUtama(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const rows = await sql`select nomor_sk, tanggal_sk from referensi_sk_walikota where id = 1`;
+    const r = rows[0] || { nomor_sk: null, tanggal_sk: null };
+    return { sukses: true, nomorSk: r.nomor_sk || "", tanggalSk: r.tanggal_sk || "" };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
+export async function simpanReferensiSkWalikota(token: string, nomorSk: string, tanggalSk: string) {
+  try {
+    await wajibUtama(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  const nomor = (nomorSk || "").toString().trim() || null;
+  const tanggal = (tanggalSk || "").toString().trim() || null;
+
+  try {
+    await sql`
+      update referensi_sk_walikota
+      set nomor_sk = ${nomor}, tanggal_sk = ${tanggal}, diperbarui_at = now()
+      where id = 1
+    `;
+    return { sukses: true, pesan: "Referensi SK Wali Kota berhasil disimpan." };
   } catch (error) {
     return { sukses: false, pesan: String(error) };
   }

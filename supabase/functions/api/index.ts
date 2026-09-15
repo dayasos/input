@@ -57,8 +57,12 @@ import {
   ambilDaftarBatchPembayaran,
   ambilDetailBatchPembayaran,
   ambilPejabatTtd,
+  ambilReferensiSkWalikota,
+  ambilSkLayanan,
   buatBatchPembayaran,
   simpanPejabatTtd,
+  simpanReferensiSkWalikota,
+  simpanSkLayanan,
   unduhExcelBatch,
 } from "./domains/pembayaran.ts";
 import { buatTokenSSORetur } from "./domains/sso.ts";
@@ -148,6 +152,10 @@ const ALLOWED: Record<string, Handler> = {
   ambilPejabatTtd,
   simpanPejabatTtd,
   unduhExcelBatch,
+  ambilSkLayanan,
+  simpanSkLayanan,
+  ambilReferensiSkWalikota,
+  simpanReferensiSkWalikota,
   ping: () => ({ pong: true, status: "ok", timestamp: new Date().toISOString() }),
 };
 
