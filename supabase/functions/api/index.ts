@@ -59,6 +59,7 @@ import {
   ambilPejabatTtd,
   buatBatchPembayaran,
   simpanPejabatTtd,
+  unduhExcelBatch,
 } from "./domains/pembayaran.ts";
 import { buatTokenSSORetur } from "./domains/sso.ts";
 import { ambilDataTahunHakAkses, ambilRiwayatEdit, ambilTahunTersedia } from "./domains/riwayat.ts";
@@ -146,6 +147,7 @@ const ALLOWED: Record<string, Handler> = {
   ambilDetailBatchPembayaran,
   ambilPejabatTtd,
   simpanPejabatTtd,
+  unduhExcelBatch,
   ping: () => ({ pong: true, status: "ok", timestamp: new Date().toISOString() }),
 };
 

@@ -302,6 +302,161 @@ export async function ambilDetailBatchPembayaran(token: string, batchId: number)
   }
 }
 
+// Blok tanda tangan 3 pejabat (kolom A/D/H, meniru posisi persis `ttd(...)` di
+// distribusiDataLayanan() Kode.gs) -- dipakai di sheet REKAP dan tiap sheet layanan (jenis DJPM
+// saja; BPJS TK tidak punya blok TTD di kode asli).
+function bangunBlokTtd(
+  teksTtd: string,
+  tahun: number,
+  pejabat: Record<string, { nama: string; jabatan: string; nip: string }>,
+): unknown[][] {
+  const kepala = pejabat["KEPALA_DINAS"] || { nama: "", jabatan: "", nip: "" };
+  const pptk = pejabat["PPTK"] || { nama: "", jabatan: "", nip: "" };
+  const bendahara = pejabat["BENDAHARA"] || { nama: "", jabatan: "", nip: "" };
+  return [
+    ["Setuju Dibayar", "", "", "", "", "", "", teksTtd],
+    [],
+    ["KEPALA DINAS SOSIAL KOTA MEDAN", "", "", "PEJABAT PELAKSANA TEKNIS KEGIATAN", "", "", "", "YANG MEMBAYARKAN"],
+    ["SELAKU PENGGUNA ANGGARAN", "", "", "TAHUN ANGGARAN " + tahun, "", "", "", "BENDAHARA PENGELUARAN"],
+    ["", "", "", "", "", "", "", "DINAS SOSIAL KOTA MEDAN"],
+    [], [], [], [], [],
+    [kepala.nama, "", "", pptk.nama, "", "", "", bendahara.nama],
+    [kepala.jabatan, "", "", pptk.jabatan, "", "", "", bendahara.jabatan],
+    [kepala.nip, "", "", pptk.nip, "", "", "", bendahara.nip],
+  ];
+}
+
+// Generate .xlsx dari batch yang SUDAH TERSIMPAN (bukan hitung ulang dari data_detail) -- baca
+// snapshot beku di pembayaran_baris, persis prinsip "dokumen yang sudah dibuat tidak berubah".
+// Kontrak respons sama seperti eksporDataKeSpreadsheet(): { sukses, base64, namaFile }.
+export async function unduhExcelBatch(token: string, batchId: number) {
+  try {
+    await wajibUtama(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const batchRows = await sql`
+      select id, tahun, bulan, jenis from pembayaran_batch
+      where id = ${batchId} and tahun = ${TAHUN_AKTIF}
+      limit 1
+    `;
+    if (batchRows.length === 0) {
+      return { sukses: false, pesan: "Batch pembayaran tidak ditemukan." };
+    }
+    const batch = batchRows[0];
+
+    const baris = await sql`
+      select nama, nik, layanan, layanan_kode, nomor_rekening, kecamatan, kelurahan, umur,
+             jumlah_kotor, jkm, jkk, jumlah_potongan, jumlah_diterima
+      from pembayaran_baris
+      where batch_id = ${batchId}
+      order by layanan_kode, umur
+    `;
+    if (baris.length === 0) {
+      return { sukses: false, pesan: "Batch ini belum punya data baris (kosong)." };
+    }
+
+    // deno-lint-ignore no-explicit-any
+    const XLSX: any = await import("npm:xlsx@0.18.5");
+    const wb = XLSX.utils.book_new();
+
+    const teksHeader = `BULAN : ${batch.bulan} ${batch.tahun}`;
+    const teksTtd = `Medan, ${batch.bulan} ${batch.tahun}`;
+
+    if (batch.jenis === "BPJS") {
+      // Satu sheet saja, TANPA blok TTD -- persis updateBPJS_Lokal() di Kode.gs.
+      const aoa: unknown[][] = [
+        [teksHeader],
+        [],
+        ["NO", "NAMA", "NIK", "LAYANAN", "KECAMATAN", "KELURAHAN", "USIA"],
+        ...baris.map((b, i) => [i + 1, b.nama, b.nik, b.layanan, b.kecamatan, b.kelurahan, b.umur]),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = [{ wch: 5 }, { wch: 28 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 8 }];
+      XLSX.utils.book_append_sheet(wb, ws, "BPJS TK");
+    } else {
+      // Jenis DJPM: 1 sheet REKAP + 1 sheet per layanan yang ada datanya -- persis
+      // isiRekapOtomatis() + distribusiDataLayanan() di Kode.gs.
+      const pejabatRows = await sql`select peran, nama, jabatan, nip from pejabat_ttd`;
+      const pejabat: Record<string, { nama: string; jabatan: string; nip: string }> = {};
+      for (const p of pejabatRows) pejabat[p.peran] = { nama: p.nama, jabatan: p.jabatan, nip: p.nip };
+
+      const grup: Record<string, typeof baris> = {};
+      for (const b of baris) {
+        if (!grup[b.layanan_kode]) grup[b.layanan_kode] = [];
+        grup[b.layanan_kode].push(b);
+      }
+
+      // ---- Sheet REKAP ----
+      const rekapAoa: unknown[][] = [
+        [teksHeader], [],
+        ["LAYANAN", "TOTAL", "USIA < 65", "USIA >= 65", "TOTAL DITERIMA"],
+      ];
+      let totTotal = 0, totBwh = 0, totAts = 0, totUang = 0;
+      for (const kode of Object.keys(grup).sort()) {
+        const rows = grup[kode];
+        const bwh65 = rows.filter((r) => r.umur < 65).length;
+        const ats65 = rows.length - bwh65;
+        const uang = rows.reduce((s, r) => s + r.jumlah_diterima, 0);
+        rekapAoa.push([kode, rows.length, bwh65, ats65, uang]);
+        totTotal += rows.length; totBwh += bwh65; totAts += ats65; totUang += uang;
+      }
+      rekapAoa.push(["TOTAL", totTotal, totBwh, totAts, totUang]);
+      rekapAoa.push([]);
+      rekapAoa.push(...bangunBlokTtd(teksTtd, batch.tahun, pejabat));
+      const wsRekap = XLSX.utils.aoa_to_sheet(rekapAoa);
+      wsRekap["!cols"] = [{ wch: 30 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsRekap, "REKAP");
+
+      // ---- Sheet per layanan ----
+      const headerLayanan = ["NO", "NAMA", "NIK", "LAYANAN", "NO REK BANK SUMUT", "JLH KOTOR", "JKM", "JKK", "JLH JKK + JKM", "JUMLAH DITERIMA"];
+      for (const kode of Object.keys(grup).sort()) {
+        const rows = grup[kode];
+        const dataRows = rows.map((b, i) => [
+          i + 1, b.nama, b.nik, b.layanan, b.nomor_rekening,
+          b.jumlah_kotor, b.jkm, b.jkk, b.jumlah_potongan, b.jumlah_diterima,
+        ]);
+        const totalBaris = ["JUMLAH TOTAL", "", "", "", "",
+          rows.reduce((s, r) => s + r.jumlah_kotor, 0),
+          rows.reduce((s, r) => s + r.jkm, 0),
+          rows.reduce((s, r) => s + r.jkk, 0),
+          rows.reduce((s, r) => s + r.jumlah_potongan, 0),
+          rows.reduce((s, r) => s + r.jumlah_diterima, 0)];
+
+        const aoa: unknown[][] = [
+          [teksHeader], [],
+          headerLayanan,
+          ...dataRows,
+          totalBaris,
+          [],
+          ...bangunBlokTtd(teksTtd, batch.tahun, pejabat),
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws["!cols"] = [{ wch: 5 }, { wch: 26 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }];
+        // Nama sheet Excel maks 31 karakter & tidak boleh mengandung karakter tertentu
+        // ([]:*?/\) -- kode layanan kita ("P. KUBUR" dkk.) sudah aman, tapi tetap dijaga.
+        const namaSheet = kode.replace(/[\[\]:*?/\\]/g, "").slice(0, 31) || "LAYANAN";
+        XLSX.utils.book_append_sheet(wb, ws, namaSheet);
+      }
+    }
+
+    const xlsxBuffer: Uint8Array = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    let binary = "";
+    const chunk = 8192;
+    for (let i = 0; i < xlsxBuffer.length; i += chunk) {
+      binary += String.fromCharCode(...xlsxBuffer.subarray(i, i + chunk));
+    }
+    const base64 = btoa(binary);
+
+    const namaFile = `${batch.jenis === "DJPM" ? "Pembayaran Dana Jasa" : "Pembayaran BPJS Ketenagakerjaan"} Bulan ${batch.bulan} ${batch.tahun}`;
+    return { sukses: true, base64, namaFile: namaFile + ".xlsx" };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
 // ---- Pejabat penandatangan TTD (poin 2 di rencana Tools) ----
 
 export async function ambilPejabatTtd(token: string) {
