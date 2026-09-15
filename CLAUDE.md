@@ -11,7 +11,7 @@ DJPM 2027 — a web app for Dinas Sosial / Kemenag Kota Medan to collect and ver
 ```
 Browser (index.html, vanilla JS, Tailwind via CDN — no build step, no framework)
   → js/api-bridge.js  (shim: window.google.script.run.<fn>(...) → fetch('/api/gas'))
-  → api/gas.js         (Vercel serverless function: proxy, injects shared secret, retry/fallback)
+  → api/gas.js         (Vercel serverless function: proxy, injects shared secret, same-backend retry — cross-backend fallback to GAS was removed 2026-09-15, see below)
   → Kode.gs             (Google Apps Script Web App — doPost() dispatcher, ~60-fn ALLOWED{} whitelist)
   → Google Sheets (2 spreadsheets, ~20 tabs) + Google Drive (uploaded berkas)
 ```
@@ -32,6 +32,7 @@ Key decisions already locked in (don't re-litigate without asking):
 - Custom auth table (`akun`) replaces `db_admin` 1:1 — NOT Supabase Auth. Password hashes are copied as-is (SHA-256 hex) so existing users don't need to reset passwords.
 - **File uploads moved to Supabase Storage (decided + shipped 2026-09-15)** — superseded the earlier "file uploads stay on Google Drive" plan. See the "Upload berkas" bullet below for details. Decision was only feasible because production data/berkas were still empty at the time — this was a clean cutover, not a live migration.
 - The Input app ("Aplikasi Input", this repo) is one of 3 apps meant to eventually share this same Supabase database: **Aplikasi Retur** (currently a separate GAS+Sheets app, `../Retur 2027/`, not yet migrated) and **Aplikasi Pembayaran** (currently a fully manual Excel-based process, no code exists yet). Both read what used to be the "Data Detail" Google Sheet — see the `data_detail` table below, which is their intended shared read target once they're migrated. Don't build anything that assumes Retur/Pembayaran stay Sheets-based long-term.
+- **Cross-backend fallback (Supabase → GAS) removed entirely 2026-09-15** — `api/gas.js` no longer has a `FALLBACK_SAFE_ACTIONS` allowlist or any code path that retries a failed Supabase call against Google Apps Script. It was found to actively hurt reliability: on a transient Supabase hiccup, the proxy would also wait out a full GAS attempt (GAS has slower cold-starts and generally lower uptime than Supabase Edge Functions), roughly doubling worst-case latency before returning an error, for no benefit now that all reads/writes are Supabase-only anyway. `api/gas.js`'s default target (`DEFAULT_TARGET_URL`, used when the env var is empty/invalid) now also points at the Supabase Edge Function URL, not a GAS URL — don't reintroduce a GAS default. GAS itself is still a technically-valid `sanitizeUrl()` target (an emergency escape hatch via env var), it's just never reached automatically anymore.
 
 Structure:
 - `supabase/migrations/*.sql` — Postgres schema, chronologically numbered. `penerima` (the core recipient table) is `PARTITION BY LIST (tahun)` — indexes/constraints are created on the **parent** table so new year-partitions inherit them automatically; never add them to a child partition only.

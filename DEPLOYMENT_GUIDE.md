@@ -87,10 +87,11 @@ node scripts/backfill/run.js --step=all
 $env:BACKFILL_CONFIRM="YA"; node scripts/backfill/run.js --step=all --write
 ```
 
-### Langkah 3.6: Pengalihan Traffic di Vercel (Dual-Target Proxy)
-Proxy `api/gas.js` mendukung **Dual-Target Proxy**:
-* **Mode Transisi (Default):** Jika `SUPABASE_EDGE_FUNCTION_URL` belum diisi di Vercel, seluruh request tetap dialirkan ke Google Apps Script (`GAS_API_URL`).
-* **Mode Supabase Aktif:** Cukup tambahkan `SUPABASE_EDGE_FUNCTION_URL` dengan nilai `https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api` di Vercel Environment Variables. Seketika itu juga seluruh traffic diarahkan ke Supabase Edge Function tanpa perlu deploy ulang frontend!
+### Langkah 3.6: Pengalihan Traffic di Vercel
+
+**Update 2026-09-15 — murni Supabase, fallback ke GAS sudah dihapus total.** Proxy `api/gas.js` sekarang HANYA berbicara ke Supabase Edge Function — tidak ada lagi mode transisi maupun percobaan otomatis ke Google Apps Script kalau Supabase gagal (GAS punya cold-start & keandalan lebih rendah, jadi fallback ke sana dulu justru menambah titik gagal, bukan mengurangi).
+
+Isi `GAS_API_URL` (nama env var lama, dipertahankan untuk kompatibilitas) atau `SUPABASE_EDGE_FUNCTION_URL` dengan `https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api`. Kalau env var kosong/tidak valid, proxy otomatis memakai URL Supabase itu sebagai default (`DEFAULT_TARGET_URL` di `api/gas.js`) — bukan lagi default ke GAS seperti sebelumnya.
 
 ## 4. Batas Ukuran Unggahan Berkas (Payload Limit)
 

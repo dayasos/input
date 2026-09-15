@@ -2,7 +2,11 @@ export const config = {
   maxDuration: 60,
 };
 
-const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbwQvkJ_6McDWi6erkIfP6CAnRu0L1f8ipIk18k7SltwQS-xhXyd-atnbaTNBdq0hjHyVg/exec';
+// Sebelumnya bernama DEFAULT_GAS_URL (fallback ke Google Apps Script kalau env var kosong/tidak
+// valid). Diganti 2026-09-15 sebagai bagian dari keputusan "murni Supabase" — GAS tidak lagi
+// dipakai sama sekali oleh proxy ini, baik sebagai target utama maupun fallback darurat, jadi
+// nilai default-nya pun diarahkan ke Supabase Edge Function, bukan lagi ke GAS.
+const DEFAULT_TARGET_URL = 'https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api';
 
 // Fungsi helper untuk fetch dengan retry dan timeout per-request
 async function fetchWithRetry(url, options, maxRetries = 1, timeoutMs = 15000) {
@@ -33,8 +37,12 @@ async function fetchWithRetry(url, options, maxRetries = 1, timeoutMs = 15000) {
   throw lastError;
 }
 
+// GAS masih diterima sebagai URL yang SAH (isGas) murni sebagai escape hatch operasional darurat
+// lewat env var — bukan sesuatu yang otomatis dipakai proxy ini. Selama GAS_API_URL/
+// SUPABASE_EDGE_FUNCTION_URL tidak sengaja diisi URL script.google.com, jalur ini tidak pernah
+// dipakai.
 function sanitizeUrl(raw) {
-  if (!raw) return DEFAULT_GAS_URL;
+  if (!raw) return DEFAULT_TARGET_URL;
   let u = raw.trim().replace(/^["']|["']$/g, '');
   if (u.startsWith('ttps://')) u = 'h' + u; // Otomatis perbaiki jika huruf 'h' tertinggal saat copy-paste
   if (u.startsWith('http://') && !u.includes('localhost') && !u.includes('127.0.0.1')) {
@@ -43,7 +51,7 @@ function sanitizeUrl(raw) {
   const isGas = u.startsWith('https://script.google.com/macros/s/');
   const isSupabase = u.includes('/functions/v1/');
   if (!isGas && !isSupabase) {
-    return DEFAULT_GAS_URL;
+    return DEFAULT_TARGET_URL;
   }
   return u;
 }
@@ -95,7 +103,7 @@ export default async function handler(req, res) {
       status: 'API Proxy Online',
       envConfigured: Boolean(rawEnv),
       activeBackendUrl: sanitizedTargetUrl,
-      isUsingFallback: sanitizedTargetUrl === DEFAULT_GAS_URL && rawEnv !== DEFAULT_GAS_URL,
+      isUsingDefaultTarget: sanitizedTargetUrl === DEFAULT_TARGET_URL && rawEnv !== DEFAULT_TARGET_URL,
       pingTest: pingStatus
     });
   }
@@ -106,7 +114,7 @@ export default async function handler(req, res) {
   }
 
   // 3. Gunakan URL yang telah disanitasi
-  let targetUrl = sanitizedTargetUrl;
+  const targetUrl = sanitizedTargetUrl;
 
   // 4. Siapkan payload dan injeksi Secret Token
   let payloadObj = {};
@@ -132,33 +140,6 @@ export default async function handler(req, res) {
   const UPLOAD_ACTIONS = new Set(['simpanDataKeSheet', 'editDataPenerima', 'uploadSemuaBerkasKeSupabase']);
   const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
 
-  // Upload berkas sekarang ke Supabase Storage (uploadSemuaBerkasKeSupabase, 2026-09-15) — tidak
-  // ada lagi aksi yang wajib dipaksa ke GAS apa pun target utama yang aktif. uploadSemuaBerkasKeDrive
-  // lama di Kode.gs dibiarkan ada (tidak dihapus, cadangan darurat) tapi tidak dipanggil lagi.
-
-  // Fallback lintas-backend (GAS <-> Supabase Edge Function) HANYA aman untuk aksi baca murni.
-  // GAS menulis ke Google Sheets, Supabase Edge Function menulis ke Postgres — dua penyimpanan
-  // terpisah yang (pada tahap migrasi ini) belum disinkronkan otomatis dua arah. Kalau aksi TULIS
-  // gagal di backend utama lalu diam-diam dicoba ulang ke backend lain, hasilnya bisa "berhasil"
-  // di satu sisi tapi tidak tercatat di sisi yang sedang jadi acuan utama (split-state) — atau,
-  // untuk sesi login, token yang dibuat di backend fallback tidak akan dikenali saat request
-  // berikutnya kembali mencoba backend utama. Sengaja pakai ALLOWLIST (bukan daftar-larangan aksi
-  // tulis) supaya aksi baru yang lupa diklasifikasikan default-nya AMAN (tidak fallback), bukan
-  // berisiko.
-  const FALLBACK_SAFE_ACTIONS = new Set([
-    'getMasterLayanan', 'getKelurahanByKecamatan', 'getDataRumahIbadah', 'getKemenagData',
-    'getSheetName', 'getVersiAplikasi',
-    'cekNikRealtime', 'cekRekeningRealtime', 'cekTempatTugasGandaRealtime', 'cekKuotaRealtime',
-    'cekKuotaTersedia', 'validasiDataBaru',
-    'ambilDataLihatDataHakAkses', 'ambilDetailPenerimaPerBaris',
-    'ambilTahunTersedia', 'ambilDataTahunHakAkses', 'ambilRiwayatEdit',
-    'getDashboardProgresVerifikasi', 'getSemuaKuota', 'getProgresKuota',
-    'getDaftarBerkasTidakLengkapUntukWA',
-    'statusInputKecKem', 'ambilStatusDetailSetelan', 'ambilDaftarUserDenganStatus', 'ambilDaftarAkun',
-    'eksporDataKeSpreadsheet', 'buatTokenSSORetur', 'ping',
-  ]);
-  const isFallbackSafe = FALLBACK_SAFE_ACTIONS.has(payloadObj.action);
-
   const fetchOptions = {
     method: 'POST',
     headers: {
@@ -170,81 +151,43 @@ export default async function handler(req, res) {
     redirect: 'follow'
   };
 
-  // 5. Eksekusi fetch dengan otomatis fallback ke DEFAULT_GAS_URL jika target awal gagal
-  let usedUrl = targetUrl;
-  let fallbackAttempted = false;
   // Dideklarasikan di sini (bukan di dalam try di bawah) supaya tetap terjangkau dari blok
-  // catch terluar — sebelumnya `text` dideklarasikan di dalam try dan tidak terjangkau di
-  // catch pasangannya (ReferenceError saat backend mengembalikan respon bukan-JSON).
+  // catch terluar — kalau di dalam try, tidak terjangkau di catch pasangannya (ReferenceError
+  // saat backend mengembalikan respon bukan-JSON).
   let text = '';
   let data = null;
 
-  // Batas waktu total percobaan (primer + fallback), disengaja di bawah `maxDuration: 60`
-  // milik Vercel supaya proxy ini sempat mengembalikan JSON error yang rapi sebelum
-  // platform mematikan function secara paksa (yang akan menghasilkan 504 mentah tanpa detail).
-  const FUNCTION_BUDGET_MS = 48000;
-  const startedAt = Date.now();
-
-  const executeFetch = async (endpoint, timeoutMs, retries = 1) => {
-    return await fetchWithRetry(endpoint, fetchOptions, retries, timeoutMs);
-  };
-
-  const getBackendLabel = (url) => {
-    return url.includes('/functions/v1/') ? 'Supabase Edge Function' : 'Google Apps Script';
-  };
-
-  // Aksi upload: satu percobaan saja (retry percuma untuk unggahan lambat), timeout longgar.
-  // Aksi lain: timeout lebih ketat + 1x retry pada target yang sama (payload kecil, retry murah).
-  const primaryTimeout = isUploadAction ? 40000 : 15000;
-  const primaryRetries = isUploadAction ? 0 : 1;
-
+  // 5. Eksekusi fetch murni ke Supabase -- TIDAK ADA LAGI fallback lintas-backend ke GAS
+  // (dihapus total 2026-09-15, keputusan "murni Supabase"). Sebelumnya di sini ada percobaan
+  // otomatis ke Google Apps Script kalau panggilan pertama gagal, KHUSUS untuk aksi baca yang
+  // dianggap aman -- tapi itu justru menambah satu titik gagal ekstra (GAS punya cold-start &
+  // keandalan lebih rendah dari Supabase Edge Function) tanpa manfaat lagi sekarang semua data
+  // sudah murni di Supabase. Kalau permintaan ke Supabase gagal, error dikembalikan langsung
+  // supaya SWR cache di browser (js/api-bridge.js) yang menangani retry, bukan proxy ini diam-diam
+  // mencoba backend lain.
   try {
-    try {
-      const response = await executeFetch(targetUrl, primaryTimeout, primaryRetries);
-      text = await response.text();
-      data = JSON.parse(text);
-    } catch (initialErr) {
-      // Fallback lintas-backend hanya untuk aksi baca murni (lihat FALLBACK_SAFE_ACTIONS) DAN
-      // hanya jika target awal dari ENV berbeda dari DEFAULT_GAS_URL DAN masih ada sisa anggaran waktu.
-      const sisaBudget = FUNCTION_BUDGET_MS - (Date.now() - startedAt);
-      if (isFallbackSafe && targetUrl !== DEFAULT_GAS_URL && sisaBudget > 5000) {
-        console.warn(`Fetch ke targetUrl (${targetUrl}) gagal (${initialErr.message}). Otomatis fallback ke DEFAULT_GAS_URL...`);
-        fallbackAttempted = true;
-        usedUrl = DEFAULT_GAS_URL;
-        // Fallback: satu kali percobaan saja (tanpa retry internal) dengan timeout dibatasi
-        // sisa anggaran waktu, supaya total primer+fallback tidak pernah melewati FUNCTION_BUDGET_MS.
-        const fbTimeout = Math.min(15000, sisaBudget - 2000);
-        const fbResponse = await executeFetch(DEFAULT_GAS_URL, fbTimeout, 0);
-        text = await fbResponse.text();
-        data = JSON.parse(text);
-      } else {
-        throw initialErr;
-      }
-    }
+    const response = await fetchWithRetry(targetUrl, fetchOptions, isUploadAction ? 0 : 1, isUploadAction ? 40000 : 15000);
+    text = await response.text();
+    data = JSON.parse(text);
 
     return res.status(200).json(data);
   } catch (err) {
-    const backendName = getBackendLabel(usedUrl);
-    console.error(`Vercel Proxy Error (${backendName}):`, err);
+    console.error('Vercel Proxy Error (Supabase Edge Function):', err);
 
     // Bedakan antara respon bukan JSON (parse error) vs kesalahan jaringan/timeout
     if (err instanceof SyntaxError) {
       return res.status(502).json({
-        error: `${backendName} tidak mengembalikan respon JSON valid. Pastikan Web App / Function aktif dan dapat diakses.`,
+        error: 'Supabase Edge Function tidak mengembalikan respon JSON valid. Pastikan Function aktif dan dapat diakses.',
         details: text ? text.slice(0, 500) : err.message,
-        usedUrl,
-        fallbackAttempted
+        usedUrl: targetUrl
       });
     }
 
     return res.status(500).json({
-      error: `Terjadi kesalahan koneksi antara server Vercel dan ${backendName}.`,
+      error: 'Terjadi kesalahan koneksi antara server Vercel dan Supabase Edge Function.',
       details: err.toString(),
       cause: err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : null,
-      usedUrl,
-      fallbackAttempted
+      usedUrl: targetUrl
     });
   }
 }
-
-
