@@ -165,8 +165,14 @@ export default async function handler(req, res) {
   // sudah murni di Supabase. Kalau permintaan ke Supabase gagal, error dikembalikan langsung
   // supaya SWR cache di browser (js/api-bridge.js) yang menangani retry, bukan proxy ini diam-diam
   // mencoba backend lain.
+  // Timeout aksi non-upload dinaikkan 15s -> 20s (2026-09-15): setelah traffic produksi resmi
+  // dialihkan ke Supabase, ditemukan Edge Function `api` sempat gagal 500 pada beberapa
+  // permintaan pertama -- diduga cold-start (isolate Deno baru + buka koneksi Postgres via
+  // Supavisor) yang kadang butuh sedikit lebih dari 15 detik, dan terkonfirmasi hilang sendiri
+  // begitu instance-nya sudah "panas". Tetap 1x retry, jadi total 40 detik terburuk -- masih
+  // jauh di bawah `maxDuration: 60` milik Vercel.
   try {
-    const response = await fetchWithRetry(targetUrl, fetchOptions, isUploadAction ? 0 : 1, isUploadAction ? 40000 : 15000);
+    const response = await fetchWithRetry(targetUrl, fetchOptions, isUploadAction ? 0 : 1, isUploadAction ? 40000 : 20000);
     text = await response.text();
     data = JSON.parse(text);
 
