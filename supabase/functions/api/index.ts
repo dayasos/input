@@ -52,7 +52,7 @@ import {
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
-import { uploadSemuaBerkasKeSupabase } from "./domains/upload.ts";
+import { konfirmasiUploadBerkas, mintaUrlUploadBerkas, uploadSemuaBerkasKeSupabase } from "./domains/upload.ts";
 import {
   ambilDaftarBatchPembayaran,
   ambilDetailBatchPembayaran,
@@ -119,6 +119,8 @@ const ALLOWED: Record<string, Handler> = {
   editDataPenerima,
   ambilDataDetail,
   uploadSemuaBerkasKeSupabase,
+  mintaUrlUploadBerkas,
+  konfirmasiUploadBerkas,
   ambilTahunTersedia,
   ambilDataTahunHakAkses,
   ambilRiwayatEdit,

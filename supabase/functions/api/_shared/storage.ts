@@ -29,8 +29,44 @@ export type HasilUpload =
   | { sukses: true; url: string }
   | { sukses: false; pesan: string };
 
-// Upload satu berkas ke Storage lalu langsung buat signed URL-nya. `path` harus unik per
-// berkas (lihat pemanggil di domains/upload.ts untuk pola penamaannya).
+// Signed READ url berumur panjang utk 1 path -- diekstrak jadi helper terpisah supaya bisa
+// dipakai baik oleh upload server-side lama (uploadBerkasKeStorage) maupun alur upload langsung
+// dari browser yang baru (dipanggil setelah browser selesai PUT, lihat domains/upload.ts).
+export async function buatSignedUrlBaca(path: string): Promise<HasilUpload> {
+  const { data, error } = await storageClient
+    .from(NAMA_BUCKET_BERKAS)
+    .createSignedUrl(path, UMUR_SIGNED_URL_DETIK);
+
+  if (error || !data) {
+    return { sukses: false, pesan: "Gagal membuat link: " + (error ? error.message : "tidak diketahui") };
+  }
+  return { sukses: true, url: data.signedUrl };
+}
+
+// URL upload sekali-pakai (signed upload URL) -- dipakai browser untuk PUT berkas LANGSUNG ke
+// Supabase Storage, TIDAK lewat body request Vercel (yang punya batas keras 4.5 MB). Diterbitkan
+// di sini (Service Role Key, setelah wajibSesi() di domains/upload.ts) supaya browser tidak
+// pernah pegang kredensial Storage -- cuma pegang satu URL bertanda-tangan yang hanya berlaku
+// untuk SATU path spesifik dan kedaluwarsa cepat (beda dari signed READ url di atas yang umurnya
+// ~10 tahun -- ini cuma jendela upload sekali pakai, expiry default dari Supabase, ~2 jam).
+export type HasilUrlUpload =
+  | { sukses: true; uploadUrl: string; token: string; path: string }
+  | { sukses: false; pesan: string };
+
+export async function buatUrlUploadSigned(path: string): Promise<HasilUrlUpload> {
+  const { data, error } = await storageClient
+    .from(NAMA_BUCKET_BERKAS)
+    .createSignedUploadUrl(path, { upsert: true });
+
+  if (error || !data) {
+    return { sukses: false, pesan: "Gagal membuat URL upload: " + (error ? error.message : "tidak diketahui") };
+  }
+  return { sukses: true, uploadUrl: data.signedUrl, token: data.token, path: data.path };
+}
+
+// Upload satu berkas ke Storage lalu langsung buat signed URL-nya (jalur SERVER-SIDE lama --
+// dipertahankan sebagai cadangan, sudah tidak dipanggil dari index.html sejak migrasi ke upload
+// langsung browser->Storage, lihat mintaUrlUploadBerkas/konfirmasiUploadBerkas di domains/upload.ts).
 export async function uploadBerkasKeStorage(
   path: string,
   bytes: Uint8Array,
@@ -44,16 +80,5 @@ export async function uploadBerkasKeStorage(
     return { sukses: false, pesan: "Gagal upload ke Storage: " + errUpload.message };
   }
 
-  const { data: dataSigned, error: errSigned } = await storageClient
-    .from(NAMA_BUCKET_BERKAS)
-    .createSignedUrl(path, UMUR_SIGNED_URL_DETIK);
-
-  if (errSigned || !dataSigned) {
-    return {
-      sukses: false,
-      pesan: "Berkas ter-upload tapi gagal membuat link: " + (errSigned ? errSigned.message : "tidak diketahui"),
-    };
-  }
-
-  return { sukses: true, url: dataSigned.signedUrl };
+  return buatSignedUrlBaca(path);
 }
