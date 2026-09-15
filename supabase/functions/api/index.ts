@@ -53,6 +53,13 @@ import {
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
 import { uploadSemuaBerkasKeSupabase } from "./domains/upload.ts";
+import {
+  ambilDaftarBatchPembayaran,
+  ambilDetailBatchPembayaran,
+  ambilPejabatTtd,
+  buatBatchPembayaran,
+  simpanPejabatTtd,
+} from "./domains/pembayaran.ts";
 import { buatTokenSSORetur } from "./domains/sso.ts";
 import { ambilDataTahunHakAkses, ambilRiwayatEdit, ambilTahunTersedia } from "./domains/riwayat.ts";
 import { getDashboardProgresVerifikasi } from "./domains/dashboard.ts";
@@ -134,6 +141,11 @@ const ALLOWED: Record<string, Handler> = {
   ubahProfilUser,
   eksporDataKeSpreadsheet,
   buatTokenSSORetur,
+  buatBatchPembayaran,
+  ambilDaftarBatchPembayaran,
+  ambilDetailBatchPembayaran,
+  ambilPejabatTtd,
+  simpanPejabatTtd,
   ping: () => ({ pong: true, status: "ok", timestamp: new Date().toISOString() }),
 };
 
