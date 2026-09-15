@@ -374,6 +374,63 @@ function formatTanggalSkIndo(tanggal: string | Date | null | undefined): string 
   return `${d.getUTCDate()} ${bulanIndo[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+// ---- Helper styling (dipakai bersama oleh sheet REKAP, per-layanan, dan BPJS TK) -- migrasi
+// dari `xlsx` (SheetJS Community Edition, TIDAK menyimpan info gaya sel saat menulis .xlsx) ke
+// `exceljs` (mendukung penuh bold/border/fill/format angka), 2026-09-15. Diuji lokal dulu
+// sebelum dipakai di sini: buat file -> tulis -> baca ulang -> pastikan gaya & nilainya benar
+// tersimpan (bukan cuma "tidak error saat generate"). ----
+const HURUF_KOLOM = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
+const WARNA_HEADER = "FFDDE6F0"; // biru muda lembut, dipakai konsisten di semua sheet
+const BORDER_TIPIS = { style: "thin" as const };
+const BORDER_SEL_PENUH = { top: BORDER_TIPIS, left: BORDER_TIPIS, bottom: BORDER_TIPIS, right: BORDER_TIPIS };
+
+// deno-lint-ignore no-explicit-any
+function terapkanGayaJudul(ws: any, jumlahKolom: number) {
+  const rentang = `A1:${HURUF_KOLOM[jumlahKolom - 1]}1`;
+  ws.mergeCells(rentang);
+  const sel = ws.getCell("A1");
+  sel.font = { bold: true, size: 12 };
+  sel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanGayaHeaderKolom(ws: any, baris: number, jumlahKolom: number) {
+  for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
+    const sel = ws.getCell(baris, kolom);
+    sel.font = { bold: true };
+    sel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: WARNA_HEADER } };
+    sel.border = BORDER_SEL_PENUH;
+    sel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanBorderData(ws: any, barisAwal: number, barisAkhir: number, jumlahKolom: number) {
+  for (let baris = barisAwal; baris <= barisAkhir; baris++) {
+    for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
+      ws.getCell(baris, kolom).border = BORDER_SEL_PENUH;
+    }
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanGayaBarisTotal(ws: any, baris: number, jumlahKolom: number) {
+  for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
+    const sel = ws.getCell(baris, kolom);
+    sel.font = { bold: true };
+    sel.border = { top: { style: "medium" }, left: BORDER_TIPIS, bottom: BORDER_TIPIS, right: BORDER_TIPIS };
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanFormatUang(ws: any, barisAwal: number, barisAkhir: number, kolomList: number[]) {
+  for (let baris = barisAwal; baris <= barisAkhir; baris++) {
+    for (const kolom of kolomList) {
+      ws.getCell(baris, kolom).numFmt = "#,##0";
+    }
+  }
+}
+
 // Generate .xlsx dari batch yang SUDAH TERSIMPAN (bukan hitung ulang dari data_detail) -- baca
 // snapshot beku di pembayaran_baris, persis prinsip "dokumen yang sudah dibuat tidak berubah".
 // Kontrak respons sama seperti eksporDataKeSpreadsheet(): { sukses, base64, namaFile }.
@@ -407,23 +464,34 @@ export async function unduhExcelBatch(token: string, batchId: number) {
     }
 
     // deno-lint-ignore no-explicit-any
-    const XLSX: any = await import("npm:xlsx@0.18.5");
-    const wb = XLSX.utils.book_new();
+    const ExcelJSMod: any = await import("npm:exceljs@4.4.0");
+    // Di Deno, import("npm:exceljs") TIDAK selalu meng-ekspos `Workbook` langsung di namespace
+    // (beda dari Node `require()`) -- CJS export exceljs sebenarnya ada di properti `.default`
+    // kalau Deno tidak berhasil mendeteksi named export secara statis. Diverifikasi lewat
+    // pengujian nyata ke Edge Function (bukan tebakan): tanpa fallback ini muncul error
+    // "ExcelJS.Workbook is not a constructor".
+    const ExcelJS: any = ExcelJSMod.Workbook ? ExcelJSMod : (ExcelJSMod.default ?? ExcelJSMod);
+    const wb = new ExcelJS.Workbook();
 
     const teksHeader = `BULAN : ${batch.bulan} ${batch.tahun}`;
     const teksTtd = `Medan, ${batch.bulan} ${batch.tahun}`;
 
     if (batch.jenis === "BPJS") {
       // Satu sheet saja, TANPA blok TTD -- persis updateBPJS_Lokal() di Kode.gs.
+      const JUMLAH_KOLOM_BPJS = 7;
       const aoa: unknown[][] = [
         [teksHeader],
         [],
         ["NO", "NAMA", "NIK", "LAYANAN", "KECAMATAN", "KELURAHAN", "USIA"],
         ...baris.map((b, i) => [i + 1, b.nama, b.nik, b.layanan, b.kecamatan, b.kelurahan, b.umur]),
       ];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws["!cols"] = [{ wch: 5 }, { wch: 28 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 8 }];
-      XLSX.utils.book_append_sheet(wb, ws, "BPJS TK");
+      const barisHeaderBpjs = 3;
+      const ws = wb.addWorksheet("BPJS TK");
+      ws.addRows(aoa);
+      ws.columns = [{ width: 5 }, { width: 28 }, { width: 18 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 8 }];
+      terapkanGayaHeaderKolom(ws, barisHeaderBpjs, JUMLAH_KOLOM_BPJS);
+      terapkanBorderData(ws, barisHeaderBpjs + 1, aoa.length, JUMLAH_KOLOM_BPJS);
+      ws.views = [{ state: "frozen", ySplit: barisHeaderBpjs }];
     } else {
       // Jenis DJPM: 1 sheet REKAP + 1 sheet per layanan yang ada datanya -- persis
       // isiRekapOtomatis() + distribusiDataLayanan() di Kode.gs, DIVERIFIKASI baris-per-baris
@@ -450,13 +518,17 @@ export async function unduhExcelBatch(token: string, batchId: number) {
 
       // ---- Sheet REKAP -- SEMUA 16 layanan tetap muncul (bahkan yang 0 baris bulan ini),
       // urutan TETAP (bukan alfabetis), kolom SK dari sk_layanan (bukan dihitung ulang). ----
-      const rekapAoa: unknown[][] = [
+      const JUMLAH_KOLOM_REKAP = 9;
+      const rekapAoaAwal: unknown[][] = [
         [`REKAP PEMBAYARAN PENERIMA DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN ANGGARAN ${batch.tahun}`],
         [],
         [teksHeader],
         ["NO", "LAYANAN", "SK", "JLH DATA BAYAR", "< 65", ">= 65",
           "DIBAYARKAN KEPADA WARGA PELAYAN MASYARAKAT", "TOTAL DIBAYARKAN", "KETERANGAN"],
       ];
+      const barisHeaderRekap = rekapAoaAwal.length; // baris 4
+      const barisDataAwalRekap = barisHeaderRekap + 1; // baris 5
+      const rekapAoa: unknown[][] = [...rekapAoaAwal];
       let totSk = 0, totBayar = 0, totBwh = 0, totAts = 0, totUang = 0;
       URUTAN_LAYANAN_REKAP.forEach((kode, idx) => {
         const rows = grup[kode] || [];
@@ -470,14 +542,23 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         ]);
         totSk += sk ?? 0; totBayar += rows.length; totBwh += bwh65; totAts += ats65; totUang += uang;
       });
+      const barisDataAkhirRekap = barisDataAwalRekap + URUTAN_LAYANAN_REKAP.length - 1;
+      const barisJumlahRekap = barisDataAkhirRekap + 1;
       rekapAoa.push(["", "JUMLAH", totSk, totBayar, totBwh, totAts, totUang, totUang, ""]);
       rekapAoa.push([]);
       rekapAoa.push(...bangunBlokTtdRekap(teksTtd, batch.tahun, pptk));
-      const wsRekap = XLSX.utils.aoa_to_sheet(rekapAoa);
-      wsRekap["!cols"] = [{ wch: 5 }, { wch: 30 }, { wch: 10 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 20 }];
-      XLSX.utils.book_append_sheet(wb, wsRekap, "REKAP");
+      const wsRekap = wb.addWorksheet("REKAP");
+      wsRekap.addRows(rekapAoa);
+      wsRekap.columns = [{ width: 5 }, { width: 30 }, { width: 10 }, { width: 14 }, { width: 8 }, { width: 8 }, { width: 18 }, { width: 16 }, { width: 20 }];
+      terapkanGayaJudul(wsRekap, JUMLAH_KOLOM_REKAP);
+      terapkanGayaHeaderKolom(wsRekap, barisHeaderRekap, JUMLAH_KOLOM_REKAP);
+      terapkanBorderData(wsRekap, barisDataAwalRekap, barisJumlahRekap, JUMLAH_KOLOM_REKAP);
+      terapkanGayaBarisTotal(wsRekap, barisJumlahRekap, JUMLAH_KOLOM_REKAP);
+      terapkanFormatUang(wsRekap, barisDataAwalRekap, barisJumlahRekap, [7, 8]);
+      wsRekap.views = [{ state: "frozen", ySplit: barisHeaderRekap }];
 
       // ---- Sheet per layanan -- HANYA layanan yang ada datanya bulan ini, urutan TETAP ----
+      const JUMLAH_KOLOM_LAYANAN = 10;
       const headerLayanan = ["NO", "NAMA", "NIK", "LAYANAN", "NO REK BANK SUMUT", "JLH KOTOR", "JKM", "JKK", "JLH JKK + JKM", "JUMLAH DITERIMA"];
       const judulSheetLayanan = `DAFTAR PEMBAYARAN DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN ${batch.tahun}`;
       for (const kode of URUTAN_LAYANAN_REKAP) {
@@ -495,28 +576,44 @@ export async function unduhExcelBatch(token: string, batchId: number) {
           rows.reduce((s, r) => s + r.jumlah_potongan, 0),
           rows.reduce((s, r) => s + r.jumlah_diterima, 0)];
 
-        const aoa: unknown[][] = [
+        const aoaAwal: unknown[][] = [
           [judulSheetLayanan],
           [baraSkWalikota],
           [],
           [teksHeader],
           [NAMA_LAYANAN_DARI_KODE[kode] || kode],
           headerLayanan,
+        ];
+        const barisHeaderLayanan = aoaAwal.length; // baris 6
+        const barisDataAwalLayanan = barisHeaderLayanan + 1; // baris 7
+        const barisDataAkhirLayanan = barisDataAwalLayanan + dataRows.length - 1;
+        const barisTotalLayanan = barisDataAkhirLayanan + 1;
+        const aoa: unknown[][] = [
+          ...aoaAwal,
           ...dataRows,
           totalBaris,
           [],
           ...bangunBlokTtd(teksTtd, batch.tahun, pejabat),
         ];
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        ws["!cols"] = [{ wch: 5 }, { wch: 26 }, { wch: 18 }, { wch: 22 }, { wch: 18 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 16 }];
         // Nama sheet Excel maks 31 karakter & tidak boleh mengandung karakter tertentu
         // ([]:*?/\) -- kode layanan kita ("P. KUBUR" dkk.) sudah aman, tapi tetap dijaga.
         const namaSheet = kode.replace(/[\[\]:*?/\\]/g, "").slice(0, 31) || "LAYANAN";
-        XLSX.utils.book_append_sheet(wb, ws, namaSheet);
+        const ws = wb.addWorksheet(namaSheet);
+        ws.addRows(aoa);
+        ws.columns = [{ width: 5 }, { width: 26 }, { width: 18 }, { width: 22 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 16 }];
+        terapkanGayaJudul(ws, JUMLAH_KOLOM_LAYANAN);
+        terapkanGayaHeaderKolom(ws, barisHeaderLayanan, JUMLAH_KOLOM_LAYANAN);
+        terapkanBorderData(ws, barisDataAwalLayanan, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
+        terapkanGayaBarisTotal(ws, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
+        terapkanFormatUang(ws, barisDataAwalLayanan, barisTotalLayanan, [6, 7, 8, 9, 10]);
+        ws.views = [{ state: "frozen", ySplit: barisHeaderLayanan }];
       }
     }
 
-    const xlsxBuffer: Uint8Array = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const xlsxBufferMentah = await wb.xlsx.writeBuffer();
+    const xlsxBuffer: Uint8Array = xlsxBufferMentah instanceof Uint8Array
+      ? xlsxBufferMentah
+      : new Uint8Array(xlsxBufferMentah);
     let binary = "";
     const chunk = 8192;
     for (let i = 0; i < xlsxBuffer.length; i += chunk) {
