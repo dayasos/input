@@ -576,7 +576,11 @@ export async function unduhExcelBatch(token: string, batchId: number) {
       rekapAoa.push(...blokTtdRekap);
       const wsRekap = wb.addWorksheet("REKAP");
       wsRekap.addRows(rekapAoa);
-      wsRekap.columns = [{ width: 5 }, { width: 30 }, { width: 10 }, { width: 14 }, { width: 8 }, { width: 8 }, { width: 18 }, { width: 16 }, { width: 20 }];
+      // Kolom LAYANAN (B) dilebarkan ke 34 -- nama layanan terpanjang ("PENGURUS
+      // VIHARA/KLENTENG/KUIL") 29 karakter, dan kolom C (SK) di sebelahnya SELALU terisi ("-" atau
+      // angka, tidak pernah benar-benar kosong) sehingga teks tidak bisa overflow ke situ kalau
+      // kolomnya terlalu sempit -- pola bug yang sama dengan blok TTD yang baru diperbaiki.
+      wsRekap.columns = [{ width: 5 }, { width: 34 }, { width: 10 }, { width: 14 }, { width: 8 }, { width: 8 }, { width: 18 }, { width: 16 }, { width: 20 }];
       terapkanGayaJudul(wsRekap, 1, JUMLAH_KOLOM_REKAP);
       terapkanGayaHeaderKolom(wsRekap, barisHeaderRekap, JUMLAH_KOLOM_REKAP);
       terapkanBorderData(wsRekap, barisDataAwalRekap, barisJumlahRekap, JUMLAH_KOLOM_REKAP);
@@ -630,7 +634,9 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         const namaSheet = kode.replace(/[\[\]:*?/\\]/g, "").slice(0, 31) || "LAYANAN";
         const ws = wb.addWorksheet(namaSheet);
         ws.addRows(aoa);
-        ws.columns = [{ width: 5 }, { width: 26 }, { width: 18 }, { width: 22 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 16 }];
+        // Kolom LAYANAN (D) dilebarkan ke 32 dgn alasan sama seperti kolom LAYANAN di REKAP --
+        // kolom E (NO REK BANK SUMUT) di sebelahnya selalu terisi nomor rekening nyata.
+        ws.columns = [{ width: 5 }, { width: 26 }, { width: 18 }, { width: 32 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 16 }];
         terapkanGayaJudul(ws, 1, JUMLAH_KOLOM_LAYANAN);
         terapkanGayaJudul(ws, 2, JUMLAH_KOLOM_LAYANAN); // baris "BERDASARKAN SK WALI KOTA ..." -- disamakan dgn judul
         terapkanGayaHeaderKolom(ws, barisHeaderLayanan, JUMLAH_KOLOM_LAYANAN);
