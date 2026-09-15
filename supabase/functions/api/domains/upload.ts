@@ -184,14 +184,20 @@ export async function mintaUrlUploadBerkas(
     const prefixTersimpan = (K.folderId || "").toString().trim();
     const prefix = prefixTersimpan || `${slugPath(K.kecamatan)}/${slugPath(K.layanan)}/${slugPath(K.nama)}_${slugPath(K.nik)}`;
 
-    const daftarUrl: Record<string, { path: string; uploadUrl: string }> = {};
-    for (const kunci of Object.keys(D)) {
+    // Diparalelkan (Promise.all, bukan await berurutan) -- layanan dgn banyak berkas wajib
+    // (mis. Guru Maghrib Mengaji: bisa 8-9 berkas) akan menumpuk latensi kalau tiap
+    // createSignedUploadUrl() menunggu yang sebelumnya selesai dulu satu-satu.
+    const kunciList = Object.keys(D).filter((k) => D[k]);
+    const hasilTiapBerkas = await Promise.all(kunciList.map(async (kunci) => {
       const item = D[kunci];
-      if (!item) continue;
       const namaAman = slugPath(item.namaFile || kunci) || kunci;
       const path = `${prefix}/${kunci}_${namaAman}`;
-
       const hasilUrl = await buatUrlUploadSigned(path);
+      return { kunci, item, hasilUrl };
+    }));
+
+    const daftarUrl: Record<string, { path: string; uploadUrl: string }> = {};
+    for (const { kunci, item, hasilUrl } of hasilTiapBerkas) {
       if (!hasilUrl.sukses) {
         return { sukses: false, pesan: `GAGAL menyiapkan upload "${item.label || kunci}": ${hasilUrl.pesan}` };
       }
@@ -217,12 +223,17 @@ export async function konfirmasiUploadBerkas(
 
   try {
     const P = daftarPath || {};
-    const hasil: Record<string, string> = {};
-    for (const kunci of Object.keys(P)) {
-      const path = (P[kunci] || "").toString().trim();
-      if (!path) continue;
-
+    const kunciList = Object.keys(P).filter((k) => (P[k] || "").toString().trim());
+    // Diparalelkan sama seperti mintaUrlUploadBerkas -- alasan sama, hindari latensi menumpuk
+    // utk layanan dgn banyak berkas.
+    const hasilTiapBerkas = await Promise.all(kunciList.map(async (kunci) => {
+      const path = P[kunci].toString().trim();
       const hasilSigned = await buatSignedUrlBaca(path);
+      return { kunci, hasilSigned };
+    }));
+
+    const hasil: Record<string, string> = {};
+    for (const { kunci, hasilSigned } of hasilTiapBerkas) {
       if (!hasilSigned.sukses) {
         return { sukses: false, pesan: `GAGAL mengonfirmasi berkas "${kunci}": ${hasilSigned.pesan}` };
       }
