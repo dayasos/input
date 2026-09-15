@@ -385,12 +385,37 @@ const BORDER_TIPIS = { style: "thin" as const };
 const BORDER_SEL_PENUH = { top: BORDER_TIPIS, left: BORDER_TIPIS, bottom: BORDER_TIPIS, right: BORDER_TIPIS };
 
 // deno-lint-ignore no-explicit-any
-function terapkanGayaJudul(ws: any, jumlahKolom: number) {
-  const rentang = `A1:${HURUF_KOLOM[jumlahKolom - 1]}1`;
+function terapkanGayaJudul(ws: any, baris: number, jumlahKolom: number) {
+  const rentang = `A${baris}:${HURUF_KOLOM[jumlahKolom - 1]}${baris}`;
   ws.mergeCells(rentang);
-  const sel = ws.getCell("A1");
+  const sel = ws.getCell(`A${baris}`);
   sel.font = { bold: true, size: 12 };
   sel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanMergeBlokTtd(ws: any, barisMulai: number, jumlahBaris: number) {
+  // Blok TTD 3 pejabat: kepala di kolom A-C, PPTK di kolom D-G, bendahara di kolom H-J (posisi
+  // sama seperti bangunBlokTtd()). Di-merge per baris supaya label panjang (mis. "PEJABAT
+  // PELAKSANA TEKNIS KEGIATAN") tidak terpotong -- ditemukan dari screenshot pengguna: sel "" di
+  // antara label MENGHALANGI overflow otomatis Excel/LibreOffice (beda dari sel benar-benar
+  // kosong/null, yang overflow-nya jalan normal -- itu sebabnya kolom bendahara sebelumnya
+  // terlihat baik-baik saja, karena tidak ada sel "" setelahnya).
+  for (let i = 0; i < jumlahBaris; i++) {
+    const baris = barisMulai + i;
+    ws.mergeCells(`A${baris}:C${baris}`);
+    ws.mergeCells(`D${baris}:G${baris}`);
+    ws.mergeCells(`H${baris}:J${baris}`);
+  }
+}
+
+// deno-lint-ignore no-explicit-any
+function terapkanMergeBlokTtdRekap(ws: any, barisMulai: number, jumlahBaris: number) {
+  // REKAP cuma 1 kelompok (PPTK) di kolom H, sheet REKAP cuma 9 kolom (A-I) jadi rentangnya H-I.
+  for (let i = 0; i < jumlahBaris; i++) {
+    const baris = barisMulai + i;
+    ws.mergeCells(`H${baris}:I${baris}`);
+  }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -546,15 +571,18 @@ export async function unduhExcelBatch(token: string, batchId: number) {
       const barisJumlahRekap = barisDataAkhirRekap + 1;
       rekapAoa.push(["", "JUMLAH", totSk, totBayar, totBwh, totAts, totUang, totUang, ""]);
       rekapAoa.push([]);
-      rekapAoa.push(...bangunBlokTtdRekap(teksTtd, batch.tahun, pptk));
+      const blokTtdRekap = bangunBlokTtdRekap(teksTtd, batch.tahun, pptk);
+      const barisTtdMulaiRekap = barisJumlahRekap + 2; // +1 baris JUMLAH, +1 baris kosong
+      rekapAoa.push(...blokTtdRekap);
       const wsRekap = wb.addWorksheet("REKAP");
       wsRekap.addRows(rekapAoa);
       wsRekap.columns = [{ width: 5 }, { width: 30 }, { width: 10 }, { width: 14 }, { width: 8 }, { width: 8 }, { width: 18 }, { width: 16 }, { width: 20 }];
-      terapkanGayaJudul(wsRekap, JUMLAH_KOLOM_REKAP);
+      terapkanGayaJudul(wsRekap, 1, JUMLAH_KOLOM_REKAP);
       terapkanGayaHeaderKolom(wsRekap, barisHeaderRekap, JUMLAH_KOLOM_REKAP);
       terapkanBorderData(wsRekap, barisDataAwalRekap, barisJumlahRekap, JUMLAH_KOLOM_REKAP);
       terapkanGayaBarisTotal(wsRekap, barisJumlahRekap, JUMLAH_KOLOM_REKAP);
       terapkanFormatUang(wsRekap, barisDataAwalRekap, barisJumlahRekap, [7, 8]);
+      terapkanMergeBlokTtdRekap(wsRekap, barisTtdMulaiRekap, blokTtdRekap.length);
       wsRekap.views = [{ state: "frozen", ySplit: barisHeaderRekap }];
 
       // ---- Sheet per layanan -- HANYA layanan yang ada datanya bulan ini, urutan TETAP ----
@@ -588,12 +616,14 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         const barisDataAwalLayanan = barisHeaderLayanan + 1; // baris 7
         const barisDataAkhirLayanan = barisDataAwalLayanan + dataRows.length - 1;
         const barisTotalLayanan = barisDataAkhirLayanan + 1;
+        const blokTtd = bangunBlokTtd(teksTtd, batch.tahun, pejabat);
+        const barisTtdMulai = barisTotalLayanan + 2; // +1 baris JUMLAH TOTAL, +1 baris kosong
         const aoa: unknown[][] = [
           ...aoaAwal,
           ...dataRows,
           totalBaris,
           [],
-          ...bangunBlokTtd(teksTtd, batch.tahun, pejabat),
+          ...blokTtd,
         ];
         // Nama sheet Excel maks 31 karakter & tidak boleh mengandung karakter tertentu
         // ([]:*?/\) -- kode layanan kita ("P. KUBUR" dkk.) sudah aman, tapi tetap dijaga.
@@ -601,11 +631,13 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         const ws = wb.addWorksheet(namaSheet);
         ws.addRows(aoa);
         ws.columns = [{ width: 5 }, { width: 26 }, { width: 18 }, { width: 22 }, { width: 18 }, { width: 14 }, { width: 10 }, { width: 10 }, { width: 14 }, { width: 16 }];
-        terapkanGayaJudul(ws, JUMLAH_KOLOM_LAYANAN);
+        terapkanGayaJudul(ws, 1, JUMLAH_KOLOM_LAYANAN);
+        terapkanGayaJudul(ws, 2, JUMLAH_KOLOM_LAYANAN); // baris "BERDASARKAN SK WALI KOTA ..." -- disamakan dgn judul
         terapkanGayaHeaderKolom(ws, barisHeaderLayanan, JUMLAH_KOLOM_LAYANAN);
         terapkanBorderData(ws, barisDataAwalLayanan, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
         terapkanGayaBarisTotal(ws, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
         terapkanFormatUang(ws, barisDataAwalLayanan, barisTotalLayanan, [6, 7, 8, 9, 10]);
+        terapkanMergeBlokTtd(ws, barisTtdMulai, blokTtd.length);
         ws.views = [{ state: "frozen", ySplit: barisHeaderLayanan }];
       }
     }
