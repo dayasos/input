@@ -82,8 +82,6 @@ import {
   ubahProfilUser,
 } from "./domains/akun.ts";
 
-const SECRET_FALLBACK = "DJPM2027_DEFAULT_SECRET";
-
 // deno-lint-ignore no-explicit-any
 type Handler = (...args: any[]) => unknown | Promise<unknown>;
 
@@ -187,9 +185,14 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Verifikasi Keamanan (Shared Secret Token dari Vercel) - pola sama seperti doPost() di Kode.gs
-  const expectedSecret = Deno.env.get("GAS_SECRET_TOKEN") || SECRET_FALLBACK;
-  if (body._secret !== expectedSecret) {
+  // Verifikasi Keamanan (Shared Secret Token dari Vercel) - pola sama seperti doPost() di Kode.gs.
+  // WAJIB diset lewat `supabase secrets set` -- TIDAK ADA LAGI fallback ke nilai default yang
+  // tertulis di kode (2026-09-15: nilai default itu ketahuan masih dipakai di produksi, celah
+  // keamanan nyata karena siapa pun yang baca source code tahu nilainya). `!expectedSecret` WAJIB
+  // dicek eksplisit -- tanpa ini, secret kosong di kedua sisi (env var lupa diset DAN body._secret
+  // tidak dikirim) akan lolos begitu saja lewat `undefined !== undefined`.
+  const expectedSecret = Deno.env.get("GAS_SECRET_TOKEN");
+  if (!expectedSecret || body._secret !== expectedSecret) {
     return json({
       error: "Akses Ditolak: Kredensial API tidak sah",
       sukses: false,

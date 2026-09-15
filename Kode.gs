@@ -48,12 +48,16 @@ function doPost(e) {
     var raw      = (e && e.postData && e.postData.contents) ? e.postData.contents : "{}";
     var request  = JSON.parse(raw);
     
-    // Verifikasi Keamanan (Shared Secret Token dari Vercel)
-    var EXPECTED_SECRET = "DJPM2027_DEFAULT_SECRET"; // Fallback rahasia default
+    // Verifikasi Keamanan (Shared Secret Token dari Vercel). WAJIB diset lewat Script Properties
+    // -- TIDAK ADA LAGI fallback ke nilai default yang tertulis di kode (2026-09-15: nilai default
+    // itu ketahuan masih dipakai di produksi, celah keamanan nyata karena siapa pun yang baca
+    // source code tahu nilainya). `!secret` WAJIB dicek eksplisit -- tanpa ini, secret kosong di
+    // kedua sisi (Script Property lupa diset DAN request._secret tidak dikirim) akan lolos begitu
+    // saja lewat `undefined !== undefined`.
     var scriptProperties = PropertiesService.getScriptProperties();
-    var secret = scriptProperties.getProperty('GAS_SECRET_TOKEN') || EXPECTED_SECRET;
-    
-    if (request._secret !== secret) {
+    var secret = scriptProperties.getProperty('GAS_SECRET_TOKEN');
+
+    if (!secret || request._secret !== secret) {
       return ContentService
         .createTextOutput(JSON.stringify({ error: "Akses Ditolak: Kredensial API tidak sah", sukses: false, pesan: "Akses Ditolak" }))
         .setMimeType(ContentService.MimeType.JSON);

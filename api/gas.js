@@ -71,37 +71,48 @@ export default async function handler(req, res) {
 
   // 1. Endpoint Health-Check jika diakses via GET
   if (req.method === 'GET') {
+    // Secret WAJIB diset lewat env var -- TIDAK ADA LAGI fallback ke nilai default yang
+    // tertulis di kode (2026-09-15, insiden: nilai default itu ketahuan masih dipakai di
+    // produksi, celah keamanan nyata karena siapa pun yang baca source code tahu nilainya).
+    // Ping test dilewati sama sekali kalau secret belum diset -- daripada diam-diam mengirim
+    // nilai yang bisa ditebak.
+    const secretDikonfigurasi = Boolean(process.env.GAS_SECRET_TOKEN);
     let pingStatus = 'untested';
 
-    try {
-      const pingController = new AbortController();
-      const pingTimer = setTimeout(() => pingController.abort(new Error('Ping timeout')), 6000);
+    if (!secretDikonfigurasi) {
+      pingStatus = { error: 'GAS_SECRET_TOKEN belum diset di environment ini -- ping dilewati.' };
+    } else {
+      try {
+        const pingController = new AbortController();
+        const pingTimer = setTimeout(() => pingController.abort(new Error('Ping timeout')), 6000);
 
-      const testRes = await fetch(sanitizedTargetUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*'
-        },
-        body: JSON.stringify({
-          action: 'ping',
-          _secret: process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET'
-        }),
-        signal: pingController.signal
-      });
-      clearTimeout(pingTimer);
-      pingStatus = { status: testRes.status, ok: testRes.ok };
-    } catch (pingErr) {
-      pingStatus = {
-        error: pingErr.message,
-        cause: pingErr.cause ? (pingErr.cause.message || pingErr.cause.code || String(pingErr.cause)) : null
-      };
+        const testRes = await fetch(sanitizedTargetUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*'
+          },
+          body: JSON.stringify({
+            action: 'ping',
+            _secret: process.env.GAS_SECRET_TOKEN
+          }),
+          signal: pingController.signal
+        });
+        clearTimeout(pingTimer);
+        pingStatus = { status: testRes.status, ok: testRes.ok };
+      } catch (pingErr) {
+        pingStatus = {
+          error: pingErr.message,
+          cause: pingErr.cause ? (pingErr.cause.message || pingErr.cause.code || String(pingErr.cause)) : null
+        };
+      }
     }
 
     return res.status(200).json({
       status: 'API Proxy Online',
       envConfigured: Boolean(rawEnv),
+      secretConfigured: secretDikonfigurasi,
       activeBackendUrl: sanitizedTargetUrl,
       isUsingDefaultTarget: sanitizedTargetUrl === DEFAULT_TARGET_URL && rawEnv !== DEFAULT_TARGET_URL,
       pingTest: pingStatus
@@ -130,7 +141,15 @@ export default async function handler(req, res) {
     payloadObj = {};
   }
 
-  const secretToken = process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET';
+  // WAJIB diset lewat env var Vercel -- TIDAK ADA LAGI fallback ke nilai default (2026-09-15,
+  // lihat catatan di health-check GET di atas). Gagal keras & tolak permintaan daripada diam-diam
+  // memakai secret yang tertulis di source code dan bisa ditebak siapa saja.
+  const secretToken = process.env.GAS_SECRET_TOKEN;
+  if (!secretToken) {
+    return res.status(500).json({
+      error: 'Konfigurasi server tidak lengkap: GAS_SECRET_TOKEN belum diset. Hubungi administrator.',
+    });
+  }
   payloadObj._secret = secretToken;
 
   // simpanDataKeSheet/editDataPenerima/uploadSemuaBerkasKeSupabase membawa berkas (base64) yang
