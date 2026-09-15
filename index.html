@@ -4277,11 +4277,14 @@
         }
         let html = '';
         daftar.forEach(function (r) {
+          // Kode layanan mengandung spasi/titik (mis. "N. MASJID") -- tidak valid sebagai id HTML,
+          // jadi dibersihkan dulu untuk id elemen; kode aslinya tetap dipakai untuk argumen fungsi.
+          const idAman = r.layananKode.replace(/[^A-Za-z0-9]/g, '_');
           html += `
   <tr class="hover:bg-slate-50 transition border-b border-slate-100">
     <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.namaLengkap)}</td>
     <td class="px-3 py-2">
-      <input type="number" min="0" id="tools-sk-jumlah-${esc(r.layananKode)}" value="${r.jumlahSk === null || r.jumlahSk === undefined ? '' : esc(r.jumlahSk)}"
+      <input type="number" min="0" id="tools-sk-jumlah-${idAman}" value="${r.jumlahSk === null || r.jumlahSk === undefined ? '' : esc(r.jumlahSk)}"
         placeholder="-" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
     </td>
     <td class="px-3 py-2">
@@ -4294,7 +4297,8 @@
 
       window.toolsSimpanSkLayanan = function (layananKode) {
         if (!pastikanLogin()) return;
-        const input = document.getElementById('tools-sk-jumlah-' + layananKode);
+        const idAman = layananKode.replace(/[^A-Za-z0-9]/g, '_');
+        const input = document.getElementById('tools-sk-jumlah-' + idAman);
         const nilaiTeks = input.value.trim();
         const jumlahSk = nilaiTeks === '' ? null : Number(nilaiTeks);
 

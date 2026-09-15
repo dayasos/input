@@ -647,7 +647,18 @@ export async function ambilReferensiSkWalikota(token: string) {
   try {
     const rows = await sql`select nomor_sk, tanggal_sk from referensi_sk_walikota where id = 1`;
     const r = rows[0] || { nomor_sk: null, tanggal_sk: null };
-    return { sukses: true, nomorSk: r.nomor_sk || "", tanggalSk: r.tanggal_sk || "" };
+    // Driver `postgres` mengembalikan kolom `date` sebagai objek Date, yang kalau di-JSON.stringify
+    // apa adanya jadi ISO datetime ("...T00:00:00.000Z") -- <input type="date"> di frontend butuh
+    // persis "YYYY-MM-DD", jadi harus diformat manual di sini (ditemukan lewat pengujian langsung
+    // terhadap driver, bukan tebakan).
+    let tanggalSk = "";
+    if (r.tanggal_sk) {
+      const d = r.tanggal_sk instanceof Date ? r.tanggal_sk : new Date(r.tanggal_sk);
+      if (!isNaN(d.getTime())) {
+        tanggalSk = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      }
+    }
+    return { sukses: true, nomorSk: r.nomor_sk || "", tanggalSk };
   } catch (error) {
     return { sukses: false, pesan: String(error) };
   }
