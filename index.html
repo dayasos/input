@@ -135,6 +135,9 @@
           <button id="tab-rekap" class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
             LIHAT DATA
           </button>
+          <button id="tab-tools" class="hidden px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
+            🛠️ TOOLS
+          </button>
           <button id="btn-retur-kematian"
             class="hidden px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
             title="Laporan Retur & Kematian">
@@ -773,6 +776,81 @@
           <div id="info-halaman" class="text-xs text-slate-500 font-medium"></div>
         </div>
         <div id="pagination-wrap" class="flex items-center gap-1 flex-wrap justify-center mt-2"></div>
+      </div>
+    </section>
+
+    <!-- Halaman kerja "Tools" — khusus role UTAMA. Halaman penuh (pola sama seperti
+         panel-input/panel-rekap), BUKAN modal, sesuai permintaan eksplisit. -->
+    <section id="panel-tools" class="hidden">
+      <div class="flex flex-col gap-1 mb-6 border-b border-slate-100 pb-4">
+        <h2 class="text-xl font-bold text-slate-800">🛠️ Tools — Pembayaran</h2>
+        <p class="text-xs text-slate-500 mt-1">Khusus Admin Utama. Buat &amp; unduh data pembayaran per bulan, kelola
+          pejabat penandatangan.</p>
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Buat / Perbarui Data Pembayaran</h3>
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Bulan Pembayaran</label>
+            <select id="tools-select-bulan"
+              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              <option value="">-- Pilih Bulan --</option>
+              <option>JANUARI</option>
+              <option>FEBRUARI</option>
+              <option>MARET</option>
+              <option>APRIL</option>
+              <option>MEI</option>
+              <option>JUNI</option>
+              <option>JULI</option>
+              <option>AGUSTUS</option>
+              <option>SEPTEMBER</option>
+              <option>OKTOBER</option>
+              <option>NOVEMBER</option>
+              <option>DESEMBER</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Jenis Pembayaran</label>
+            <select id="tools-select-jenis"
+              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              <option value="">-- Pilih Jenis --</option>
+              <option value="DJPM">DJPM</option>
+              <option value="BPJS">BPJS TK</option>
+            </select>
+          </div>
+          <button id="btn-tools-buat-batch" onclick="toolsBuatBatch()"
+            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">
+            ⚙️ Tarik Data Terkini (AKTIF)
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2">Data yang dibuat adalah salinan beku saat tombol diklik — perubahan
+          data setelahnya tidak memengaruhi yang sudah dibuat, sampai dibuat ulang secara sengaja.</p>
+        <div id="tools-preview-rekap" class="mt-4"></div>
+      </div>
+
+      <div class="mb-6">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Review Data Pembayaran</h3>
+        <div class="overflow-x-auto rounded-lg border border-slate-200">
+          <table class="w-full text-left border-collapse bg-white">
+            <thead>
+              <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
+                <th class="px-3 py-2">Bulan</th>
+                <th class="px-3 py-2">Jenis</th>
+                <th class="px-3 py-2 text-center">Jumlah Orang</th>
+                <th class="px-3 py-2 text-right">Total Nominal</th>
+                <th class="px-3 py-2">Terakhir Dibuat</th>
+                <th class="px-3 py-2 text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="tools-body-tabel-batch" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+        <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Pejabat Penandatangan</h3>
+        <div id="tools-form-pejabat" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
       </div>
     </section>
 
@@ -2075,6 +2153,9 @@
         if (btnProgresKuota) btnProgresKuota.classList.toggle('hidden', role !== "UTAMA");
         const btnKelolaKuota = document.getElementById('btn-kelola-kuota');
         if (btnKelolaKuota) btnKelolaKuota.classList.toggle('hidden', role !== "UTAMA");
+        // Tab "Tools" (halaman kerja Pembayaran) — khusus Admin Utama.
+        const tabTools = document.getElementById('tab-tools');
+        if (tabTools) tabTools.classList.toggle('hidden', role !== "UTAMA");
         // Dashboard Progres Verifikasi — tampil untuk semua role.
         const btnDashboardProgres = document.getElementById('btn-dashboard-progres');
         if (btnDashboardProgres) btnDashboardProgres.classList.remove('hidden');
@@ -2284,8 +2365,10 @@
       const fileRekomendasiRi = wrapperRekomendasiRi.querySelector('input[type="file"]');
       const tabInput = document.getElementById('tab-input');
       const tabRekap = document.getElementById('tab-rekap');
+      const tabTools = document.getElementById('tab-tools');
       const panelInput = document.getElementById('panel-input');
       const panelRekap = document.getElementById('panel-rekap');
+      const panelTools = document.getElementById('panel-tools');
 
       window.addEventListener('DOMContentLoaded', () => {
         google.script.run
@@ -2293,6 +2376,20 @@
           .withFailureHandler((err) => { tampilkanToast("Gagal mengambil data master: " + pesanErrorRamah(err), "gagal", { durasi: 6000 }); })
           .getMasterLayanan();
       });
+
+      // Set 1 tombol tab ke style aktif/tidak-aktif TANPA menyentuh kelas 'hidden' -- beda dari
+      // pola `tab.className = "..."` (overwrite penuh) yang dipakai tabInput/tabRekap untuk
+      // DIRI SENDIRI di bawah. Dipakai khusus saat menyentuh tab-tools dari handler tab LAIN,
+      // supaya tab-tools yang sengaja disembunyikan utk role non-UTAMA (lihat terapkanHakAkses)
+      // tidak pernah ikut ter-un-hide gara-gara klik tab lain.
+      function setTabTidakAktif(tabEl) {
+        tabEl.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
+        tabEl.classList.add('text-white', 'hover:bg-slate-700');
+      }
+      function setTabAktif(tabEl) {
+        tabEl.classList.remove('text-white', 'hover:bg-slate-700');
+        tabEl.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
+      }
 
       tabInput.addEventListener('click', () => {
         // SAFEGUARD: kalau sakelar TUTUP dan user bukan admin utama,
@@ -2305,8 +2402,10 @@
         tabInput.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition";
         panelAktif = "input";
         tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+        setTabTidakAktif(tabTools);
         panelInput.classList.remove('hidden');
         panelRekap.classList.add('hidden');
+        panelTools.classList.add('hidden');
         document.getElementById('btn-refresh-data').classList.add('hidden');
 
         if (dataPengguna.role === "UTAMA" || dataPengguna.role === "") {
@@ -2336,13 +2435,28 @@
         tabRekap.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition";
         panelAktif = "rekap";
         tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+        setTabTidakAktif(tabTools);
         panelRekap.classList.remove('hidden');
         panelInput.classList.add('hidden');
+        panelTools.classList.add('hidden');
         document.getElementById('btn-refresh-data').classList.remove('hidden');
         // Cache TTL: kalau data sebelumnya masih segar (< TTL_CACHE_DATA_TRANSAKSI_MS), tampilkan
         // langsung tanpa fetch ulang — tabel yang sudah dirender tetap ada di DOM (cuma disembunyikan).
         const dataMasihSegar = masterDataLihat.length > 0 && (Date.now() - waktuMasterDataLihat) < TTL_CACHE_DATA_TRANSAKSI_MS;
         if (!dataMasihSegar) inisialisasiMenuLihatData();
+      });
+
+      tabTools.addEventListener('click', () => {
+        if (dataPengguna.role !== "UTAMA") return; // safeguard tambahan, tombolnya juga sudah disembunyikan
+        setTabAktif(tabTools);
+        panelAktif = "tools";
+        tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+        tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+        panelTools.classList.remove('hidden');
+        panelInput.classList.add('hidden');
+        panelRekap.classList.add('hidden');
+        document.getElementById('btn-refresh-data').classList.add('hidden');
+        inisialisasiMenuTools();
       });
 
       // ===================== MULTI-TAHUN =====================
@@ -3883,6 +3997,189 @@
         }
         return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-full">⏳ Proses Verifikasi</span>`;
       }
+
+      // ===================== TOOLS — PEMBAYARAN (khusus role UTAMA) =====================
+      const PERAN_TTD_LABEL = { KEPALA_DINAS: "Kepala Dinas Sosial", PPTK: "PPTK", BENDAHARA: "Bendahara Pengeluaran" };
+
+      function formatRupiahTools(angka) {
+        return "Rp " + (Number(angka) || 0).toLocaleString('id-ID');
+      }
+
+      function inisialisasiMenuTools() {
+        if (!pastikanLogin()) return;
+        toolsMuatDaftarBatch();
+        toolsMuatPejabat();
+      }
+
+      function toolsMuatDaftarBatch() {
+        const tbody = document.getElementById('tools-body-tabel-batch');
+        tbody.innerHTML = htmlSkeletonBaris(6, 3);
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-red-500">' + esc(res ? res.pesan : 'Gagal memuat data') + '</td></tr>';
+              return;
+            }
+            toolsRenderTabelBatch(res.daftar);
+          })
+          .withFailureHandler(function (err) {
+            tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
+          })
+          .ambilDaftarBatchPembayaran(dataPengguna.token);
+      }
+
+      function toolsRenderTabelBatch(daftar) {
+        const tbody = document.getElementById('tools-body-tabel-batch');
+        if (!daftar || daftar.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data pembayaran dibuat.</td></tr>';
+          return;
+        }
+        let html = '';
+        daftar.forEach(function (b) {
+          const tglDibuat = b.diperbaruiAt ? new Date(b.diperbaruiAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
+          html += `
+  <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+    <td class="px-3 py-2 font-semibold text-slate-800">${esc(b.bulan)} ${esc(b.tahun)}</td>
+    <td class="px-3 py-2"><span class="bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 rounded-full font-medium">${esc(b.jenis)}</span></td>
+    <td class="px-3 py-2 text-center">${esc(b.jumlahBaris)}</td>
+    <td class="px-3 py-2 text-right font-mono text-xs">${formatRupiahTools(b.totalNominal)}</td>
+    <td class="px-3 py-2 text-xs text-slate-500">${esc(tglDibuat)}</td>
+    <td class="px-3 py-2 text-center">
+      <button onclick="toolsDownloadBatch(${b.id})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-xs transition">📥 Download</button>
+    </td>
+  </tr>`;
+        });
+        tbody.innerHTML = html;
+      }
+
+      window.toolsBuatBatch = function () {
+        if (!pastikanLogin()) return;
+        const bulan = document.getElementById('tools-select-bulan').value;
+        const jenis = document.getElementById('tools-select-jenis').value;
+        if (!bulan) { tampilkanToast('Pilih bulan pembayaran dulu.', 'gagal'); return; }
+        if (!jenis) { tampilkanToast('Pilih jenis pembayaran dulu.', 'gagal'); return; }
+
+        const btn = document.getElementById('btn-tools-buat-batch');
+        const labelAsli = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Memproses...';
+        document.getElementById('tools-preview-rekap').innerHTML = '';
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            btn.disabled = false;
+            btn.innerHTML = labelAsli;
+            if (!res || !res.sukses) {
+              tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 });
+              return;
+            }
+            tampilkanToast('Data pembayaran ' + bulan + ' (' + jenis + ') berhasil dibuat — ' + res.jumlahBaris + ' orang.', 'sukses');
+            toolsTampilkanPreviewRekap(res.rekap);
+            toolsMuatDaftarBatch();
+          })
+          .withFailureHandler(function (err) {
+            btn.disabled = false;
+            btn.innerHTML = labelAsli;
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .buatBatchPembayaran(dataPengguna.token, bulan, jenis);
+      };
+
+      function toolsTampilkanPreviewRekap(rekap) {
+        const wrap = document.getElementById('tools-preview-rekap');
+        if (!rekap || rekap.length === 0) { wrap.innerHTML = ''; return; }
+        let html = '<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">';
+        rekap.forEach(function (r) {
+          html += `
+    <div class="bg-white border border-slate-200 rounded-lg p-3">
+      <p class="text-xs font-bold text-slate-700">${esc(r.layananKode)}</p>
+      <p class="text-[11px] text-slate-500">${esc(r.total)} orang (&lt;65: ${esc(r.bwh65)}, &ge;65: ${esc(r.ats65)})</p>
+      <p class="text-xs font-mono text-emerald-700 mt-1">${formatRupiahTools(r.uang)}</p>
+    </div>`;
+        });
+        html += '</div>';
+        wrap.innerHTML = html;
+      }
+
+      window.toolsDownloadBatch = function (batchId) {
+        if (!pastikanLogin()) return;
+        tampilkanToast('Menyiapkan file Excel...', 'info');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 });
+              return;
+            }
+            unduhFileBase64(res.base64, res.namaFile);
+          })
+          .withFailureHandler(function (err) {
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .unduhExcelBatch(dataPengguna.token, batchId);
+      };
+
+      function toolsMuatPejabat() {
+        const wrap = document.getElementById('tools-form-pejabat');
+        wrap.innerHTML = '<p class="text-xs text-slate-400 italic col-span-3">Memuat...</p>';
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              wrap.innerHTML = '<p class="text-xs text-red-500 col-span-3">' + esc(res ? res.pesan : 'Gagal memuat data') + '</p>';
+              return;
+            }
+            toolsRenderFormPejabat(res.pejabat);
+          })
+          .withFailureHandler(function (err) {
+            wrap.innerHTML = '<p class="text-xs text-red-500 col-span-3">' + esc(pesanErrorRamah(err)) + '</p>';
+          })
+          .ambilPejabatTtd(dataPengguna.token);
+      }
+
+      function toolsRenderFormPejabat(daftarPejabat) {
+        const wrap = document.getElementById('tools-form-pejabat');
+        let html = '';
+        (daftarPejabat || []).forEach(function (p) {
+          const idAman = p.peran;
+          html += `
+    <div class="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+      <p class="text-xs font-bold text-slate-700 uppercase">${esc(PERAN_TTD_LABEL[p.peran] || p.peran)}</p>
+      <div>
+        <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Nama</label>
+        <input type="text" id="tools-pejabat-nama-${idAman}" value="${esc(p.nama)}" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
+      </div>
+      <div>
+        <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Jabatan / Pangkat</label>
+        <input type="text" id="tools-pejabat-jabatan-${idAman}" value="${esc(p.jabatan)}" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
+      </div>
+      <div>
+        <label class="block text-[11px] font-medium text-slate-500 mb-0.5">NIP</label>
+        <input type="text" id="tools-pejabat-nip-${idAman}" value="${esc(p.nip)}" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
+      </div>
+      <button onclick="toolsSimpanPejabat('${idAman}')" class="w-full px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs font-semibold transition">💾 Simpan</button>
+    </div>`;
+        });
+        wrap.innerHTML = html;
+      }
+
+      window.toolsSimpanPejabat = function (peran) {
+        if (!pastikanLogin()) return;
+        const nama = document.getElementById('tools-pejabat-nama-' + peran).value.trim();
+        const jabatan = document.getElementById('tools-pejabat-jabatan-' + peran).value.trim();
+        const nip = document.getElementById('tools-pejabat-nip-' + peran).value.trim();
+
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (!res || !res.sukses) {
+              tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 });
+              return;
+            }
+            tampilkanToast('Data pejabat berhasil disimpan.', 'sukses');
+          })
+          .withFailureHandler(function (err) {
+            tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+          })
+          .simpanPejabatTtd(dataPengguna.token, peran, nama, jabatan, nip);
+      };
 
       function perbaruiElemenNavigasi(sekarang, total) {
         const infoHal = document.getElementById('info-halaman');
