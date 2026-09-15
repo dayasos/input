@@ -419,6 +419,11 @@ function terapkanMergeBlokTtdRekap(ws: any, barisMulai: number, jumlahBaris: num
 }
 
 // deno-lint-ignore no-explicit-any
+function terapkanMergeLabel(ws: any, baris: number, kolomAwal: number, kolomAkhir: number) {
+  ws.mergeCells(baris, kolomAwal, baris, kolomAkhir);
+}
+
+// deno-lint-ignore no-explicit-any
 function terapkanGayaHeaderKolom(ws: any, baris: number, jumlahKolom: number) {
   for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
     const sel = ws.getCell(baris, kolom);
@@ -643,6 +648,9 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         terapkanBorderData(ws, barisDataAwalLayanan, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
         terapkanGayaBarisTotal(ws, barisTotalLayanan, JUMLAH_KOLOM_LAYANAN);
         terapkanFormatUang(ws, barisDataAwalLayanan, barisTotalLayanan, [6, 7, 8, 9, 10]);
+        // Label "JUMLAH TOTAL" ada di kolom A (lebar cuma 5), kolom B-E diisi "" -- gabung supaya
+        // tidak terpotong, pola bug sama seperti blok TTD (ditemukan dari screenshot pengguna).
+        terapkanMergeLabel(ws, barisTotalLayanan, 1, 5);
         terapkanMergeBlokTtd(ws, barisTtdMulai, blokTtd.length);
         ws.views = [{ state: "frozen", ySplit: barisHeaderLayanan }];
       }
