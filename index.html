@@ -3385,9 +3385,11 @@
         });
       }
 
-      // ===================== HELPER UPLOAD BASE64 =====================
-      // Baca satu <input type=file> menjadi objek {namaFile, mimeType, dataBase64} atau null.
-      async function bacaFileKeBase64(inputEl) {
+      // ===================== HELPER UPLOAD BERKAS =====================
+      // Baca satu <input type=file> (dgn kompresi kalau gambar) menjadi {namaFile, mimeType,
+      // file} -- BUKAN base64 lagi (lihat unggahBerkasLangsungKeStorage: berkas sekarang di-PUT
+      // langsung sbg File/Blob ke Supabase Storage, base64 cuma menambah ~33% ukuran tanpa guna).
+      async function bacaFileTerkompresi(inputEl) {
         if (!inputEl || !inputEl.files || inputEl.files.length === 0) return null;
 
         let file = inputEl.files[0];
@@ -3397,25 +3399,87 @@
           // Kalau kompresi gagal karena sebab apa pun, lanjut pakai file asli (tidak menggagalkan upload).
         }
 
-        const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas
+        const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas -- sama dgn batas bucket Storage
         if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
 
+        return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', file: file };
+      }
+
+      // Bungkus google.script.run jadi Promise, supaya bisa dipakai dgn async/await di alur
+      // upload langsung (perlu menunggu hasil mint URL / konfirmasi secara berurutan).
+      function panggilAksiPromise(namaAksi) {
+        const args = Array.prototype.slice.call(arguments, 1);
         return new Promise(function (resolve, reject) {
-          const reader = new FileReader();
-          reader.onload = function () {
-            try {
-              const hasil = reader.result || "";
-              const koma = hasil.indexOf(',');
-              const base64 = koma >= 0 ? hasil.substring(koma + 1) : hasil;
-              resolve({ namaFile: file.name, mimeType: file.type || 'application/octet-stream', dataBase64: base64 });
-            } catch (e) { reject(e); }
-          };
-          reader.onerror = function () { reject(new Error('Gagal membaca file: ' + (file ? file.name : ''))); };
-          reader.readAsDataURL(file);
+          const run = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          run[namaAksi].apply(run, args);
         });
       }
 
-      // Kumpulkan seluruh field form menjadi objek biasa + semua file jadi base64.
+      // Upload satu batch berkas LANGSUNG ke Supabase Storage: minta signed upload URL per
+      // berkas ke server, PUT byte-nya langsung ke Storage (TIDAK lewat /api/gas -- inilah yang
+      // menghilangkan batas keras 4.5 MB body Vercel Serverless Function), baru konfirmasi ke
+      // server utk dapat link baca jangka panjang. Menggantikan pola lama yang mengirim seluruh
+      // berkas sbg base64 dalam satu body request -- ditemukan sering gagal utk layanan dgn
+      // banyak berkas wajib (mis. Guru Maghrib Mengaji: bisa 8-9 berkas sekaligus).
+      // `berkasMap`: { kunci: { file: File, namaFile, mimeType, label } }
+      // `konteks`: { kecamatan, layanan, nama, nik, folderId? }
+      // Balikan: { sukses, link: {...} } atau { sukses:false, pesan }.
+      async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
+        const kunciList = Object.keys(berkasMap);
+        if (kunciList.length === 0) return { sukses: true, link: {} };
+
+        const daftarFileInfo = {};
+        kunciList.forEach(function (k) {
+          const item = berkasMap[k];
+          daftarFileInfo[k] = { namaFile: item.namaFile, mimeType: item.mimeType, label: item.label };
+        });
+
+        const hasilMint = await panggilAksiPromise('mintaUrlUploadBerkas', dataPengguna.token, konteks, daftarFileInfo);
+        if (!hasilMint || !hasilMint.sukses) {
+          return { sukses: false, pesan: hasilMint ? hasilMint.pesan : 'Gagal menyiapkan upload.' };
+        }
+
+        // PUT semua berkas PARALEL (Promise.all, bukan satu-satu) -- layanan dgn banyak berkas
+        // (mis. Guru Maghrib Mengaji) akan terasa lambat kalau menunggu tiap upload selesai
+        // dulu sebelum mulai yang berikutnya. Browser modern aman menangani beberapa fetch
+        // paralel ke origin yang sama.
+        const hasilTiapPut = await Promise.all(kunciList.map(async function (k) {
+          const info = hasilMint.daftarUrl[k];
+          const item = berkasMap[k];
+          if (!info) return { k: k, gagal: null };
+
+          try {
+            const resPut = await fetch(info.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': item.mimeType || 'application/octet-stream' },
+              body: item.file,
+            });
+            if (!resPut.ok) {
+              return { k: k, gagal: 'Gagal mengunggah "' + (item.label || k) + '" (status ' + resPut.status + ').' };
+            }
+            return { k: k, path: info.path, gagal: null };
+          } catch (eNet) {
+            return { k: k, gagal: 'Gagal mengunggah "' + (item.label || k) + '": kendala jaringan. Coba lagi.' };
+          }
+        }));
+
+        const gagalPertama = hasilTiapPut.find(function (r) { return r.gagal; });
+        if (gagalPertama) {
+          return { sukses: false, pesan: gagalPertama.gagal };
+        }
+
+        const daftarPath = {};
+        hasilTiapPut.forEach(function (r) { if (r.path) daftarPath[r.k] = r.path; });
+
+        const hasilKonfirmasi = await panggilAksiPromise('konfirmasiUploadBerkas', dataPengguna.token, hasilMint.prefix, daftarPath);
+        return hasilKonfirmasi || { sukses: false, pesan: 'Tidak ada respons saat konfirmasi upload.' };
+      }
+
+      // Kumpulkan seluruh field form menjadi objek biasa + semua file terpilih (dgn kompresi).
+      // Batas ukuran GABUNGAN 3.5 MB (utk hindari limit body 4.5 MB Vercel) TIDAK berlaku lagi
+      // sejak berkas di-upload langsung browser->Supabase Storage (lihat
+      // unggahBerkasLangsungKeStorage) -- yang tersisa cuma batas 25 MB PER berkas (dicek di
+      // bacaFileTerkompresi), sama seperti batas bucket Storage sendiri.
       async function kumpulkanDataForm() {
         function val(name) {
           const el = formPembayaran.querySelector('[name="' + name + '"]');
@@ -3424,20 +3488,6 @@
         function fileEl(name) { return formPembayaran.querySelector('input[type="file"][name="' + name + '"]'); }
 
         const namaFileInput = ['fileKtp', 'fileBukuRekening', 'fileSuratPermohon', 'filePernyataan', null, 'fileDomisili', 'fileBerkasPendukung', 'fileBerkasPendukung2', 'fileFotoPlank', 'fileFotoIbadah', 'fileFotoKegiatan', 'fileRekomendasiBkm', 'fileRekomendasiRi'];
-
-        // Cek total ukuran GABUNGAN semua berkas terpilih SEBELUM proses baca/encode base64 yang lambat
-        // dimulai, supaya user tahu lebih awal (bukan setelah menunggu lama di layar "MENGUNGGAH BERKAS...").
-        // Batas diturunkan menjadi 3.5 MB agar aman dari batas 4.5 MB Vercel Serverless Function.
-        const MAKS_TOTAL_BYTE_GABUNGAN = 3.5 * 1024 * 1024; // 3.5 MB
-        let totalByteTerpilih = 0;
-        for (const nmCek of namaFileInput) {
-          const elCek = fileEl(nmCek);
-          const wrapperHiddenCek = elCek && elCek.closest('.hidden');
-          if (elCek && !wrapperHiddenCek && elCek.files && elCek.files[0]) totalByteTerpilih += elCek.files[0].size;
-        }
-        if (totalByteTerpilih > MAKS_TOTAL_BYTE_GABUNGAN) {
-          throw new Error('Total ukuran seluruh berkas melebihi batas aman upload Vercel (' + (totalByteTerpilih / (1024 * 1024)).toFixed(1) + ' MB, maksimal 3.5 MB gabungan). Aplikasi otomatis mengompres foto, namun untuk dokumen PDF mohon gunakan ukuran yang lebih kecil.');
-        }
 
         const data = {
           selectLayanan: val('selectLayanan'),
@@ -3469,7 +3519,7 @@
           // Lewati input yang tersembunyi (wrapper .hidden) — tidak dipakai utk layanan ini.
           const wrapperHidden = el && el.closest('.hidden');
           if (el && !wrapperHidden) {
-            berkas[nm] = await bacaFileKeBase64(el);
+            berkas[nm] = await bacaFileTerkompresi(el);
           } else {
             berkas[nm] = null;
           }
@@ -3478,9 +3528,9 @@
         return data;
       }
 
-      // Label tiap kunci berkas untuk aksi upload terpisah (uploadSemuaBerkasKeSupabase) — dipakai
-      // sebagai bagian nama path di Supabase Storage. Samakan persis dengan LABEL_FIELD_BERKAS di
-      // Kode.gs (baris ~1146), termasuk label kondisional fileBerkasPendukung2 tergantung layanan.
+      // Label tiap kunci berkas -- dipakai sebagai bagian nama path di Supabase Storage. Samakan
+      // persis dengan LABEL_FIELD_BERKAS di Kode.gs (baris ~1146), termasuk label kondisional
+      // fileBerkasPendukung2 tergantung layanan.
       function labelBerkasSimpanBaru(layanan) {
         const lay = (layanan || "").toString().toUpperCase().trim();
         return {
@@ -3493,8 +3543,8 @@
         };
       }
 
-      // Kirim data ke simpanDataKeSheet — kalau ada berkas terpilih, upload dulu ke Supabase
-      // Storage lewat aksi terpisah uploadSemuaBerkasKeSupabase, baru kirim link-nya. Kalau tidak
+      // Kirim data ke simpanDataKeSheet — kalau ada berkas terpilih, upload dulu LANGSUNG ke
+      // Supabase Storage (lihat unggahBerkasLangsungKeStorage), baru kirim link-nya. Kalau tidak
       // ada berkas sama sekali, langsung simpan tanpa upload.
       function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
         function eksekusiSimpan() {
@@ -3512,7 +3562,7 @@
         }
 
         const berkasMentah = dataObjek.__berkas || {};
-        const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].dataBase64; });
+        const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].file; });
 
         if (!adaBerkas) {
           loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
@@ -3522,35 +3572,31 @@
 
         loadingOverlay.querySelector('h3').innerText = "MENGUNGGAH BERKAS...";
         const label = labelBerkasSimpanBaru(dataObjek.selectLayanan);
-        const berkasBerlabel = {};
+        const berkasUntukUpload = {};
         Object.keys(berkasMentah).forEach(function (k) {
           const item = berkasMentah[k];
-          if (item && item.dataBase64) {
-            berkasBerlabel[k] = { namaFile: item.namaFile, mimeType: item.mimeType, dataBase64: item.dataBase64, label: label[k] || k };
+          if (item && item.file) {
+            berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, label: label[k] || k };
           }
         });
 
-        google.script.run
-          .withSuccessHandler(function (hasilUpload) {
-            if (!hasilUpload || !hasilUpload.sukses) {
-              loadingOverlay.classList.add('hidden');
-              tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), 'gagal', { durasi: 6000 });
-              return;
-            }
-            dataObjek.__linkBerkas = hasilUpload.link;
-            delete dataObjek.__berkas;
-            loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
-            eksekusiSimpan();
-          })
-          .withFailureHandler(function (errUpload) {
+        unggahBerkasLangsungKeStorage(
+          { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
+          berkasUntukUpload
+        ).then(function (hasilUpload) {
+          if (!hasilUpload || !hasilUpload.sukses) {
             loadingOverlay.classList.add('hidden');
-            tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
-          })
-          .uploadSemuaBerkasKeSupabase(
-            dataPengguna.token,
-            { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
-            berkasBerlabel
-          );
+            tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), 'gagal', { durasi: 6000 });
+            return;
+          }
+          dataObjek.__linkBerkas = hasilUpload.link;
+          delete dataObjek.__berkas;
+          loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
+          eksekusiSimpan();
+        }).catch(function (errUpload) {
+          loadingOverlay.classList.add('hidden');
+          tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
+        });
       }
 
       // ── Fungsi proses validasi + simpan (dipanggil setelah konfirmasi) ──
@@ -4417,7 +4463,7 @@
         let nomorBarisAktif = null;
         let dataAktif = null;
         let modeEdit = false;
-        let berkasBaruMap = {}; // {idx: {namaFile, mimeType, dataBase64}}
+        let berkasBaruMap = {}; // {idx: {namaFile, mimeType, file}}
 
         const modal = document.getElementById('modal-detail-penerima');
         const isiKonten = document.getElementById('isi-konten-detail');
@@ -4740,21 +4786,16 @@
           }
         }
 
-        // Handler pilih berkas baru
+        // Handler pilih berkas baru -- simpan File langsung (bukan base64 lagi), di-upload
+        // langsung ke Storage nanti saat simpanEdit() (lihat unggahBerkasLangsungKeStorage).
         window._pilihBerkasEdit = function (inputEl) {
           const idx = inputEl.dataset.berkasIdx;
           const file = inputEl.files[0];
           if (!file) return;
           if (file.size > 25 * 1024 * 1024) { tampilkanToast("Ukuran berkas melebihi 25 MB.", "gagal"); inputEl.value = ""; return; }
           const labelEl = document.getElementById("label-berkas-" + idx);
-          if (labelEl) labelEl.textContent = "Membaca...";
-          const reader = new FileReader();
-          reader.onload = function (ev) {
-            const b64 = ev.target.result.split(",")[1];
-            berkasBaruMap[idx] = { namaFile: file.name, mimeType: file.type, dataBase64: b64 };
-            if (labelEl) labelEl.textContent = file.name;
-          };
-          reader.readAsDataURL(file);
+          berkasBaruMap[idx] = { namaFile: file.name, mimeType: file.type, file: file };
+          if (labelEl) labelEl.textContent = file.name;
         };
 
         // ─── Aktifkan mode edit ───
@@ -4823,51 +4864,46 @@
               .editDataPenerima(dataPengguna.token, nomorBarisAktif, { teks: teks, berkas: berkasUntukDikirim, idFolderBerkas: idFolderBerkasUntukDikirim || "" });
           }
 
-          const adaBerkasBaru = Object.keys(berkasBaruMap).some(function (k) { return berkasBaruMap[k] && berkasBaruMap[k].dataBase64; });
+          const adaBerkasBaru = Object.keys(berkasBaruMap).some(function (k) { return berkasBaruMap[k] && berkasBaruMap[k].file; });
           if (!adaBerkasBaru) {
             eksekusiEdit(berkasBaruMap, "");
             return;
           }
 
-          // Upload berkas lebih dulu ke Supabase Storage lewat aksi terpisah
-          // uploadSemuaBerkasKeSupabase, baru kirim link-nya ke editDataPenerima. Label per
-          // kolom diambil dari getBerkasSesuaiLayanan
-          // (sumber label yang sudah ada, dipakai juga saat render form edit).
+          // Upload berkas LANGSUNG ke Supabase Storage (lihat unggahBerkasLangsungKeStorage),
+          // baru kirim link-nya ke editDataPenerima. Label per kolom diambil dari
+          // getBerkasSesuaiLayanan (sumber label yang sudah ada, dipakai juga saat render form edit).
           btnSimpan.textContent = "⏳ Mengunggah berkas...";
           const labelPerIdx = {};
           getBerkasSesuaiLayanan(dataAktif[7]).forEach(function (b) { labelPerIdx[b.idx] = b.label; });
-          const berkasBerlabel = {};
+          const berkasUntukUpload = {};
           Object.keys(berkasBaruMap).forEach(function (k) {
             const item = berkasBaruMap[k];
-            if (item && item.dataBase64) {
-              berkasBerlabel[k] = { namaFile: item.namaFile, mimeType: item.mimeType, dataBase64: item.dataBase64, label: labelPerIdx[k] || ("Kolom " + k) };
+            if (item && item.file) {
+              berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, label: labelPerIdx[k] || ("Kolom " + k) };
             }
           });
 
-          google.script.run
-            .withSuccessHandler(function (hasilUpload) {
-              if (!hasilUpload || !hasilUpload.sukses) {
-                btnSimpan.disabled = false;
-                btnSimpan.textContent = "💾 Simpan Perubahan";
-                tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), "gagal", { durasi: 6000 });
-                return;
-              }
-              btnSimpan.textContent = "⏳ Menyimpan...";
-              const link = hasilUpload.link || {};
-              const idFolderBaru = link.idFolderBerkas || "";
-              delete link.idFolderBerkas;
-              eksekusiEdit(link, idFolderBaru);
-            })
-            .withFailureHandler(function (errUpload) {
+          unggahBerkasLangsungKeStorage(
+            { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },
+            berkasUntukUpload
+          ).then(function (hasilUpload) {
+            if (!hasilUpload || !hasilUpload.sukses) {
               btnSimpan.disabled = false;
               btnSimpan.textContent = "💾 Simpan Perubahan";
-              tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), "gagal", { durasi: 6000 });
-            })
-            .uploadSemuaBerkasKeSupabase(
-              dataPengguna.token,
-              { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },
-              berkasBerlabel
-            );
+              tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), "gagal", { durasi: 6000 });
+              return;
+            }
+            btnSimpan.textContent = "⏳ Menyimpan...";
+            const link = hasilUpload.link || {};
+            const idFolderBaru = link.idFolderBerkas || "";
+            delete link.idFolderBerkas;
+            eksekusiEdit(link, idFolderBaru);
+          }).catch(function (errUpload) {
+            btnSimpan.disabled = false;
+            btnSimpan.textContent = "💾 Simpan Perubahan";
+            tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), "gagal", { durasi: 6000 });
+          });
         }
 
         // ─── Ambil dan tampilkan detail ───
