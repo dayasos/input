@@ -1,6 +1,15 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
 import { TAHUN_AKTIF } from "../_shared/config.ts";
+import {
+  muatExcelJS,
+  terapkanBorderData,
+  terapkanFormatUang,
+  terapkanGayaBarisTotal,
+  terapkanGayaHeaderKolom,
+  terapkanGayaJudul,
+  terapkanMergeLabel,
+} from "../_shared/excelGaya.ts";
 
 // ---------------------------------------------------------------------------
 // Halaman "Tools" (khusus role UTAMA) — pengganti alur manual "Kode.gs Data Bayar"
@@ -374,24 +383,9 @@ function formatTanggalSkIndo(tanggal: string | Date | null | undefined): string 
   return `${d.getUTCDate()} ${bulanIndo[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-// ---- Helper styling (dipakai bersama oleh sheet REKAP, per-layanan, dan BPJS TK) -- migrasi
-// dari `xlsx` (SheetJS Community Edition, TIDAK menyimpan info gaya sel saat menulis .xlsx) ke
-// `exceljs` (mendukung penuh bold/border/fill/format angka), 2026-09-15. Diuji lokal dulu
-// sebelum dipakai di sini: buat file -> tulis -> baca ulang -> pastikan gaya & nilainya benar
-// tersimpan (bukan cuma "tidak error saat generate"). ----
-const HURUF_KOLOM = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"];
-const WARNA_HEADER = "FFDDE6F0"; // biru muda lembut, dipakai konsisten di semua sheet
-const BORDER_TIPIS = { style: "thin" as const };
-const BORDER_SEL_PENUH = { top: BORDER_TIPIS, left: BORDER_TIPIS, bottom: BORDER_TIPIS, right: BORDER_TIPIS };
-
-// deno-lint-ignore no-explicit-any
-function terapkanGayaJudul(ws: any, baris: number, jumlahKolom: number) {
-  const rentang = `A${baris}:${HURUF_KOLOM[jumlahKolom - 1]}${baris}`;
-  ws.mergeCells(rentang);
-  const sel = ws.getCell(`A${baris}`);
-  sel.font = { bold: true, size: 12 };
-  sel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-}
+// ---- Helper styling generik (terapkanGayaJudul, terapkanGayaHeaderKolom, dst) dipindah ke
+// _shared/excelGaya.ts 2026-09-16 supaya bisa dipakai bersama domains/ekspor.ts juga -- yang
+// tersisa di sini cuma yang KHUSUS payment (blok TTD, posisi kolom kepala/PPTK/bendahara). ----
 
 // deno-lint-ignore no-explicit-any
 function terapkanMergeBlokTtd(ws: any, barisMulai: number, jumlahBaris: number) {
@@ -415,49 +409,6 @@ function terapkanMergeBlokTtdRekap(ws: any, barisMulai: number, jumlahBaris: num
   for (let i = 0; i < jumlahBaris; i++) {
     const baris = barisMulai + i;
     ws.mergeCells(`H${baris}:I${baris}`);
-  }
-}
-
-// deno-lint-ignore no-explicit-any
-function terapkanMergeLabel(ws: any, baris: number, kolomAwal: number, kolomAkhir: number) {
-  ws.mergeCells(baris, kolomAwal, baris, kolomAkhir);
-}
-
-// deno-lint-ignore no-explicit-any
-function terapkanGayaHeaderKolom(ws: any, baris: number, jumlahKolom: number) {
-  for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
-    const sel = ws.getCell(baris, kolom);
-    sel.font = { bold: true };
-    sel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: WARNA_HEADER } };
-    sel.border = BORDER_SEL_PENUH;
-    sel.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-  }
-}
-
-// deno-lint-ignore no-explicit-any
-function terapkanBorderData(ws: any, barisAwal: number, barisAkhir: number, jumlahKolom: number) {
-  for (let baris = barisAwal; baris <= barisAkhir; baris++) {
-    for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
-      ws.getCell(baris, kolom).border = BORDER_SEL_PENUH;
-    }
-  }
-}
-
-// deno-lint-ignore no-explicit-any
-function terapkanGayaBarisTotal(ws: any, baris: number, jumlahKolom: number) {
-  for (let kolom = 1; kolom <= jumlahKolom; kolom++) {
-    const sel = ws.getCell(baris, kolom);
-    sel.font = { bold: true };
-    sel.border = { top: { style: "medium" }, left: BORDER_TIPIS, bottom: BORDER_TIPIS, right: BORDER_TIPIS };
-  }
-}
-
-// deno-lint-ignore no-explicit-any
-function terapkanFormatUang(ws: any, barisAwal: number, barisAkhir: number, kolomList: number[]) {
-  for (let baris = barisAwal; baris <= barisAkhir; baris++) {
-    for (const kolom of kolomList) {
-      ws.getCell(baris, kolom).numFmt = "#,##0";
-    }
   }
 }
 
@@ -493,14 +444,7 @@ export async function unduhExcelBatch(token: string, batchId: number) {
       return { sukses: false, pesan: "Batch ini belum punya data baris (kosong)." };
     }
 
-    // deno-lint-ignore no-explicit-any
-    const ExcelJSMod: any = await import("npm:exceljs@4.4.0");
-    // Di Deno, import("npm:exceljs") TIDAK selalu meng-ekspos `Workbook` langsung di namespace
-    // (beda dari Node `require()`) -- CJS export exceljs sebenarnya ada di properti `.default`
-    // kalau Deno tidak berhasil mendeteksi named export secara statis. Diverifikasi lewat
-    // pengujian nyata ke Edge Function (bukan tebakan): tanpa fallback ini muncul error
-    // "ExcelJS.Workbook is not a constructor".
-    const ExcelJS: any = ExcelJSMod.Workbook ? ExcelJSMod : (ExcelJSMod.default ?? ExcelJSMod);
+    const ExcelJS = await muatExcelJS();
     const wb = new ExcelJS.Workbook();
 
     const teksHeader = `BULAN : ${batch.bulan} ${batch.tahun}`;

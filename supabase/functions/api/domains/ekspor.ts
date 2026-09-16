@@ -1,12 +1,22 @@
 import { wajibSesi } from "../_shared/sesi.ts";
+import {
+  muatExcelJS,
+  terapkanBorderData,
+  terapkanGayaHeaderKolom,
+} from "../_shared/excelGaya.ts";
 
 // ---------------------------------------------------------------------------
 // Port dari eksporDataKeSpreadsheet() — Kode.gs baris 1519-1606.
 //
 // PERUBAHAN ARSITEKTUR: Kode.gs membuat Google Sheet sementara, mengkonversi ke XLSX via
 // Drive API, lalu menghapus sheet. Di Supabase, kita langsung membuat XLSX di memory
-// menggunakan library `xlsx` (Deno-compatible) — jauh lebih cepat dan tidak memerlukan
+// menggunakan `exceljs` (Deno-compatible) — jauh lebih cepat dan tidak memerlukan
 // akses Google Drive/Sheets sama sekali.
+//
+// 2026-09-16: diganti dari `xlsx` (SheetJS Community Edition, tidak menyimpan gaya sel) ke
+// `exceljs`, memakai helper styling yang sama dengan halaman Tools (domains/pembayaran.ts) --
+// supaya semua dokumen Excel yang dihasilkan aplikasi ini konsisten tampilannya (header tebal +
+// border + latar, border pada data, baris header dibekukan), bukan cuma yang untuk pembayaran.
 //
 // Kontrak respons IDENTIK: { sukses: true, base64: string, namaFile: string }
 // Frontend index.html membuat link download dari base64 ini.
@@ -31,10 +41,6 @@ export async function eksporDataKeSpreadsheet(
   }
 
   try {
-    // Dinamis import npm:xlsx supaya tidak load saat startup
-    // deno-lint-ignore no-explicit-any
-    const XLSX: any = await import("npm:xlsx@0.18.5");
-
     // Bersihkan & normalkan setiap baris (port Kode.gs baris 1545-1559)
     const rowsToExport: unknown[][] = [];
     for (const r of dataRows) {
@@ -52,27 +58,31 @@ export async function eksporDataKeSpreadsheet(
 
       // TIDAK di-prefix "'" seperti Kode.gs baris 1553-1555. Trik itu khusus Google Sheets API
       // (setValues() menafsirkan awalan kutip sebagai "paksa format teks" dan MEMBUANG kutipnya).
-      // SheetJS (aoa_to_sheet) TIDAK mengenal konvensi itu — nilai string JS biasa sudah otomatis
-      // tersimpan sebagai sel bertipe teks (t:'s') berdasarkan typeof, tanpa perlu trik apa pun,
-      // jadi tidak ada risiko notasi ilmiah. Kalau kutipnya tetap ditambahkan di sini, ada bug
-      // SheetJS yang terdokumentasi (isu #3025) untuk pola string-angka+kutip-depan persis ini —
-      // berisiko NIK/rekening/kontak di file Excel hasil ekspor malah kepentok kutip yang salah.
+      // exceljs (sama seperti xlsx sebelumnya) TIDAK mengenal konvensi itu -- nilai string JS
+      // biasa sudah otomatis tersimpan sebagai sel bertipe teks berdasarkan typeof, tanpa perlu
+      // trik apa pun, jadi tidak ada risiko notasi ilmiah.
       rowsToExport.push(rowTrimmed);
     }
 
-    // Buat worksheet: header + data
-    const wsData = [HEADER_EKSPOR, ...rowsToExport];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    const ExcelJS = await muatExcelJS();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Rekap Penerima");
 
-    // Set lebar kolom
-    ws["!cols"] = HEADER_EKSPOR.map((h: string) => ({ wch: Math.max(h.length + 2, 15) }));
+    const jumlahKolom = HEADER_EKSPOR.length;
+    ws.addRows([HEADER_EKSPOR, ...rowsToExport]);
+    ws.columns = HEADER_EKSPOR.map((h) => ({ width: Math.max(h.length + 2, 15) }));
 
-    // Buat workbook & tambah sheet
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Rekap Penerima");
+    const barisHeader = 1;
+    terapkanGayaHeaderKolom(ws, barisHeader, jumlahKolom);
+    if (rowsToExport.length > 0) {
+      terapkanBorderData(ws, barisHeader + 1, barisHeader + rowsToExport.length, jumlahKolom);
+    }
+    ws.views = [{ state: "frozen", ySplit: barisHeader }];
 
-    // Tulis ke buffer binary (format xlsx)
-    const xlsxBuffer: Uint8Array = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    const xlsxBufferMentah = await wb.xlsx.writeBuffer();
+    const xlsxBuffer: Uint8Array = xlsxBufferMentah instanceof Uint8Array
+      ? xlsxBufferMentah
+      : new Uint8Array(xlsxBufferMentah);
 
     // Encode ke base64 secara chunked agar aman untuk data ribuan baris (hindari RangeError call stack limit)
     let binary = "";
