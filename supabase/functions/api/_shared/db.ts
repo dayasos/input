@@ -5,7 +5,7 @@ const connectionString = Deno.env.get("SUPABASE_DB_URL");
 if (!connectionString) {
   throw new Error(
     "Env var SUPABASE_DB_URL belum diset. Set lewat: supabase secrets set SUPABASE_DB_URL=... " +
-      "(connection string Postgres project Supabase, lihat Dashboard > Project Settings > Database).",
+    "(connection string Postgres project Supabase, lihat Dashboard > Project Settings > Database).",
   );
 }
 
