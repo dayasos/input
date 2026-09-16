@@ -1,27 +1,37 @@
 // DJPM 2027 - Modul Transaksi
 
-inputTglLahir.addEventListener('input', () => {
-  if (!inputTglLahir.value) { inputUmur.value = ""; setGembokSubFormulir(false); return; }
-  const tglLahir = new Date(inputTglLahir.value);
-  const tglPatokan = new Date("2027-01-01");
-  let usia = tglPatokan.getFullYear() - tglLahir.getFullYear();
-  const m = tglPatokan.getMonth() - tglLahir.getMonth();
-  if (m < 0 || (m === 0 && tglPatokan.getDate() < tglLahir.getDate())) { usia--; }
-  inputUmur.value = usia >= 0 ? usia : 0;
-  if (usia < 18) { modalUsia.classList.remove('hidden'); } else { setGembokSubFormulir(false); }
-});
+// Inisialisasi event listener untuk elemen form utama
+// Guard null diperlukan karena app-transaksi.js dieksekusi setelah app-core.js,
+// namun referensi const (inputTglLahir, dll) di app-core.js bergantung pada
+// elemen HTML yang harus sudah ada di DOM.
+if (inputTglLahir) {
+  inputTglLahir.addEventListener('input', () => {
+    if (!inputTglLahir.value) { if (inputUmur) inputUmur.value = ""; setGembokSubFormulir(false); return; }
+    const tglLahir = new Date(inputTglLahir.value);
+    const tglPatokan = new Date("2027-01-01");
+    let usia = tglPatokan.getFullYear() - tglLahir.getFullYear();
+    const m = tglPatokan.getMonth() - tglLahir.getMonth();
+    if (m < 0 || (m === 0 && tglPatokan.getDate() < tglLahir.getDate())) { usia--; }
+    if (inputUmur) inputUmur.value = usia >= 0 ? usia : 0;
+    if (usia < 18) { if (modalUsia) modalUsia.classList.remove('hidden'); } else { setGembokSubFormulir(false); }
+  });
+}
 
-btnModalUsiaOk.addEventListener('click', () => {
-  modalUsia.classList.add('hidden');
-  setGembokSubFormulir(true);
-  inputTglLahir.focus();
-});
+if (btnModalUsiaOk) {
+  btnModalUsiaOk.addEventListener('click', () => {
+    if (modalUsia) modalUsia.classList.add('hidden');
+    setGembokSubFormulir(true);
+    if (inputTglLahir) inputTglLahir.focus();
+  });
+}
 
-inputKontak.addEventListener('input', (e) => {
-  let val = e.target.value.replace(/[^0-9]/g, '');
-  if (val.length >= 2 && !val.startsWith("08")) { tampilkanToast("Nomor kontak harus diawali dengan angka 08!", "gagal"); val = "08"; }
-  e.target.value = val;
-});
+if (inputKontak) {
+  inputKontak.addEventListener('input', (e) => {
+    let val = e.target.value.replace(/[^0-9]/g, '');
+    if (val.length >= 2 && !val.startsWith("08")) { tampilkanToast("Nomor kontak harus diawali dengan angka 08!", "gagal"); val = "08"; }
+    e.target.value = val;
+  });
+}
 
 /// Pembaca EXIF GPS mandiri (tanpa library luar) — parsing header JPEG murni JavaScript.
 function bacaGpsDariFile(file) {

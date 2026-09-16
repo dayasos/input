@@ -279,9 +279,18 @@ function pastikanLogin() {
 function terapkanHakAkses(role, kecamatan, inputDitutup) {
   inputDitutupGlobal = !!inputDitutup;
 
-  tabInput.classList.remove('hidden');
-  tabRekap.classList.remove('hidden');
-  tabInput.click();
+  // Ambil elemen DOM secara langsung agar aman dari Temporal Dead Zone
+  // (const tabInput, panelInput, dll dideklarasikan SETELAH fungsi ini di file)
+  const _tabInput = document.getElementById('tab-input');
+  const _tabRekap = document.getElementById('tab-rekap');
+  const _panelInput = document.getElementById('panel-input');
+  const _fsContainer = document.getElementById('fs-container');
+  const _btnKec = document.getElementById('btn-instansi-kec');
+  const _btnKem = document.getElementById('btn-instansi-kem');
+
+  if (_tabInput) _tabInput.classList.remove('hidden');
+  if (_tabRekap) _tabRekap.classList.remove('hidden');
+  if (_tabInput) _tabInput.click();
 
   const btnReturKematian = document.getElementById('btn-retur-kematian');
   if (btnReturKematian) btnReturKematian.classList.remove('hidden');
@@ -299,15 +308,12 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (btnDashboardProgres) btnDashboardProgres.classList.remove('hidden');
 
   if (role === "UTAMA") {
-    btnKec.disabled = false;
-    btnKem.disabled = false;
-    btnKec.classList.remove('opacity-40', 'cursor-not-allowed');
-    btnKem.classList.remove('opacity-40', 'cursor-not-allowed');
+    if (_btnKec) { _btnKec.disabled = false; _btnKec.classList.remove('opacity-40', 'cursor-not-allowed'); }
+    if (_btnKem) { _btnKem.disabled = false; _btnKem.classList.remove('opacity-40', 'cursor-not-allowed'); }
 
   } else if (role === "KECAMATAN") {
-    btnKem.disabled = true;
-    btnKem.classList.add('opacity-40', 'cursor-not-allowed');
-    murniGantiInstansi("KECAMATAN", btnKec, btnKem);
+    if (_btnKem) { _btnKem.disabled = true; _btnKem.classList.add('opacity-40', 'cursor-not-allowed'); }
+    murniGantiInstansi("KECAMATAN", _btnKec, _btnKem);
     const controlKec = document.getElementById('control-kecamatan');
     if (controlKec && kecamatan) {
       controlKec.value = kecamatan;
@@ -318,9 +324,8 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
     }
 
   } else if (isRoleKemenagBebas(role)) {
-    btnKec.disabled = true;
-    btnKec.classList.add('opacity-40', 'cursor-not-allowed');
-    murniGantiInstansi("KEMENAG", btnKem, btnKec);
+    if (_btnKec) { _btnKec.disabled = true; _btnKec.classList.add('opacity-40', 'cursor-not-allowed'); }
+    murniGantiInstansi("KEMENAG", _btnKem, _btnKec);
     const controlKec = document.getElementById('control-kecamatan');
     if (controlKec) {
       controlKec.disabled = false;
@@ -330,9 +335,8 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
     renderDropdownLayananTunggal(role);
 
   } else if (isRoleKemenagTerikat(role)) {
-    btnKec.disabled = true;
-    btnKec.classList.add('opacity-40', 'cursor-not-allowed');
-    murniGantiInstansi("KEMENAG", btnKem, btnKec);
+    if (_btnKec) { _btnKec.disabled = true; _btnKec.classList.add('opacity-40', 'cursor-not-allowed'); }
+    murniGantiInstansi("KEMENAG", _btnKem, _btnKec);
     const controlKec = document.getElementById('control-kecamatan');
     if (controlKec && kecamatan) {
       controlKec.value = kecamatan;
@@ -345,25 +349,19 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   }
 
   if (inputDitutup && role !== "UTAMA") {
-    tabInput.classList.add('hidden');
+    if (_tabInput) { _tabInput.classList.add('hidden'); _tabInput.disabled = true; _tabInput.style.pointerEvents = 'none'; }
+    if (_panelInput) _panelInput.classList.add('hidden');
 
-    tabInput.disabled = true;
-    tabInput.style.pointerEvents = 'none';
-
-    panelInput.classList.add('hidden');
-
-    if (fsContainer) {
-      fsContainer.disabled = true;
-      fsContainer.classList.add('opacity-50', 'pointer-events-none');
+    if (_fsContainer) {
+      _fsContainer.disabled = true;
+      _fsContainer.classList.add('opacity-50', 'pointer-events-none');
     }
     const controlKec = document.getElementById('control-kecamatan');
     if (controlKec) controlKec.disabled = true;
-    const btnKec = document.getElementById('btn-instansi-kec');
-    const btnKem = document.getElementById('btn-instansi-kem');
-    if (btnKec) { btnKec.disabled = true; btnKec.style.pointerEvents = 'none'; }
-    if (btnKem) { btnKem.disabled = true; btnKem.style.pointerEvents = 'none'; }
+    if (_btnKec) { _btnKec.disabled = true; _btnKec.style.pointerEvents = 'none'; }
+    if (_btnKem) { _btnKem.disabled = true; _btnKem.style.pointerEvents = 'none'; }
 
-    tabRekap.click();
+    if (_tabRekap) _tabRekap.click();
 
     const banner = document.getElementById('banner-tutup');
     if (banner) banner.classList.remove('hidden');
@@ -423,9 +421,22 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   } else {
     const banner = document.getElementById('banner-tutup');
     if (banner) banner.classList.add('hidden');
-    tabInput.disabled = false;
-    tabInput.style.pointerEvents = '';
+    if (_tabInput) { _tabInput.disabled = false; _tabInput.style.pointerEvents = ''; }
   }
+}
+
+// Fungsi periksaStatusAkses: memeriksa status buka/tutup input berdasarkan role pengguna
+// dan memperbarui UI (banner, tab) sesuai kondisi terkini dari server.
+function periksaStatusAkses() {
+  if (!dataPengguna.token || dataPengguna.role === "UTAMA") return;
+  const _tabInput = document.getElementById('tab-input');
+  google.script.run
+    .withSuccessHandler(function (st) {
+      const ditutup = st && st.sukses ? !!st.ditutup : false;
+      terapkanHakAkses(dataPengguna.role, dataPengguna.kecamatan, ditutup);
+    })
+    .withFailureHandler(function () { /* silent: pertahankan status terakhir */ })
+    .statusInputKecKem(dataPengguna.token);
 }
 window.periksaStatusAkses = periksaStatusAkses;
 
