@@ -10,7 +10,7 @@ import {
   subFilterGsmDari,
 } from "../_shared/akses.ts";
 import { cekAksesInputUser } from "./setelan.ts";
-import { validasiDataBaru } from "./validasi.ts";
+import { cekKuotaTersedia } from "./validasi.ts";
 
 // ---------------------------------------------------------------------------
 // CATATAN ARSITEKTUR PENTING: identitas baris ("nomorBaris")
