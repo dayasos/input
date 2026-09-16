@@ -36,7 +36,11 @@ function doPost(e) {
             "loginPengguna": loginPengguna,
             "logoutPengguna": logoutPengguna,
             "pulihkanSesi": pulihkanSesi,
-            "uploadSemuaBerkasKeDrive": uploadSemuaBerkasKeDrive
+            "uploadSemuaBerkasKeDrive": uploadSemuaBerkasKeDrive,
+            "uploadSatuBerkasKeDrive": uploadSemuaBerkasKeDrive,
+            "ping": function () {
+                return { status: "ok", pong: true, pesan: "Google Apps Script Microservice Online" };
+            }
         };
 
         if (!ALLOWED[action]) {
@@ -97,10 +101,16 @@ function ambilSesi_(token) {
         const secret = scriptProperties.getProperty('GAS_SECRET_TOKEN') || EXPECTED_SECRET;
         const supabaseApiUrl = scriptProperties.getProperty('SUPABASE_EDGE_FUNCTION_URL') ||
             "https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api";
+        const anonKey = scriptProperties.getProperty('SUPABASE_ANON_KEY') ||
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ";
 
         const resp = UrlFetchApp.fetch(supabaseApiUrl, {
             method: "post",
             contentType: "application/json",
+            headers: {
+                "apikey": anonKey,
+                "Authorization": "Bearer " + anonKey
+            },
             payload: JSON.stringify({
                 action: "pulihkanSesi",
                 args: [token],
