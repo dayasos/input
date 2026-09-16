@@ -1201,6 +1201,29 @@
       </div>
     </div>
 
+    <script>
+      // Tampilkan modal login SECEPATNYA kalau memang tidak ada sesi tersimpan -- ditaruh persis
+      // di sini (langsung setelah HTML modal-login), BUKAN di skrip utama yang baru jalan setelah
+      // SELURUH ~450KB sisa index.html selesai di-parse (termasuk logo besar yang di-embed base64
+      // dua kali, semua modal lain, dsb). Ditemukan dari laporan user: ada jeda terlihat (header +
+      // logo sempat "flash" sendirian) sebelum modal login akhirnya tampil.
+      //
+      // Cuma menangani kasus PALING UMUM (tidak ada sesi tersimpan sama sekali) yang aman
+      // ditampilkan seketika tanpa perlu jaringan. Kasus lain (ada token tersimpan, perlu
+      // divalidasi ke server dulu via pulihkanSesi) TETAP ditangani cobaPulihkanSesi() di skrip
+      // utama seperti biasa -- fungsi itu TIDAK diubah, panggilan classList.remove('hidden')-nya
+      // di sana jadi redundan-tapi-aman utk kasus ini (idempoten, tidak masalah dipanggil dua kali).
+      (function tampilkanLoginSecepatnyaKalauTanpaSesi() {
+        try {
+          const raw = sessionStorage.getItem('dana_jasa_sesi');
+          const sesi = raw ? JSON.parse(raw) : null;
+          if (!sesi || !sesi.token) {
+            document.getElementById('modal-login').classList.remove('hidden');
+          }
+        } catch (e) { /* biarkan cobaPulihkanSesi() di skrip utama yang tangani */ }
+      })();
+    </script>
+
     <!-- Modal: ajakan instal aplikasi (Android/Chrome/Edge -- pakai prompt instal bawaan
          browser). z-index lebih tinggi dari modal-login (z-[500]) supaya tampil di atasnya
          kalau kebetulan muncul bersamaan. -->
