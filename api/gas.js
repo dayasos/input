@@ -142,14 +142,10 @@ export default async function handler(req, res) {
     payloadObj = {};
   }
 
-  // Routing khusus untuk upload ke Google Drive
+  // Routing khusus untuk upload ke Google Drive.
+  // Fallback ke URL GAS terbaru jika env var GAS_DRIVE_UPLOAD_URL belum diset di Vercel.
   if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
-    const driveUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbzrAA20sJ_U0RtzoCEElKUusHJJQm8K-I83R0Ckyxru9F1H-UW9r31Cc9YATp66tKGSRQ/exec';
-    if (driveUrl) {
-      targetUrl = driveUrl;
-    } else {
-      return res.status(500).json({ error: 'Konfigurasi server tidak lengkap: GAS_DRIVE_UPLOAD_URL belum diset.' });
-    }
+    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbzrAA20sJ_U0RtzoCEElKUusHJJQm8K-I83R0Ckyxru9F1H-UW9r31Cc9YATp66tKGSRQ/exec';
   }
 
   // WAJIB diset lewat env var Vercel -- TIDAK ADA LAGI fallback ke nilai default (2026-09-15,
@@ -163,10 +159,19 @@ export default async function handler(req, res) {
   }
   payloadObj._secret = secretToken;
 
-  // simpanDataKeSheet/editDataPenerima/mintaUrlUploadBerkas/konfirmasiUploadBerkas dan operasi berkas
-  // memiliki payload atau proses multi-tahap. Timeout dilonggarkan menjadi 50 detik (mendekati
-  // maxDuration Vercel: 60s). Operasi umum lainnya dinaikkan menjadi 45 detik agar cold-start
-  // Deno isolate di Supabase tidak pernah terputus prematur di 20 detik.
+  // Timeout bertingkat per kategori aksi (2026-09-17):
+  //   REALTIME_CHECK (15s): cek cepat saat user mengetik — gagal cepat lebih baik dari tunggu lama
+  //   VALIDASI (25s): validasiDataBaru — beberapa query paralel, butuh ruang lebih
+  //   UPLOAD/SIMPAN (50s): payload besar + multi-step, mendekati maxDuration Vercel 60s
+  //   DEFAULT (30s): aksi umum — lebih pendek dari 45s lama agar Vercel tidak selalu yang timeout lebih dulu
+  const REALTIME_CHECK_ACTIONS = new Set([
+    'cekNikRealtime',
+    'cekRekeningRealtime',
+    'cekKuotaRealtime',
+    'cekTempatTugasGandaRealtime',
+    'cekKuotaTersedia',
+    'ping',
+  ]);
   const UPLOAD_ACTIONS = new Set([
     'simpanDataKeSheet',
     'editDataPenerima',
@@ -174,10 +179,18 @@ export default async function handler(req, res) {
     'mintaUrlUploadBerkas',
     'konfirmasiUploadBerkas',
     'uploadSatuBerkasKeDrive',
-    'uploadSemuaBerkasKeDrive'
+    'uploadSemuaBerkasKeDrive',
   ]);
-  const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
-  const timeoutMs = isUploadAction ? 50000 : 45000;
+  let timeoutMs;
+  if (REALTIME_CHECK_ACTIONS.has(payloadObj.action)) {
+    timeoutMs = 15000; // Fail fast — cek realtime tidak boleh block UI >15 detik
+  } else if (payloadObj.action === 'validasiDataBaru') {
+    timeoutMs = 25000; // Beberapa query paralel + kuota check
+  } else if (UPLOAD_ACTIONS.has(payloadObj.action)) {
+    timeoutMs = 50000; // Upload/simpan: payload besar, mendekati batas Vercel 60s
+  } else {
+    timeoutMs = 30000; // Default: 30s (lebih pendek dari 45s lama)
+  }
 
   const anonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ';
 
@@ -218,7 +231,7 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
   } catch (err) {
     const backendName = targetUrl.includes('script.google.com') ? 'Google Drive Microservice (Apps Script)' : 'Supabase Edge Function';
-    console.error(`Vercel Proxy Error for action [${payloadObj.action}] (${backendName}):`, err);
+    console.error(`Vercel Proxy Error for action [${payloadObj.action}] timeout=${timeoutMs}ms (${backendName}):`, err.message);
 
     // Bedakan antara respon bukan JSON (parse error) vs kesalahan jaringan/timeout
     if (err instanceof SyntaxError) {
@@ -232,11 +245,17 @@ export default async function handler(req, res) {
 
     const causeStr = err.cause ? ` (Penyebab: ${err.cause.message || err.cause.code || String(err.cause)})` : '';
     const errString = err instanceof Error ? err.message : String(err);
+    // Deteksi khusus timeout agar pesan error lebih informatif di frontend
+    const isTimeout = errString.includes('Batas waktu') || errString.includes('timeout') || errString.includes('abort');
+    const pesanUser = isTimeout
+      ? `Terjadi kesalahan koneksi antara server Vercel dan ${backendName}. Detail: ${errString}${causeStr}`
+      : `Terjadi kesalahan koneksi antara server Vercel dan ${backendName}. Detail: ${errString}${causeStr}`;
     return res.status(500).json({
-      error: `Terjadi kesalahan koneksi antara server Vercel dan ${backendName}. Detail: ${errString}${causeStr}`,
+      error: pesanUser,
       action: payloadObj.action,
       details: errString,
       cause: causeStr,
+      timeoutMs,
       usedUrl: targetUrl
     });
   }
