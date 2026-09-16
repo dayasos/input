@@ -673,26 +673,26 @@ function tampilkanModalUpdate() {
 
       google.script.run
         .withSuccessHandler(function (res) {
-        if (res && res.sukses) {
-          let pesanSukses = "Sakelar berhasil diubah. Perubahan langsung berlaku untuk user yang login berikutnya.";
-          if (res.cleanup > 0) {
-            pesanSukses += " Auto-cleanup: " + res.cleanup + " sakelar khusus yang jadi redundant telah dihapus.";
+          if (res && res.sukses) {
+            let pesanSukses = "Sakelar berhasil diubah. Perubahan langsung berlaku untuk user yang login berikutnya.";
+            if (res.cleanup > 0) {
+              pesanSukses += " Auto-cleanup: " + res.cleanup + " sakelar khusus yang jadi redundant telah dihapus.";
+            }
+            tampilPesanSakelar(pesanSukses, true);
+            setTimeout(function () {
+              muatStatusSakelar();
+              inputDitutupGlobal = res.ditutup;
+            }, 500);
+          } else {
+            tampilPesanSakelar(res ? res.pesan : "Gagal mengubah sakelar.", false);
+            if (btn) { btn.disabled = false; muatStatusSakelar(); }
           }
-          tampilPesanSakelar(pesanSukses, true);
-          setTimeout(function () {
-            muatStatusSakelar();
-            inputDitutupGlobal = res.ditutup;
-          }, 500);
-        } else {
-          tampilPesanSakelar(res ? res.pesan : "Gagal mengubah sakelar.", false);
+        })
+        .withFailureHandler(function (err) {
+          tampilPesanSakelar("Error: " + (err && err.message ? err.message : err), false);
           if (btn) { btn.disabled = false; muatStatusSakelar(); }
-        }
-      })
-      .withFailureHandler(function (err) {
-        tampilPesanSakelar("Error: " + (err && err.message ? err.message : err), false);
-        if (btn) { btn.disabled = false; muatStatusSakelar(); }
-      })
-      .setInputKecKem(dataPengguna.token, buka);
+        })
+        .setInputKecKem(dataPengguna.token, buka);
     });
   }
 })();
@@ -893,18 +893,18 @@ function tampilkanModalUpdate() {
     }).then(function (setuju) {
       if (!setuju) return;
       if (aksi === "RESET") {
-      google.script.run
-        .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
-        .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
-        .resetSakelarUserByAdmin(dataPengguna.token, userId);
-    } else {
-      google.script.run
-        .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
-        .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
-        .setSakelarUserByAdmin(dataPengguna.token, userId, aksi === "BUKA");
-    }
-  });
-}
+        google.script.run
+          .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
+          .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
+          .resetSakelarUserByAdmin(dataPengguna.token, userId);
+      } else {
+        google.script.run
+          .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
+          .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
+          .setSakelarUserByAdmin(dataPengguna.token, userId, aksi === "BUKA");
+      }
+    });
+  }
 
   function hasilAksiPerUser(res) {
     if (res && res.sukses) {
@@ -1022,31 +1022,31 @@ function tampilkanModalUpdate() {
       document.getElementById('bk-eksekusi').disabled = true;
       document.getElementById('bk-eksekusi').textContent = "Memproses...";
 
-    google.script.run
-      .withSuccessHandler(function (res) {
-        document.getElementById('bk-eksekusi').textContent = "Eksekusi";
-        const pesan = document.getElementById('bk-pesan');
-        if (res && res.sukses) {
-          pesan.textContent = "✅ " + res.pesan;
-          pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-700";
-          pesan.classList.remove('hidden');
-          setTimeout(function () {
-            document.getElementById('modal-bulk-kecamatan').classList.add('hidden');
-            bukaModalKelolaUser(); // reload daftar user
-          }, 1500);
-        } else {
-          pesan.textContent = "❌ " + (res ? res.pesan : "Unknown error");
-          pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700";
-          pesan.classList.remove('hidden');
+      google.script.run
+        .withSuccessHandler(function (res) {
+          document.getElementById('bk-eksekusi').textContent = "Eksekusi";
+          const pesan = document.getElementById('bk-pesan');
+          if (res && res.sukses) {
+            pesan.textContent = "✅ " + res.pesan;
+            pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-700";
+            pesan.classList.remove('hidden');
+            setTimeout(function () {
+              document.getElementById('modal-bulk-kecamatan').classList.add('hidden');
+              bukaModalKelolaUser(); // reload daftar user
+            }, 1500);
+          } else {
+            pesan.textContent = "❌ " + (res ? res.pesan : "Unknown error");
+            pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700";
+            pesan.classList.remove('hidden');
+            document.getElementById('bk-eksekusi').disabled = false;
+          }
+        })
+        .withFailureHandler(function (err) {
+          document.getElementById('bk-eksekusi').textContent = "Eksekusi";
           document.getElementById('bk-eksekusi').disabled = false;
-        }
-      })
-      .withFailureHandler(function (err) {
-        document.getElementById('bk-eksekusi').textContent = "Eksekusi";
-        document.getElementById('bk-eksekusi').disabled = false;
-        tampilkanToast(pesanErrorRamah(err), "gagal");
-      })
-      .bulkSakelarPerKecamatan(dataPengguna.token, kec, bkAksiTerpilih);
+          tampilkanToast(pesanErrorRamah(err), "gagal");
+        })
+        .bulkSakelarPerKecamatan(dataPengguna.token, kec, bkAksiTerpilih);
     });
   });
 
@@ -1377,7 +1377,7 @@ function masukSetelahAuth(res, usernameFallback) {
           try {
             const raw = localStorage.getItem('cache_kel_' + nilaiKecamatan);
             if (raw) tersimpan = JSON.parse(raw);
-          } catch (e) {}
+          } catch (e) { }
         }
         if (tersimpan && tersimpan.data && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
           cacheKelurahanByKecamatan[nilaiKecamatan] = tersimpan;
@@ -1391,7 +1391,7 @@ function masukSetelahAuth(res, usernameFallback) {
           .withSuccessHandler(function (daftarKelurahan) {
             const entri = { data: daftarKelurahan, waktu: Date.now() };
             cacheKelurahanByKecamatan[nilaiKecamatan] = entri;
-            try { localStorage.setItem('cache_kel_' + nilaiKecamatan, JSON.stringify(entri)); } catch (e) {}
+            try { localStorage.setItem('cache_kel_' + nilaiKecamatan, JSON.stringify(entri)); } catch (e) { }
             isiDropdownKelurahan(daftarKelurahan);
           })
           .withFailureHandler(function (error) {
@@ -2093,18 +2093,18 @@ function konfirmasiHapusUser(username) {
 
     google.script.run
       .withSuccessHandler(function (res) {
-      if (res && res.sukses) {
-        tampilkanToast(res.pesan, 'sukses');
-        muatDaftarUserLengkap();
-        muatDaftarUser();
-      } else {
-        tampilkanToast(res ? res.pesan : 'Gagal menghapus user.', 'gagal');
-      }
-    })
-    .withFailureHandler(function (err) {
-      tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
-    })
-    .hapusUser(dataPengguna.token, username);
+        if (res && res.sukses) {
+          tampilkanToast(res.pesan, 'sukses');
+          muatDaftarUserLengkap();
+          muatDaftarUser();
+        } else {
+          tampilkanToast(res ? res.pesan : 'Gagal menghapus user.', 'gagal');
+        }
+      })
+      .withFailureHandler(function (err) {
+        tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
+      })
+      .hapusUser(dataPengguna.token, username);
   });
 }
 
