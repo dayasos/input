@@ -843,7 +843,8 @@
                 <th class="px-3 py-2 text-center">Aksi</th>
               </tr>
             </thead>
-            <tbody id="tools-body-tabel-batch" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white"></tbody>
+            <tbody id="tools-body-tabel-batch" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
+            </tbody>
           </table>
         </div>
       </div>
@@ -3870,22 +3871,45 @@
         document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(20, 5);
         document.getElementById('info-total-data-detail').innerText = '';
         document.getElementById('modal-data-detail').classList.remove('hidden');
+        muatDataDetail(true);
+      };
+
+      // Dipisah dari tampilkanDataDetail supaya bisa dipanggil ulang utk retry otomatis.
+      // Server Supabase kadang butuh beberapa detik utk "bangun" kalau instance-nya sempat idle
+      // (cold start) -- terpisah dari kode Data Detail sendiri yang sudah cepat (query terukur
+      // <150ms), TAPI dari sisi user tetap terasa seperti "macet" kalau tidak diberi tahu.
+      // `bolehCobaLagi` membatasi retry maksimal 1x supaya tidak berulang tanpa henti kalau
+      // memang ada masalah lain yang lebih permanen.
+      function muatDataDetail(bolehCobaLagi) {
+        const info = document.getElementById('info-total-data-detail');
+        const timerPenenang = setTimeout(function () {
+          if (info) info.innerText = 'Server sedang bersiap, mohon tunggu sebentar lagi...';
+        }, 4000);
 
         google.script.run
           .withSuccessHandler(function (res) {
+            clearTimeout(timerPenenang);
             if (!res || !res.sukses) {
               document.getElementById('body-tabel-data-detail').innerHTML =
                 '<tr><td colspan="20" class="px-4 py-6 text-center text-red-500">' + esc(res ? res.pesan : 'Gagal memuat data') + '</td></tr>';
+              if (info) info.innerText = '';
               return;
             }
             renderTabelDataDetail(res.rows);
           })
           .withFailureHandler(function (err) {
+            clearTimeout(timerPenenang);
+            if (bolehCobaLagi) {
+              if (info) info.innerText = 'Sempat gagal terhubung, mencoba lagi...';
+              muatDataDetail(false);
+              return;
+            }
             document.getElementById('body-tabel-data-detail').innerHTML =
               '<tr><td colspan="20" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
+            if (info) info.innerText = '';
           })
           .ambilDataDetail(dataPengguna.token);
-      };
+      }
 
       function renderTabelDataDetail(rows) {
         const tbody = document.getElementById('body-tabel-data-detail');
