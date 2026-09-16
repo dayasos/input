@@ -1101,7 +1101,7 @@ function inisialisasiMenuLihatData() {
             return;
           }
           membangunOpsiFilter(masterDataLihat);
-          halamanSekarang = 1;
+          // halamanSekarang = 1; // DIHAPUS: Agar pengguna tidak kembali ke halaman 1 saat SWR refresh di background
           saringDanTampilkanTabel();
           setupPencarianRealtime();
         } else { tampilkanToast("Gagal memuat data: " + (response ? response.pesan : "Error JSON"), "gagal"); }
@@ -2127,9 +2127,19 @@ function halamanBerikutnya() {
             btnEdit.classList.remove('hidden');
             // Reload detail dari server agar data segar
             ambilDanTampilkanDetail(nomorBarisAktif);
-            // Lihat Data & Rekap
+            
+            // OPTIMISTIC UPDATE: Update data lokal di masterDataLihat agar tabel instan berubah
+            const barisTarget = masterDataLihat.find(function(r) { return r[0] == nomorBarisAktif; });
+            if (barisTarget) {
+              Object.keys(teks).forEach(function(i) { barisTarget[Number(i)] = teks[i]; });
+              saringDanTampilkanTabel(); // Render seketika 0ms
+            }
+            
+            // Invalidate cache saja, fetch ulang akan terjadi secara asinkron di belakang 
+            // layar saat inisialisasiMenuLihatData dipanggil (SWR)
             invalidateCacheDataTransaksi();
-            if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
+            // Panggil inisialisasi secara silent tanpa skeleton loader jika memungkinkan
+            if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData(true);
           } else {
             tampilkanToast(res ? res.pesan : "Gagal menyimpan.", "gagal", { durasi: 6000 });
           }
@@ -2207,11 +2217,11 @@ function halamanBerikutnya() {
           btnBatal.classList.add('hidden');
           renderBaca(dataAktif);
         } catch (err) {
-          isiKonten.innerHTML = `<p class="text-red-500 text-sm">Error render: ${err.message}</p>`;
+          isiKonten.innerHTML = `<p class="text-red-500 text-sm">Error render: ${esc(err.message)}</p>`;
         }
       })
       .withFailureHandler(function (err) {
-        isiKonten.innerHTML = `<p class="text-red-500 text-sm">Error server: ${err.message}</p>`;
+        isiKonten.innerHTML = `<p class="text-red-500 text-sm">Error server: ${esc(err.message)}</p>`;
       })
       .ambilDetailPenerimaPerBaris(dataPengguna.token, nomorBaris);
   }
@@ -2368,7 +2378,7 @@ document.getElementById('btn-verifikasi-massal').addEventListener('click', funct
         }
         saringDanTampilkanTabel();
         invalidateCacheDataTransaksi();
-        inisialisasiMenuLihatData(); // sinkronkan dengan data resmi server
+        inisialisasiMenuLihatData(true); // sinkronkan dengan data resmi server secara silent
       })
       .withFailureHandler(function (err) {
         pulihkanTombol(btn);
