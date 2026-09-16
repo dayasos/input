@@ -38,10 +38,19 @@ export default async function handler(req, res) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new Error('Batas waktu permintaan ke Supabase terlampaui (25 detik)')), 25000);
 
+  const anonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ';
+  const requestHeaders = {
+    'Content-Type': 'application/json'
+  };
+  if (supabaseUrl.includes('supabase.co')) {
+    requestHeaders['apikey'] = anonKey;
+    requestHeaders['Authorization'] = `Bearer ${anonKey}`;
+  }
+
   try {
     const response = await fetch(supabaseUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders,
       body: JSON.stringify({
         action: 'cekBatasWaktuVerifikasi',
         args: [],

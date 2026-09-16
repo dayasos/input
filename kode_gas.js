@@ -274,13 +274,35 @@ const MIME_BERKAS_DIIZINKAN = [
     'application/pdf'
 ];
 
+function resolusikanMimeBerkas_(berkas) {
+    if (!berkas) return 'application/octet-stream';
+    let mime = (berkas.mimeType || '').toString().trim().toLowerCase().split(';')[0];
+    if (MIME_BERKAS_DIIZINKAN.indexOf(mime) !== -1) return mime;
+
+    // Fallback deteksi dari ekstensi nama file (kamera mobile & beberapa browser mengirim application/octet-stream)
+    const nama = (berkas.namaFile || '').toString().toLowerCase();
+    if (nama.endsWith('.jpg') || nama.endsWith('.jpeg')) return 'image/jpeg';
+    if (nama.endsWith('.png')) return 'image/png';
+    if (nama.endsWith('.webp')) return 'image/webp';
+    if (nama.endsWith('.pdf')) return 'application/pdf';
+    if (nama.endsWith('.heic') || nama.endsWith('.heif')) return 'image/heic';
+    if (nama.endsWith('.bmp')) return 'image/bmp';
+    if (nama.endsWith('.gif')) return 'image/gif';
+
+    return mime || 'application/octet-stream';
+}
+
 function blobDariBerkas_(berkas) {
     try {
         if (!berkas || !berkas.dataBase64) return null;
-        const bytes = Utilities.base64Decode(berkas.dataBase64);
+        let base64Clean = berkas.dataBase64;
+        if (base64Clean.indexOf(',') !== -1) {
+            base64Clean = base64Clean.substring(base64Clean.indexOf(',') + 1);
+        }
+        const bytes = Utilities.base64Decode(base64Clean);
         if (bytes.length === 0 || bytes.length > MAKS_BYTE_PER_BERKAS) return null;
 
-        const mime = (berkas.mimeType || 'application/octet-stream').toString().trim().toLowerCase();
+        const mime = resolusikanMimeBerkas_(berkas);
         if (MIME_BERKAS_DIIZINKAN.indexOf(mime) === -1) return null;
 
         const nama = berkas.namaFile || 'berkas';
@@ -293,7 +315,7 @@ function blobDariBerkas_(berkas) {
 function validasiBerkasSebelumUpload_(berkas, labelField) {
     if (!berkas || !berkas.dataBase64) return null;
     const namaTampil = berkas.namaFile || 'tanpa nama';
-    const mime = (berkas.mimeType || '').toString().trim().toLowerCase();
+    const mime = resolusikanMimeBerkas_(berkas);
     if (MIME_BERKAS_DIIZINKAN.indexOf(mime) === -1) {
         return 'Berkas "' + labelField + '" (' + namaTampil + ') memakai format file yang tidak didukung' +
             (mime ? ' (' + mime + ')' : '') + '. Gunakan JPG, PNG, WEBP, HEIC, atau PDF.';
