@@ -125,8 +125,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 3. Gunakan URL yang telah disanitasi
-  const targetUrl = sanitizedTargetUrl;
+  // 3. Gunakan URL yang telah disanitasi (default)
+  let targetUrl = sanitizedTargetUrl;
 
   // 4. Siapkan payload dan injeksi Secret Token
   let payloadObj = {};
@@ -140,6 +140,16 @@ export default async function handler(req, res) {
 
   if (!payloadObj || typeof payloadObj !== 'object' || Array.isArray(payloadObj)) {
     payloadObj = {};
+  }
+
+  // Routing khusus untuk upload ke Google Drive
+  if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
+    const driveUrl = process.env.GAS_DRIVE_UPLOAD_URL;
+    if (driveUrl) {
+      targetUrl = driveUrl;
+    } else {
+      return res.status(500).json({ error: 'Konfigurasi server tidak lengkap: GAS_DRIVE_UPLOAD_URL belum diset.' });
+    }
   }
 
   // WAJIB diset lewat env var Vercel -- TIDAK ADA LAGI fallback ke nilai default (2026-09-15,
@@ -163,6 +173,8 @@ export default async function handler(req, res) {
     'uploadSemuaBerkasKeSupabase',
     'mintaUrlUploadBerkas',
     'konfirmasiUploadBerkas',
+    'uploadSatuBerkasKeDrive',
+    'uploadSemuaBerkasKeDrive'
   ]);
   const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
   const timeoutMs = isUploadAction ? 50000 : 45000;

@@ -338,10 +338,20 @@ async function bacaFileTerkompresi(inputEl) {
   } catch (eKompres) {
   }
 
-  const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas -- sama dgn batas bucket Storage
+  const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas
   if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
 
-  return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', file: file };
+  const base64Data = await new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const res = reader.result;
+      resolve(res.substring(res.indexOf(',') + 1));
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', dataBase64: base64Data };
 }
 
 function panggilAksiPromise(namaAksi) {
@@ -356,32 +366,19 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const kunciList = Object.keys(berkasMap);
   if (kunciList.length === 0) return { sukses: true, link: {} };
 
-  const daftarFileInfo = {};
-  kunciList.forEach(function (k) {
-    const item = berkasMap[k];
-    daftarFileInfo[k] = { namaFile: item.namaFile, mimeType: item.mimeType, label: item.label };
-  });
-
-  const hasilMint = await panggilAksiPromise('mintaUrlUploadBerkas', dataPengguna.token, konteks, daftarFileInfo);
-  if (!hasilMint || !hasilMint.sukses) {
-    return { sukses: false, pesan: hasilMint ? hasilMint.pesan : 'Gagal menyiapkan upload.' };
-  }
-
+  // Unggah satu per satu secara paralel (chunking) ke GAS via Vercel proxy
+  // Ini menghindari error batas 4.5 MB dari Vercel
   const hasilTiapPut = await Promise.all(kunciList.map(async function (k) {
-    const info = hasilMint.daftarUrl[k];
     const item = berkasMap[k];
-    if (!info) return { k: k, gagal: null };
+    const mapKecil = {};
+    mapKecil[k] = item; // Hanya satu file
 
     try {
-      const resPut = await fetch(info.uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': item.mimeType || 'application/octet-stream' },
-        body: item.file,
-      });
-      if (!resPut.ok) {
-        return { k: k, gagal: 'Gagal mengunggah "' + (item.label || k) + '" (status ' + resPut.status + ').' };
+      const res = await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, mapKecil);
+      if (!res || !res.sukses) {
+        return { k: k, gagal: res ? res.pesan : 'Gagal mengunggah "' + (item.label || k) + '".' };
       }
-      return { k: k, path: info.path, gagal: null };
+      return { k: k, linkDrive: res.link[k], gagal: null };
     } catch (eNet) {
       return { k: k, gagal: 'Gagal mengunggah "' + (item.label || k) + '": kendala jaringan. Coba lagi.' };
     }
@@ -392,11 +389,10 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     return { sukses: false, pesan: gagalPertama.gagal };
   }
 
-  const daftarPath = {};
-  hasilTiapPut.forEach(function (r) { if (r.path) daftarPath[r.k] = r.path; });
+  const daftarLink = {};
+  hasilTiapPut.forEach(function (r) { if (r.linkDrive) daftarLink[r.k] = r.linkDrive; });
 
-  const hasilKonfirmasi = await panggilAksiPromise('konfirmasiUploadBerkas', dataPengguna.token, hasilMint.prefix, daftarPath);
-  return hasilKonfirmasi || { sukses: false, pesan: 'Tidak ada respons saat konfirmasi upload.' };
+  return { sukses: true, link: daftarLink };
 }
 
 async function kumpulkanDataForm() {
@@ -433,16 +429,17 @@ async function kumpulkanDataForm() {
   };
 
   const berkas = {};
-  for (const nm of namaFileInput) {
+  await Promise.all(namaFileInput.map(async function (nm) {
+    if (!nm) return;
     const el = fileEl(nm);
-    // Lewati input yang tersembunyi (wrapper .hidden) — tidak dipakai utk layanan ini.
+    // Lewati input yang tersembunyi (wrapper .hidden)
     const wrapperHidden = el && el.closest('.hidden');
     if (el && !wrapperHidden) {
       berkas[nm] = await bacaFileTerkompresi(el);
     } else {
       berkas[nm] = null;
     }
-  }
+  }));
   data.__berkas = berkas;
   return data;
 }
@@ -475,7 +472,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
   }
 
   const berkasMentah = dataObjek.__berkas || {};
-  const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].file; });
+  const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].dataBase64; });
 
   if (!adaBerkas) {
     loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
@@ -488,8 +485,8 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
   const berkasUntukUpload = {};
   Object.keys(berkasMentah).forEach(function (k) {
     const item = berkasMentah[k];
-    if (item && item.file) {
-      berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, label: label[k] || k };
+    if (item && item.dataBase64) {
+      berkasUntukUpload[k] = { dataBase64: item.dataBase64, namaFile: item.namaFile, mimeType: item.mimeType, label: label[k] || k };
     }
   });
 
