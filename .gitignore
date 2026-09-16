@@ -3,22 +3,29 @@
 Thumbs.db
 ehthumbs.db
 
-# Vercel
-.vercel
+# Vercel & Deployment metadata
+.vercel/
 
-# Node
+# Dependencies & Build Output
 node_modules/
-
-# Hasil build Vite (dibuat otomatis saat `vercel deploy`, bukan sumber)
 dist/
 
 # Logs
 *.log
 
-# Environment Variables — JANGAN PERNAH diupload ke GitHub!
+# Environment Variables & Secrets — JANGAN PERNAH DI-UPLOAD KE GITHUB!
 .env
+.env*
 .env.local
 .env.production
+.env.development
 
-.vercel
-.env*
+# Local Editor / Agent Secret Settings
+.claude/settings.local.json
+.vscode/*.local.json
+
+# Supabase Local Temp & Cache
+supabase/.temp/
+
+# Arsip Lokal / Scratch
+archive/

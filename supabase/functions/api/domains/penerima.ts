@@ -452,14 +452,9 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
           ${linkRekomendasiBkm}, ${linkRekomendasiRi},
           ${idFolderBerkas}, ${koordinatLink},
           'Proses Verifikasi', ${catatanPerbedaanNama},
-          ${sesi.akunId}, 'PENDING'
+          ${sesi.akunId}, 'BERHASIL'
         )
         returning id
-      `;
-      const idBaru = rows[0].id;
-      await trx`
-        insert into sync_outbox (jenis_operasi, sheet_tujuan, entity_ref, payload)
-        values ('INSERT_PENERIMA', ${"Data Input " + TAHUN_AKTIF}, ${sql.json({ tabel: "penerima", id: idBaru, tahun: TAHUN_AKTIF })}, '{}'::jsonb)
       `;
     });
 
@@ -688,19 +683,11 @@ export async function editDataPenerima(
     const setParts = setCols.map((col, i) => `${col} = $${i + 1}`).join(", ");
     const whereIdx = setCols.length + 1;
 
-    // UPDATE + enqueue sinkronisasi ke Sheets, SATU transaksi (sama pola dengan simpanDataKeSheet —
-    // payload outbox kosong, sync-worker baca ulang baris fresh saat diproses).
-    // deno-lint-ignore no-explicit-any
-    await sql.begin(async (trx: any) => {
-      await trx.unsafe(
-        `update penerima set ${setParts} where id = $${whereIdx} and tahun = $${whereIdx + 1}`,
-        [...setVals, id, TAHUN_AKTIF],
-      );
-      await trx`
-        insert into sync_outbox (jenis_operasi, sheet_tujuan, entity_ref, payload)
-        values ('UPDATE_PENERIMA', ${"Data Input " + TAHUN_AKTIF}, ${sql.json({ tabel: "penerima", id, tahun: TAHUN_AKTIF })}, '{}'::jsonb)
-      `;
-    });
+    // UPDATE data penerima secara langsung di Postgres
+    await sql.unsafe(
+      `update penerima set ${setParts} where id = $${whereIdx} and tahun = $${whereIdx + 1}`,
+      [...setVals, id, TAHUN_AKTIF],
+    );
 
     // ── Catat riwayat edit (port catatRiwayatEdit_ Kode.gs baris 3129-3146) ──
     if (riwayat.length > 0) {

@@ -4,7 +4,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check-lines": "node scripts/verify-lines.js"
   },
   "devDependencies": {
     "googleapis": "^178.0.0",

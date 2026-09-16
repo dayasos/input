@@ -89,6 +89,10 @@ import {
 } from "./domains/setelan.ts";
 import {
   ambilDaftarAkun,
+  ambilDaftarAkunLengkap,
+  tambahUserBaru,
+  ubahDataUserOlehAdmin,
+  hapusUser,
   resetPasswordUser,
   simpanProfilUser,
   ubahAkunSendiri,
@@ -143,6 +147,10 @@ const ALLOWED: Record<string, Handler> = {
   bulkSakelarPerKecamatan,
   ubahAkunSendiri,
   ambilDaftarAkun,
+  ambilDaftarAkunLengkap,
+  tambahUserBaru,
+  ubahDataUserOlehAdmin,
+  hapusUser,
   resetPasswordUser,
   simpanProfilUser,
   ubahProfilUser,
@@ -209,14 +217,15 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Verifikasi Keamanan (Shared Secret Token dari Vercel) - pola sama seperti doPost() di Kode.gs.
-  // WAJIB diset lewat `supabase secrets set` -- TIDAK ADA LAGI fallback ke nilai default yang
-  // tertulis di kode (2026-09-15: nilai default itu ketahuan masih dipakai di produksi, celah
-  // keamanan nyata karena siapa pun yang baca source code tahu nilainya). `!expectedSecret` WAJIB
-  // dicek eksplisit -- tanpa ini, secret kosong di kedua sisi (env var lupa diset DAN body._secret
-  // tidak dikirim) akan lolos begitu saja lewat `undefined !== undefined`.
+  // Verifikasi Keamanan (Shared Secret Token dari Vercel / Worker Secret Internal).
+  // WAJIB diset lewat `supabase secrets set` (GAS_SECRET_TOKEN atau SYNC_WORKER_SECRET).
   const expectedSecret = Deno.env.get("GAS_SECRET_TOKEN");
-  if (!expectedSecret || body._secret !== expectedSecret) {
+  const syncSecret = Deno.env.get("SYNC_WORKER_SECRET");
+  const isValidSecret =
+    (Boolean(expectedSecret) && body._secret === expectedSecret) ||
+    (Boolean(syncSecret) && body._secret === syncSecret);
+
+  if (!isValidSecret) {
     return json({
       error: "Akses Ditolak: Kredensial API tidak sah",
       sukses: false,

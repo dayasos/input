@@ -1,6 +1,7 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
 import { hashString } from "../_shared/hash.ts";
+import { formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
 
 // Port 1:1 dari ubahAkunSendiri() (Kode.gs baris 2246-2365) — user ganti username/password sendiri.
 export async function ubahAkunSendiri(
@@ -252,3 +253,199 @@ export async function ubahProfilUser(token: string, usernameTarget: string, nama
 
   return await simpanProfilKeAkun(sesi, target, nama, hp, jbt);
 }
+
+// ============================================================================
+// CRUD PENGGUNA PENUH (USER MANAGEMENT BY ROLE) - KHUSUS ROLE UTAMA
+// Memungkinkan penambahan, pengubahan, dan penghapusan pengguna langsung dari UI
+// ============================================================================
+
+interface UserBaruInput {
+  username: string;
+  password: string;
+  role: string;
+  kecamatan?: string;
+  namaLengkap?: string;
+  nomorHp?: string;
+  jabatan?: string;
+}
+
+export async function tambahUserBaru(token: string, userObj: UserBaruInput) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
+    return { sukses: false, pesan: "Hanya admin utama yang berhak menambah pengguna baru." };
+  }
+
+  const uName = String(userObj?.username || "").trim();
+  const pass = String(userObj?.password || "").trim();
+  const role = String(userObj?.role || "").trim().toUpperCase();
+  const kec = String(userObj?.kecamatan || "").trim().toUpperCase();
+  const nama = String(userObj?.namaLengkap || "").trim().toUpperCase();
+  const hp = bersihkanNomorHp(userObj?.nomorHp || "");
+  const jbt = String(userObj?.jabatan || "").trim().toUpperCase();
+
+  if (!uName || uName.length < 4) {
+    return { sukses: false, pesan: "Username minimal 4 karakter." };
+  }
+  if (!/^[A-Za-z0-9_]+$/.test(uName)) {
+    return { sukses: false, pesan: "Username hanya boleh huruf, angka, dan underscore (_)." };
+  }
+  if (!pass || pass.length < 6) {
+    return { sukses: false, pesan: "Password minimal 6 karakter." };
+  }
+  if (!/[A-Za-z]/.test(pass) || !/[0-9]/.test(pass)) {
+    return { sukses: false, pesan: "Password harus memuat kombinasi huruf dan angka." };
+  }
+  if (!role) {
+    return { sukses: false, pesan: "Role pengguna wajib dipilih." };
+  }
+  if (role === "KECAMATAN" && !kec) {
+    return { sukses: false, pesan: "Wilayah kecamatan wajib dipilih untuk akun role Kecamatan." };
+  }
+
+  try {
+    const existing = await sql`select id from akun where lower(username) = lower(${uName}) limit 1`;
+    if (existing.length > 0) {
+      return { sukses: false, pesan: `Username "${uName}" sudah digunakan oleh akun lain.` };
+    }
+
+    const hash = await hashString(pass);
+    await sql`
+      insert into akun (username, password_hash, role, kecamatan, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at, diperbarui_at)
+      values (${uName}, ${hash}, ${role}, ${kec || null}, ${nama || null}, ${hp || null}, ${jbt || null}, true, now(), now())
+    `;
+
+    return { sukses: true, pesan: `Pengguna "${uName}" (${role}) berhasil ditambahkan.` };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal menambah user: " + String(err) };
+  }
+}
+
+export async function ambilDaftarAkunLengkap(token: string) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
+    return { sukses: false, pesan: "Hanya admin utama yang berwenang melihat daftar akun lengkap." };
+  }
+
+  try {
+    const rows = await sql`
+      select id, username, role, kecamatan, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at
+      from akun
+      order by role asc, kecamatan asc, username asc
+    `;
+
+    const daftar = rows.map((r: Record<string, unknown>) => ({
+      id: r.id,
+      username: String(r.username || ""),
+      role: (r.role || "").toString().trim().toUpperCase(),
+      kecamatan: (r.kecamatan || "").toString().trim().toUpperCase(),
+      namaLengkap: String(r.nama_lengkap || ""),
+      nomorHp: String(r.nomor_hp || ""),
+      jabatan: String(r.jabatan || ""),
+      aktif: r.aktif !== false,
+      dibuatAt: r.dibuat_at ? formatTanggalWaktuWIB(r.dibuat_at as string) : "-",
+    }));
+
+    return { sukses: true, daftar };
+  } catch (error) {
+    return { sukses: false, pesan: "Gagal memuat daftar akun: " + String(error) };
+  }
+}
+
+export async function ubahDataUserOlehAdmin(
+  token: string,
+  usernameTarget: string,
+  dataEdit: {
+    role?: string;
+    kecamatan?: string;
+    namaLengkap?: string;
+    nomorHp?: string;
+    jabatan?: string;
+  }
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
+    return { sukses: false, pesan: "Hanya admin utama yang berwenang mengubah akun." };
+  }
+
+  const target = String(usernameTarget || "").trim();
+  if (!target) return { sukses: false, pesan: "Target username tidak valid." };
+
+  const role = dataEdit.role ? String(dataEdit.role).trim().toUpperCase() : null;
+  const kec = dataEdit.kecamatan ? String(dataEdit.kecamatan).trim().toUpperCase() : null;
+  const nama = dataEdit.namaLengkap ? String(dataEdit.namaLengkap).trim().toUpperCase() : null;
+  const hp = dataEdit.nomorHp ? bersihkanNomorHp(dataEdit.nomorHp) : null;
+  const jbt = dataEdit.jabatan ? String(dataEdit.jabatan).trim().toUpperCase() : null;
+
+  try {
+    const existing = await sql`select id, role, kecamatan from akun where username = ${target} limit 1`;
+    if (existing.length === 0) return { sukses: false, pesan: `Akun "${target}" tidak ditemukan.` };
+
+    await sql`
+      update akun set
+        role = coalesce(${role}, role),
+        kecamatan = ${kec !== null ? (kec || null) : existing[0].kecamatan},
+        nama_lengkap = coalesce(${nama}, nama_lengkap),
+        nomor_hp = coalesce(${hp}, nomor_hp),
+        jabatan = coalesce(${jbt}, jabatan),
+        diperbarui_at = now()
+      where username = ${target}
+    `;
+
+    return { sukses: true, pesan: `Data pengguna "${target}" berhasil diperbarui.` };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal memperbarui data user: " + String(err) };
+  }
+}
+
+export async function hapusUser(token: string, usernameTarget: string) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
+    return { sukses: false, pesan: "Hanya admin utama yang berwenang menghapus akun." };
+  }
+
+  const target = String(usernameTarget || "").trim();
+  if (!target) return { sukses: false, pesan: "Target username tidak valid." };
+
+  // Anti self-lockout: tidak boleh menghapus akun yang sedang dipakai
+  if (sesi.username.toLowerCase() === target.toLowerCase()) {
+    return { sukses: false, pesan: "Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif." };
+  }
+
+  try {
+    const existing = await sql`select id from akun where username = ${target} limit 1`;
+    if (existing.length === 0) return { sukses: false, pesan: `Akun "${target}" tidak ditemukan.` };
+
+    const akunId = existing[0].id;
+
+    // Hapus sesi aktif user tersebut
+    await sql`delete from sesi where akun_id = ${akunId}`.catch(() => { });
+
+    // Hapus akun dari tabel akun
+    await sql`delete from akun where id = ${akunId}`;
+
+    return { sukses: true, pesan: `Akun pengguna "${target}" berhasil dihapus.` };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal menghapus akun: " + String(err) };
+  }
+}
+

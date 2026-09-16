@@ -1,20 +1,8 @@
-/**
- * API Bridge - Pengganti google.script.run untuk lingkungan Vercel & Supabase
- * Dilengkapi dengan Smart SWR (Stale-While-Revalidate) Cache & Realtime Sync.
- * 
- * Fitur Utama:
- * 1. 0ms Instant Response (Stale): Mengembalikan data lokal seketika tanpa spinner.
- * 2. Background Revalidation: Mengambil data terbaru di latar belakang secara transparan.
- * 3. Zero-Flicker Differential Update: Handler UI hanya dipanggil ulang jika data server benar-benar berubah.
- * 4. Targeted Mutation Invalidation: Operasi tulis/simpan/verifikasi otomatis menghapus cache terkait.
- * 5. Request Deduplication: Mencegah panggilan ganda untuk query yang sama saat bersamaan.
- * 6. Cross-Tab Synchronization: Menggunakan BroadcastChannel agar perubahan di satu tab tersinkron ke tab lain.
- * 7. Window Focus & Reconnect Auto-Revalidate: Revalidasi otomatis saat tab aktif kembali atau koneksi pulih.
- */
+// API Bridge - Pengganti google.script.run untuk Vercel & Supabase
+// Smart SWR Cache (0ms response) & Realtime Cross-Tab Sync
 
-// ============================================================================
-// 1. KONFIGURASI SMART SWR & TAKSONOMI AKSI
-// ============================================================================
+
+// Konfigurasi Smart SWR
 
 const SWR_CONFIG = {
   // Master data & Wilayah: TTL 30 menit
@@ -38,7 +26,6 @@ const SWR_CONFIG = {
   getSemuaKuota: { ttl: 5 * 60 * 1000, domain: 'kuota' },
   getProgresKuota: { ttl: 5 * 60 * 1000, domain: 'kuota' },
 
-  // Sakelar & Setelan: TTL 2 menit
   statusInputKecKem: { ttl: 2 * 60 * 1000, domain: 'setelan' },
   ambilStatusDetailSetelan: { ttl: 2 * 60 * 1000, domain: 'setelan' },
   ambilDaftarUserDenganStatus: { ttl: 2 * 60 * 1000, domain: 'setelan' },
@@ -48,7 +35,6 @@ const SWR_CONFIG = {
   ambilRiwayatEdit: { ttl: 3 * 60 * 1000, domain: 'riwayat' },
 };
 
-// Pemetaan operasi tulis (mutasi) -> domain cache yang harus otomatis dibersihkan
 const MUTATION_INVALIDATIONS = {
   simpanDataKeSheet: ['penerima', 'dashboard', 'kuota'],
   editDataPenerima: ['penerima', 'penerima_detail', 'dashboard', 'riwayat'],
@@ -68,9 +54,7 @@ const MUTATION_INVALIDATIONS = {
   logoutPengguna: ['*'],
 };
 
-// ============================================================================
-// 2. KELAS SWR CACHE MANAGER
-// ============================================================================
+// SWR Cache Manager
 
 class SWRCacheManager {
   constructor() {
@@ -79,7 +63,6 @@ class SWRCacheManager {
     this._prefix = 'djpm_swr_v1_';
     this._broadcastChannel = null;
 
-    // Inisialisasi BroadcastChannel untuk sinkronisasi antar-tab
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         this._broadcastChannel = new BroadcastChannel('djpm_realtime_bus');
@@ -89,14 +72,11 @@ class SWRCacheManager {
           }
         };
       } catch (_e) {
-        // Fallback anggun jika BroadcastChannel dicekal browser
       }
     }
 
-    // Muat cache dari sessionStorage saat inisialisasi awal
     this._loadSessionCache();
 
-    // Pasang auto-revalidate saat window focus dan koneksi online
     if (typeof window !== 'undefined') {
       window.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
@@ -154,7 +134,6 @@ class SWRCacheManager {
         }
       }
     } catch (_e) {
-      // Abaikan jika storage penuh atau dinonaktifkan
     }
   }
 
@@ -213,7 +192,6 @@ class SWRCacheManager {
 
     this._memoryCache.set(key, entry);
 
-    // Simpan juga ke sessionStorage (kecuali data berukuran sangat raksasa > 2MB)
     if (typeof sessionStorage !== 'undefined') {
       try {
         if (rawString.length < 2 * 1024 * 1024) {
@@ -231,7 +209,6 @@ class SWRCacheManager {
     const domainList = Array.isArray(domains) ? domains : [domains];
     const isAll = domainList.includes('*');
 
-    // Hapus dari memori
     for (const [key, entry] of this._memoryCache.entries()) {
       if (isAll || domainList.includes(entry.domain)) {
         this._memoryCache.delete(key);
@@ -241,14 +218,12 @@ class SWRCacheManager {
       }
     }
 
-    // Siarkan ke tab lain dalam browser yang sama
     if (broadcast && this._broadcastChannel) {
       try {
         this._broadcastChannel.postMessage({ type: 'INVALIDATE', domains: domainList });
       } catch (_e) { }
     }
 
-    // Siarkan ke Supabase Realtime (lintas pengguna & perangkat secara global)
     if (broadcast && typeof window !== 'undefined' && window.djpmRealtimeChannel) {
       try {
         window.djpmRealtimeChannel.send({
@@ -259,7 +234,6 @@ class SWRCacheManager {
       } catch (_e) { }
     }
 
-    // Picu custom event lokal
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('djpm:swr-invalidated', { detail: { domains: domainList } }));
     }
@@ -280,7 +254,6 @@ class SWRCacheManager {
   }
 
   _handleWindowFocus() {
-    // Beri tahu UI bahwa tab kembali aktif, view aktif dapat memicu refresh halus jika diperlukan
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('djpm:swr-window-focus', { detail: { timestamp: Date.now() } }));
     }
@@ -300,10 +273,6 @@ const swrCache = new SWRCacheManager();
 if (typeof window !== 'undefined') {
   window.djpmCache = swrCache;
 }
-
-// ============================================================================
-// 3. PROXY HANDLER (GOOGLE SCRIPT RUN COMPATIBLE)
-// ============================================================================
 
 class GoogleScriptRunProxy {
   constructor(successHandler = null, failureHandler = null, userObject = null) {
@@ -330,7 +299,6 @@ class GoogleScriptRunProxy {
           const isSwrEligible = Boolean(SWR_CONFIG[action]);
           const mutationDomains = MUTATION_INVALIDATIONS[action];
 
-          // ── STRATEGI 1: CEK CACHE SWR (0ms INSTANT RETURN) ──
           let cachedEntry = null;
           if (isSwrEligible) {
             cachedEntry = swrCache.get(action, args);
@@ -351,7 +319,6 @@ class GoogleScriptRunProxy {
             }
           }
 
-          // ── STRATEGI 2: DEDUPLIKASI IN-FLIGHT REQUEST ──
           const reqKey = `${action}:${JSON.stringify(args || [])}`;
           let fetchPromise = swrCache._inFlightRequests.get(reqKey);
 
@@ -388,7 +355,6 @@ class GoogleScriptRunProxy {
             swrCache._inFlightRequests.set(reqKey, fetchPromise);
           }
 
-          // ── STRATEGI 3: PROSES HASIL BACKGROUND FETCH (REVALIDATE) ──
           fetchPromise
             .then((data) => {
               if (data && data.error) {
@@ -452,13 +418,6 @@ class GoogleScriptRunProxy {
 
               // Jika ini aksi SWR, bandingkan data baru dengan cache
               if (isSwrEligible) {
-                // JANGAN pernah simpan respons error ke dalam cache SWR! Beberapa aksi (mis.
-                // ambilDataLihatDataHakAkses, ambilDetailPenerimaPerBaris) mengembalikan hasil
-                // sebagai STRING hasil JSON.stringify() (kontrak dipertahankan dari Kode.gs), bukan
-                // objek langsung — jadi periksa isinya lewat parse dulu, bukan cuma typeof === 'object'.
-                // TAPI beberapa aksi lain (getSheetName, getVersiAplikasi) mengembalikan STRING BIASA
-                // (bukan JSON) sebagai hasil valid — kalau JSON.parse gagal, itu BUKAN tanda error,
-                // cukup anggap string apa adanya (persis perilaku semula), jangan digagalkan.
                 let hasilUntukDicek = freshResult;
                 if (typeof freshResult === 'string') {
                   try { hasilUntukDicek = JSON.parse(freshResult); } catch (_e) { hasilUntukDicek = freshResult; }
@@ -474,11 +433,8 @@ class GoogleScriptRunProxy {
                   const rawFresh = typeof freshResult === 'string' ? freshResult : JSON.stringify(freshResult);
                   const freshHash = swrCache._fastHash(rawFresh);
 
-                  // Perbarui cache dengan data segar
                   swrCache.set(action, args, freshResult);
 
-                  // Jika sebelumnya data cache sudah dirender dan isinya SAMA PERSIS,
-                  // lewati re-render kedua untuk menghindari kedipan (zero-flicker).
                   if (cachedEntry && cachedEntry.hash === freshHash) {
                     return;
                   }
@@ -507,4 +463,3 @@ class GoogleScriptRunProxy {
 window.google = window.google || {};
 window.google.script = window.google.script || {};
 window.google.script.run = new GoogleScriptRunProxy();
-
