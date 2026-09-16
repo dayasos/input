@@ -144,7 +144,7 @@ export default async function handler(req, res) {
 
   // Routing khusus untuk upload ke Google Drive
   if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
-    const driveUrl = process.env.GAS_DRIVE_UPLOAD_URL;
+    const driveUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbzrAA20sJ_U0RtzoCEElKUusHJJQm8K-I83R0Ckyxru9F1H-UW9r31Cc9YATp66tKGSRQ/exec';
     if (driveUrl) {
       targetUrl = driveUrl;
     } else {
