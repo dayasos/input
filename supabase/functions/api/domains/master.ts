@@ -242,15 +242,36 @@ export async function getKemenagData(token: string, sheetName: string) {
 // 2 menit) bisa menampilkan modal "ada versi baru, refresh halaman". Di Supabase, baris ini
 // disimpan di tabel `setelan` (key='VERSI_APLIKASI') — untuk menandai versi baru saat deploy Edge
 // Function, jalankan manual: update setelan set value = extract(epoch from now())::text where key='VERSI_APLIKASI';
-export async function getVersiAplikasi() {
-  const rows = await sql`select value from setelan where key = 'VERSI_APLIKASI' limit 1`;
-  if (rows.length > 0 && rows[0].value) return rows[0].value;
+// Cache in-memory per Deno isolate untuk menghindari pemanggilan query DB berulang setiap polling 2 menit
+let cachedVersiAplikasi: { value: string; expiry: number } | null = null;
 
-  const versiBaru = Date.now().toString();
-  await sql`
-    insert into setelan (key, value) values ('VERSI_APLIKASI', ${versiBaru})
-    on conflict (key) do nothing
-  `;
-  const cekLagi = await sql`select value from setelan where key = 'VERSI_APLIKASI' limit 1`;
-  return cekLagi[0]?.value ?? versiBaru;
+export async function getVersiAplikasi() {
+  const now = Date.now();
+  if (cachedVersiAplikasi && cachedVersiAplikasi.expiry > now) {
+    return cachedVersiAplikasi.value;
+  }
+
+  try {
+    const rows = await sql`select value from setelan where key = 'VERSI_APLIKASI' limit 1`;
+    if (rows.length > 0 && rows[0].value) {
+      const val = String(rows[0].value);
+      cachedVersiAplikasi = { value: val, expiry: now + 60_000 };
+      return val;
+    }
+
+    const versiBaru = Date.now().toString();
+    await sql`
+      insert into setelan (key, value) values ('VERSI_APLIKASI', ${versiBaru})
+      on conflict (key) do nothing
+    `;
+    const cekLagi = await sql`select value from setelan where key = 'VERSI_APLIKASI' limit 1`;
+    const hasil = cekLagi[0]?.value ? String(cekLagi[0].value) : versiBaru;
+    cachedVersiAplikasi = { value: hasil, expiry: now + 60_000 };
+    return hasil;
+  } catch (_e) {
+    // Fallback aman jika koneksi pooler transient/cold-start agar polling tidak pernah mengembalikan 500
+    if (cachedVersiAplikasi) return cachedVersiAplikasi.value;
+    return "1789444821758";
+  }
 }
+

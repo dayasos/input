@@ -166,13 +166,23 @@ export default async function handler(req, res) {
   const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
   const timeoutMs = isUploadAction ? 50000 : 45000;
 
+  const anonKey = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ';
+
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*'
+  };
+
+  // Sertakan apikey dan Authorization Bearer token untuk Kong Gateway Supabase
+  if (targetUrl.includes('supabase.co')) {
+    requestHeaders['apikey'] = anonKey;
+    requestHeaders['Authorization'] = `Bearer ${anonKey}`;
+  }
+
   const fetchOptions = {
     method: 'POST',
-    headers: {
-      'Content-Type': 'text/plain;charset=utf-8',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'application/json, text/plain, */*'
-    },
+    headers: requestHeaders,
     body: JSON.stringify(payloadObj),
     redirect: 'follow'
   };
