@@ -69,6 +69,20 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+// Keyboard accessibility: Tekan ESC untuk menutup modal yang aktif
+window.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    const modalLogout = document.getElementById('modal-konfirmasi-logout');
+    if (modalLogout && !modalLogout.classList.contains('hidden')) {
+      if (typeof window.tutupModalKonfirmasiLogout === 'function') {
+        window.tutupModalKonfirmasiLogout();
+      } else {
+        modalLogout.classList.add('hidden');
+      }
+    }
+  }
+});
+
 // Sistem Login & Sesi
 let dataPengguna = { username: "", role: "", kecamatan: "", token: "", userId: "", kelurahanTerkunci: "" };
 let panelAktif = "input"; // "input", "rekap"

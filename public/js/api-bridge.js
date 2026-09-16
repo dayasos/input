@@ -35,6 +35,21 @@ const SWR_CONFIG = {
   ambilRiwayatEdit: { ttl: 3 * 60 * 1000, domain: 'riwayat' },
 };
 
+// Ambang batas kesegaran cache (freshness threshold) cerdas per domain
+// Menghindari background fetch berulang untuk data yang jarang berubah
+const DOMAIN_FRESHNESS = {
+  master: 5 * 60 * 1000,        // 5 menit: respons 0ms instan untuk master data & dropdown wilayah
+  rumah_ibadah: 3 * 60 * 1000,  // 3 menit
+  kuota: 60 * 1000,             // 1 menit
+  setelan: 60 * 1000,           // 1 menit
+  akun: 60 * 1000,              // 1 menit
+  riwayat: 60 * 1000,           // 1 menit
+  penerima: 20 * 1000,          // 20 detik (transaksi dinamis)
+  penerima_detail: 20 * 1000,   // 20 detik
+  dashboard: 20 * 1000,         // 20 detik
+  data_detail: 20 * 1000,       // 20 detik
+};
+
 const MUTATION_INVALIDATIONS = {
   simpanDataKeSheet: ['penerima', 'dashboard', 'kuota'],
   editDataPenerima: ['penerima', 'penerima_detail', 'dashboard', 'riwayat'],
@@ -312,8 +327,10 @@ class GoogleScriptRunProxy {
                 }
               }
 
-              // Jika cache masih sangat segar (< 20 detik), tidak perlu fetch ulang segera
-              if (cachedEntry.age < 20000 && !cachedEntry.isExpired) {
+              // Jika cache masih sangat segar (sesuai threshold per-domain), tidak perlu fetch ulang segera
+              const domain = (SWR_CONFIG[action] && SWR_CONFIG[action].domain) || 'default';
+              const freshThreshold = DOMAIN_FRESHNESS[domain] || 20000;
+              if (cachedEntry.age < freshThreshold && !cachedEntry.isExpired) {
                 return;
               }
             }

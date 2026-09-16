@@ -1969,43 +1969,76 @@ document.getElementById('btn-verifikasi-massal').addEventListener('click', funct
     .verifikasiMassalMemenuhiSyarat(dataPengguna.token);
 });
 
-document.getElementById('btn-keluar-aplikasi').addEventListener('click', function () {
-  const konfirmasi = confirm("Yakin ingin keluar dari aplikasi?");
-  if (!konfirmasi) return;
-
-  // Beritahu server untuk menghapus token sesi dari cache
-  const tokenKeluar = dataPengguna.token;
-  if (tokenKeluar && window.google && window.google.script && window.google.script.run) {
-    try {
-      google.script.run.logoutPengguna(tokenKeluar);
-    } catch (e) { }
+window.bukaModalKonfirmasiLogout = function () {
+  const modal = document.getElementById('modal-konfirmasi-logout');
+  if (!modal) return;
+  const elUser = document.getElementById('logout-display-username');
+  const elRole = document.getElementById('logout-display-role');
+  if (elUser) elUser.textContent = dataPengguna.username || '-';
+  if (elRole) {
+    const wilayah = dataPengguna.kecamatan ? ` (${dataPengguna.kecamatan})` : '';
+    elRole.textContent = (dataPengguna.role || 'PENGGUNA') + wilayah;
   }
+  modal.classList.remove('hidden');
+};
 
-  dataPengguna = { username: "", role: "", kecamatan: "", token: "" };
-  try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
-  // Lihat Data & Rekap
-  // wajib memuat ulang data dari server dan toggle tombol sesuai role ikut dievaluasi ulang.
-  masterDataLihat = [];
+window.tutupModalKonfirmasiLogout = function () {
+  const modal = document.getElementById('modal-konfirmasi-logout');
+  if (modal) modal.classList.add('hidden');
+};
 
-  ['btn-keluar-aplikasi', 'fab-ganti-password', 'btn-panduan', 'btn-retur-kematian']
-    .forEach(function (id) {
-      const el = document.getElementById(id);
-      if (el) el.classList.add('hidden');
-    });
-
-  // Lihat Data & Rekap
-  const fsContainerEl = document.getElementById('fs-container');
-  if (fsContainerEl) { fsContainerEl.disabled = true; fsContainerEl.classList.add('opacity-50', 'pointer-events-none'); }
-  const panelRekapEl = document.getElementById('panel-rekap');
-  if (panelRekapEl) panelRekapEl.classList.add('hidden');
-
-  // Kosongkan kolom password (username boleh tetap, sesuai fitur "ingat username")
-  const elPassLogin = document.getElementById('login-password');
-  if (elPassLogin) elPassLogin.value = '';
-
-  // Tampilkan lagi modal login
-  document.getElementById('modal-login').classList.remove('hidden');
+document.getElementById('btn-keluar-aplikasi').addEventListener('click', function () {
+  bukaModalKonfirmasiLogout();
 });
+
+const btnEksekusiLogout = document.getElementById('btn-eksekusi-logout');
+if (btnEksekusiLogout) {
+  btnEksekusiLogout.addEventListener('click', function () {
+    const btn = this;
+    setTombolMemuat(btn, 'Keluar...');
+
+    const tokenKeluar = dataPengguna.token;
+    if (tokenKeluar && window.google && window.google.script && window.google.script.run) {
+      try {
+        google.script.run.logoutPengguna(tokenKeluar);
+      } catch (e) { }
+    }
+
+    // Bersihkan SWR cache dan session storage secara menyeluruh agar data tidak bocor antar sesi
+    if (window.djpmCache && typeof window.djpmCache.clear === 'function') {
+      try { window.djpmCache.clear(); } catch (_e) { }
+    }
+    try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
+
+    dataPengguna = { username: "", role: "", kecamatan: "", token: "", userId: "", kelurahanTerkunci: "" };
+    masterDataLihat = [];
+    if (typeof cacheDashboardProgres !== 'undefined') {
+      cacheDashboardProgres = {};
+    }
+
+    ['btn-keluar-aplikasi', 'fab-ganti-password', 'btn-panduan', 'btn-retur-kematian']
+      .forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+
+    const fsContainerEl = document.getElementById('fs-container');
+    if (fsContainerEl) { fsContainerEl.disabled = true; fsContainerEl.classList.add('opacity-50', 'pointer-events-none'); }
+    const panelRekapEl = document.getElementById('panel-rekap');
+    if (panelRekapEl) panelRekapEl.classList.add('hidden');
+
+    const elPassLogin = document.getElementById('login-password');
+    if (elPassLogin) elPassLogin.value = '';
+
+    tutupModalKonfirmasiLogout();
+    pulihkanTombol(btn);
+
+    // Tampilkan modal login dan toast notifikasi sukses keluar
+    const modalLogin = document.getElementById('modal-login');
+    if (modalLogin) modalLogin.classList.remove('hidden');
+    tampilkanToast('Anda telah berhasil keluar dari sistem.', 'sukses', { durasi: 3000 });
+  });
+}
 
 function formatTanggalIndo(tglString) {
   if (!tglString) return '-';
