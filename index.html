@@ -2033,7 +2033,13 @@
       }
 
       function perangkatIOS() {
-        return /iphone|ipad|ipod/i.test(navigator.userAgent || navigator.vendor || '');
+        if (/iphone|ipad|ipod/i.test(navigator.userAgent || navigator.vendor || '')) return true;
+        // iPadOS Safari (sejak iPadOS 13, 2019) SENGAJA mengirim user agent gaya desktop
+        // ("Macintosh...") supaya situs menampilkan versi desktop -- tidak mengandung "ipad"
+        // sama sekali, jadi regex di atas saja akan melewatkan iPad. Satu-satunya pembeda dari
+        // Mac asli: iPad de facto selalu punya touchscreen (maxTouchPoints > 1), Mac tidak.
+        if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
+        return false;
       }
 
       function cobaTampilkanModalInstall() {
