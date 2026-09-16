@@ -152,12 +152,19 @@ export default async function handler(req, res) {
   }
   payloadObj._secret = secretToken;
 
-  // simpanDataKeSheet/editDataPenerima/uploadSemuaBerkasKeSupabase membawa berkas (base64) yang
-  // di-upload — payload bisa besar & lambat di jaringan lemah. Meng-abort lalu me-retry hanya
-  // mengulang unggahan lambat yang sama (tidak mempercepat), jadi aksi ini diberi timeout lebih
-  // longgar tapi tanpa retry pada target yang sama.
-  const UPLOAD_ACTIONS = new Set(['simpanDataKeSheet', 'editDataPenerima', 'uploadSemuaBerkasKeSupabase']);
+  // simpanDataKeSheet/editDataPenerima/mintaUrlUploadBerkas/konfirmasiUploadBerkas dan operasi berkas
+  // memiliki payload atau proses multi-tahap. Timeout dilonggarkan menjadi 50 detik (mendekati
+  // maxDuration Vercel: 60s). Operasi umum lainnya dinaikkan menjadi 45 detik agar cold-start
+  // Deno isolate di Supabase tidak pernah terputus prematur di 20 detik.
+  const UPLOAD_ACTIONS = new Set([
+    'simpanDataKeSheet',
+    'editDataPenerima',
+    'uploadSemuaBerkasKeSupabase',
+    'mintaUrlUploadBerkas',
+    'konfirmasiUploadBerkas',
+  ]);
   const isUploadAction = UPLOAD_ACTIONS.has(payloadObj.action);
+  const timeoutMs = isUploadAction ? 50000 : 45000;
 
   const fetchOptions = {
     method: 'POST',
@@ -176,33 +183,23 @@ export default async function handler(req, res) {
   let text = '';
   let data = null;
 
-  // 5. Eksekusi fetch murni ke Supabase -- TIDAK ADA LAGI fallback lintas-backend ke GAS
-  // (dihapus total 2026-09-15, keputusan "murni Supabase"). Sebelumnya di sini ada percobaan
-  // otomatis ke Google Apps Script kalau panggilan pertama gagal, KHUSUS untuk aksi baca yang
-  // dianggap aman -- tapi itu justru menambah satu titik gagal ekstra (GAS punya cold-start &
-  // keandalan lebih rendah dari Supabase Edge Function) tanpa manfaat lagi sekarang semua data
-  // sudah murni di Supabase. Kalau permintaan ke Supabase gagal, error dikembalikan langsung
-  // supaya SWR cache di browser (js/api-bridge.js) yang menangani retry, bukan proxy ini diam-diam
-  // mencoba backend lain.
-  // Timeout aksi non-upload dinaikkan 15s -> 20s (2026-09-15): setelah traffic produksi resmi
-  // dialihkan ke Supabase, ditemukan Edge Function `api` sempat gagal 500 pada beberapa
-  // permintaan pertama -- diduga cold-start (isolate Deno baru + buka koneksi Postgres via
-  // Supavisor) yang kadang butuh sedikit lebih dari 15 detik, dan terkonfirmasi hilang sendiri
-  // begitu instance-nya sudah "panas". Tetap 1x retry, jadi total 40 detik terburuk -- masih
-  // jauh di bawah `maxDuration: 60` milik Vercel.
+  // 5. Eksekusi fetch murni ke Supabase
+  // Retry 0x di proxy Vercel karena dengan timeout 45s-50s, retry ganda akan melampaui batas keras 60s
+  // Vercel. SWR cache di browser (js/api-bridge.js) yang bertugas menangani retry jika dibutuhkan.
   try {
-    const response = await fetchWithRetry(targetUrl, fetchOptions, isUploadAction ? 0 : 1, isUploadAction ? 40000 : 20000);
+    const response = await fetchWithRetry(targetUrl, fetchOptions, 0, timeoutMs);
     text = await response.text();
     data = JSON.parse(text);
 
     return res.status(200).json(data);
   } catch (err) {
-    console.error('Vercel Proxy Error (Supabase Edge Function):', err);
+    console.error(`Vercel Proxy Error for action [${payloadObj.action}] (Supabase Edge Function):`, err);
 
     // Bedakan antara respon bukan JSON (parse error) vs kesalahan jaringan/timeout
     if (err instanceof SyntaxError) {
       return res.status(502).json({
         error: 'Supabase Edge Function tidak mengembalikan respon JSON valid. Pastikan Function aktif dan dapat diakses.',
+        action: payloadObj.action,
         details: text ? text.slice(0, 500) : err.message,
         usedUrl: targetUrl
       });
@@ -210,6 +207,7 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       error: 'Terjadi kesalahan koneksi antara server Vercel dan Supabase Edge Function.',
+      action: payloadObj.action,
       details: err.toString(),
       cause: err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : null,
       usedUrl: targetUrl
