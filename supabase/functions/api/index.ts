@@ -15,7 +15,7 @@
 // - setelan (statusInputKecKem, setInputKecKem, ambilStatusDetailSetelan, setSakelarUserByAdmin,
 //            resetSakelarUserByAdmin, ambilDaftarUserDenganStatus, bulkSakelarPerKecamatan)
 // - akun (ubahAkunSendiri, ambilDaftarAkun, resetPasswordUser, simpanProfilUser, ubahProfilUser)
-// - ekspor (eksporDataKeSpreadsheet — Fase 4, via npm:xlsx)
+// - ekspor (eksporDataKeSpreadsheet — Fase 4, via exceljs sejak 2026-09-16, lihat _shared/excelGaya.ts)
 // - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
 // - dataDetail (ambilDataDetail — 2026-09-15, fitur baru murni Supabase, bukan porting dari
 //   Kode.gs; pengganti sheet eksternal "Data Detail" + formula QUERY() yang sudah dihapus total)

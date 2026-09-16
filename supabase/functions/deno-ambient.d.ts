@@ -13,8 +13,8 @@ declare module "npm:postgres@3.4.4" {
   export default postgres;
 }
 
-declare module "npm:xlsx@0.18.5" {
+declare module "npm:exceljs@4.4.0" {
   // deno-lint-ignore no-explicit-any
-  const xlsx: any;
-  export default xlsx;
+  const exceljs: any;
+  export default exceljs;
 }
