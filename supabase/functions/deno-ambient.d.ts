@@ -18,3 +18,8 @@ declare module "npm:exceljs@4.4.0" {
   const exceljs: any;
   export default exceljs;
 }
+
+declare module "npm:@supabase/supabase-js@2" {
+  // deno-lint-ignore no-explicit-any
+  export const createClient: any;
+}
