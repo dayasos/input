@@ -693,6 +693,7 @@ function tampilkanModalUpdate() {
         if (btn) { btn.disabled = false; muatStatusSakelar(); }
       })
       .setInputKecKem(dataPengguna.token, buka);
+    });
   }
 })();
 
@@ -902,7 +903,8 @@ function tampilkanModalUpdate() {
         .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
         .setSakelarUserByAdmin(dataPengguna.token, userId, aksi === "BUKA");
     }
-  }
+  });
+}
 
   function hasilAksiPerUser(res) {
     if (res && res.sukses) {
@@ -1045,6 +1047,7 @@ function tampilkanModalUpdate() {
         tampilkanToast(pesanErrorRamah(err), "gagal");
       })
       .bulkSakelarPerKecamatan(dataPengguna.token, kec, bkAksiTerpilih);
+    });
   });
 
 })();
@@ -2102,6 +2105,7 @@ function konfirmasiHapusUser(username) {
       tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
     })
     .hapusUser(dataPengguna.token, username);
+  });
 }
 
 window.muatDaftarUserLengkap = muatDaftarUserLengkap;
