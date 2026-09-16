@@ -294,8 +294,180 @@ btnResetForm.addEventListener('click', () => {
     sembunyikanPeringatan('peringatan-rekening');
     sembunyikanPeringatan('peringatan-tempat-tugas');
     updateStatusTombolSimpan();
+    hapusDrafLokalForm();
   }, 50);
 });
+
+// =========================================================================
+// SISTEM DRAF OTOMATIS & RESTORE FORM INPUT
+// =========================================================================
+const KUNCI_DRAF_STORAGE = 'djpm_form_draft_2027';
+let timerDebounceDraf = null;
+
+function simpanDrafLokalForm() {
+  try {
+    const elNama = document.getElementById('input-nama');
+    const elTmptLahir = document.getElementById('input-tmpt-lahir');
+    const elJk = document.getElementById('input-jk');
+    const elAlamat = document.getElementById('input-alamat');
+    const elKecDom = document.getElementById('input-kecamatan');
+    const elKelDom = document.getElementById('input-kelurahan');
+    const elNamaRek = document.getElementById('input-nama-rek');
+    const elCabang = document.getElementById('input-cabang-bank');
+    const elBpjs = document.getElementById('input-bpjs');
+
+    const draf = {
+      instansiAktif: typeof instansiAktif !== 'undefined' ? instansiAktif : '',
+      controlKecamatan: controlKecamatan ? controlKecamatan.value : '',
+      selectLayanan: selectLayanan ? selectLayanan.value : '',
+      inputTempatTugas: inputTempatTugas ? inputTempatTugas.value : '',
+      inputAlamatTugas: inputAlamatTugas ? inputAlamatTugas.value : '',
+      inputNama: elNama ? elNama.value : '',
+      inputNik: inputNik ? inputNik.value : '',
+      selectGender: elJk ? elJk.value : '',
+      inputTempatLahir: elTmptLahir ? elTmptLahir.value : '',
+      inputTglLahir: inputTglLahir ? inputTglLahir.value : '',
+      inputUmur: inputUmur ? inputUmur.value : '',
+      inputKecamatanDomisili: elKecDom ? elKecDom.value : '',
+      controlKelurahan: elKelDom ? elKelDom.value : '',
+      inputAlamat: elAlamat ? elAlamat.value : '',
+      inputNamaRekening: elNamaRek ? elNamaRek.value : '',
+      inputNoRekening: inputNoRek ? inputNoRek.value : '',
+      inputKantorCabang: elCabang ? elCabang.value : '',
+      inputNoKontak: inputKontak ? inputKontak.value : '',
+      selectBpjs: elBpjs ? elBpjs.value : '',
+      waktuSimpan: Date.now()
+    };
+
+    if (draf.inputNik || draf.inputNama || draf.inputTempatTugas || draf.inputNoRekening) {
+      sessionStorage.setItem(KUNCI_DRAF_STORAGE, JSON.stringify(draf));
+    }
+  } catch (_e) { }
+}
+
+function hapusDrafLokalForm() {
+  try {
+    sessionStorage.removeItem(KUNCI_DRAF_STORAGE);
+    const banner = document.getElementById('banner-draf-tersimpan');
+    if (banner) banner.classList.add('hidden');
+  } catch (_e) { }
+}
+
+function cekDanTampilkanBannerDraf() {
+  try {
+    const raw = sessionStorage.getItem(KUNCI_DRAF_STORAGE);
+    if (!raw) return;
+    const draf = JSON.parse(raw);
+    if (draf && (draf.inputNik || draf.inputNama || draf.inputTempatTugas || draf.inputNoRekening)) {
+      const banner = document.getElementById('banner-draf-tersimpan');
+      if (banner) banner.classList.remove('hidden');
+    }
+  } catch (_e) { }
+}
+
+function pulihkanDrafLokalForm() {
+  try {
+    const raw = sessionStorage.getItem(KUNCI_DRAF_STORAGE);
+    if (!raw) return;
+    const draf = JSON.parse(raw);
+    if (!draf) return;
+
+    if (draf.controlKecamatan && controlKecamatan && !controlKecamatan.disabled) {
+      controlKecamatan.value = draf.controlKecamatan;
+      controlKecamatan.dispatchEvent(new Event('change'));
+    }
+
+    setTimeout(function () {
+      if (draf.selectLayanan && selectLayanan) {
+        selectLayanan.value = draf.selectLayanan;
+        selectLayanan.dispatchEvent(new Event('change'));
+      }
+
+      if (draf.inputTempatTugas && inputTempatTugas) inputTempatTugas.value = draf.inputTempatTugas;
+      if (draf.inputAlamatTugas && inputAlamatTugas) inputAlamatTugas.value = draf.inputAlamatTugas;
+      const elNama = document.getElementById('input-nama');
+      if (draf.inputNama && elNama) elNama.value = draf.inputNama;
+      if (draf.inputNik && inputNik) inputNik.value = draf.inputNik;
+      const elJk = document.getElementById('input-jk');
+      if (draf.selectGender && elJk) elJk.value = draf.selectGender;
+      const elTmpt = document.getElementById('input-tmpt-lahir');
+      if (draf.inputTempatLahir && elTmpt) elTmpt.value = draf.inputTempatLahir;
+      if (draf.inputTglLahir && inputTglLahir) {
+        inputTglLahir.value = draf.inputTglLahir;
+        inputTglLahir.dispatchEvent(new Event('change'));
+      }
+      const elKecDom = document.getElementById('input-kecamatan');
+      if (draf.inputKecamatanDomisili && elKecDom) {
+        elKecDom.value = draf.inputKecamatanDomisili;
+        elKecDom.dispatchEvent(new Event('change'));
+      }
+
+      setTimeout(function () {
+        const elKelDom = document.getElementById('input-kelurahan');
+        if (draf.controlKelurahan && elKelDom) elKelDom.value = draf.controlKelurahan;
+      }, 300);
+
+      const elAlamat = document.getElementById('input-alamat');
+      if (draf.inputAlamat && elAlamat) elAlamat.value = draf.inputAlamat;
+      const elNamaRek = document.getElementById('input-nama-rek');
+      if (draf.inputNamaRekening && elNamaRek) elNamaRek.value = draf.inputNamaRekening;
+      if (draf.inputNoRekening && inputNoRek) inputNoRek.value = draf.inputNoRekening;
+      const elCabang = document.getElementById('input-cabang-bank');
+      if (draf.inputKantorCabang && elCabang) elCabang.value = draf.inputKantorCabang;
+      if (draf.inputNoKontak && inputKontak) inputKontak.value = draf.inputNoKontak;
+      const elBpjs = document.getElementById('input-bpjs');
+      if (draf.selectBpjs && elBpjs) elBpjs.value = draf.selectBpjs;
+
+      tampilkanToast('Draf formulir berhasil dipulihkan.', 'sukses');
+      const banner = document.getElementById('banner-draf-tersimpan');
+      if (banner) banner.classList.add('hidden');
+    }, 250);
+  } catch (err) {
+    tampilkanToast('Gagal memulihkan draf: ' + (err ? err.message : err), 'gagal');
+  }
+}
+
+// Inisialisasi tombol draf
+const btnPulihkanDraf = document.getElementById('btn-pulihkan-draf');
+if (btnPulihkanDraf) btnPulihkanDraf.addEventListener('click', pulihkanDrafLokalForm);
+const btnBuangDraf = document.getElementById('btn-buang-draf');
+if (btnBuangDraf) btnBuangDraf.addEventListener('click', hapusDrafLokalForm);
+
+// Perekam otomatis ke sessionStorage saat user mengetik
+if (typeof formPembayaran !== 'undefined' && formPembayaran) {
+  formPembayaran.addEventListener('input', function () {
+    clearTimeout(timerDebounceDraf);
+    timerDebounceDraf = setTimeout(simpanDrafLokalForm, 1000);
+  });
+  formPembayaran.addEventListener('change', function () {
+    clearTimeout(timerDebounceDraf);
+    timerDebounceDraf = setTimeout(simpanDrafLokalForm, 500);
+  });
+
+  // Pengecekan ukuran instan saat user memilih berkas
+  formPembayaran.querySelectorAll('input[type="file"]').forEach(function (input) {
+    input.addEventListener('change', function (e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (isPdf && file.size > 3.2 * 1024 * 1024) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        tampilkanToast('⚠️ Dokumen PDF "' + file.name + '" (' + mb + ' MB) melebihi batas 3.2 MB gateway upload. Mohon kompres file PDF terlebih dahulu.', 'gagal', { durasi: 7000 });
+        input.value = '';
+        return;
+      }
+
+      if (file.size > 25 * 1024 * 1024) {
+        tampilkanToast('⚠️ Berkas "' + file.name + '" melebihi 25 MB. Mohon pilih berkas dengan ukuran lebih kecil.', 'gagal', { durasi: 6000 });
+        input.value = '';
+        return;
+      }
+    });
+  });
+}
+
+setTimeout(cekDanTampilkanBannerDraf, 500);
 
 function kompresGambar(file, maxDim, kualitas) {
   return new Promise(function (resolve) {
@@ -341,6 +513,12 @@ async function bacaFileTerkompresi(inputEl) {
   const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas
   if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
 
+  // Vercel serverless request body memiliki batas keras 4.5 MB.
+  // Base64 encoding menambah overhead ~33%. File > 3.2 MB akan menghasilkan > 4.3 MB payload yang ditolak proxy.
+  if (file.size > 3.2 * 1024 * 1024) {
+    throw new Error('Ukuran berkas "' + file.name + '" (' + (file.size / (1024 * 1024)).toFixed(1) + ' MB) terlalu besar untuk gateway upload. Maksimal 3.2 MB per berkas (khusus dokumen PDF, mohon dikompres terlebih dahulu).');
+  }
+
   const base64Data = await new Promise(function (resolve, reject) {
     const reader = new FileReader();
     reader.onload = function () {
@@ -366,31 +544,105 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const kunciList = Object.keys(berkasMap);
   if (kunciList.length === 0) return { sukses: true, link: {} };
 
-  // Unggah satu per satu secara paralel (chunking) ke GAS via Vercel proxy
-  // Ini menghindari error batas 4.5 MB dari Vercel
-  const hasilTiapPut = await Promise.all(kunciList.map(async function (k) {
-    const item = berkasMap[k];
-    const mapKecil = {};
-    mapKecil[k] = item; // Hanya satu file
+  const totalBerkas = kunciList.length;
+  let berkasSelesai = 0;
 
-    try {
-      const res = await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, mapKecil);
-      if (!res || !res.sukses) {
-        return { k: k, gagal: res ? res.pesan : 'Gagal mengunggah "' + (item.label || k) + '".' };
-      }
-      return { k: k, linkDrive: res.link[k], gagal: null };
-    } catch (eNet) {
-      return { k: k, gagal: 'Gagal mengunggah "' + (item.label || k) + '": kendala jaringan. Coba lagi.' };
+  // Elemen progress bar pada loadingOverlay
+  const progressContainer = document.getElementById('loading-progress-container');
+  const progressLabel = document.getElementById('loading-progress-label');
+  const progressPersen = document.getElementById('loading-progress-persen');
+  const progressBar = document.getElementById('loading-progress-bar');
+  const progressSub = document.getElementById('loading-progress-sub');
+
+  if (progressContainer) {
+    progressContainer.classList.remove('hidden');
+    if (progressPersen) progressPersen.innerText = '0%';
+    if (progressBar) progressBar.style.width = '0%';
+    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (0/${totalBerkas})`;
+    if (progressSub) progressSub.innerText = 'Memulai proses pengunggahan ke Google Drive...';
+  }
+
+  function updateProgressUI(namaBerkas, sedangUnggah) {
+    if (!progressContainer) return;
+    const persen = Math.round((berkasSelesai / totalBerkas) * 100);
+    if (progressPersen) progressPersen.innerText = persen + '%';
+    if (progressBar) progressBar.style.width = persen + '%';
+    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${totalBerkas})`;
+    if (progressSub) {
+      progressSub.innerText = sedangUnggah ? `Mengunggah: ${namaBerkas}...` : `Selesai: ${namaBerkas}`;
     }
-  }));
+  }
 
-  const gagalPertama = hasilTiapPut.find(function (r) { return r.gagal; });
+  // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan)
+  async function uploadSatuBerkasDenganRetry(k, item, maxRetries) {
+    const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
+    const labelBerkas = item.label || k;
+    const mapKecil = {};
+    mapKecil[k] = item;
+
+    let lastErrorMsg = null;
+    for (let attempt = 0; attempt <= limitRetry; attempt++) {
+      if (attempt > 0) {
+        if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}...`;
+        await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
+      } else {
+        updateProgressUI(labelBerkas, true);
+      }
+
+      try {
+        const res = await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, mapKecil);
+        if (res && res.sukses && res.link && res.link[k]) {
+          berkasSelesai++;
+          updateProgressUI(labelBerkas, false);
+          return { k: k, linkDrive: res.link[k], gagal: null };
+        }
+        lastErrorMsg = res ? res.pesan : 'Tidak ada respons dari server upload.';
+      } catch (eNet) {
+        lastErrorMsg = 'Kendala jaringan (' + (eNet && eNet.message ? eNet.message : 'timeout') + ').';
+      }
+    }
+
+    return { k: k, linkDrive: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
+  }
+
+  // Concurrency Pool: batasi maksimal 2 antrean paralel agar tidak membebani limit GAS / Vercel
+  const CONCURRENCY_LIMIT = 2;
+  const hasilList = [];
+  let indexAntrean = 0;
+  let adaGagalFatal = false;
+
+  async function antreanWorker() {
+    while (indexAntrean < kunciList.length && !adaGagalFatal) {
+      const idx = indexAntrean++;
+      const k = kunciList[idx];
+      const item = berkasMap[k];
+      const hasil = await uploadSatuBerkasDenganRetry(k, item, 2);
+      hasilList.push(hasil);
+      if (hasil.gagal) {
+        adaGagalFatal = true;
+        break;
+      }
+    }
+  }
+
+  const workerCount = Math.min(CONCURRENCY_LIMIT, kunciList.length);
+  const workers = [];
+  for (let w = 0; w < workerCount; w++) {
+    workers.push(antreanWorker());
+  }
+  await Promise.all(workers);
+
+  if (progressContainer) {
+    progressContainer.classList.add('hidden');
+  }
+
+  const gagalPertama = hasilList.find(function (r) { return r.gagal; });
   if (gagalPertama) {
     return { sukses: false, pesan: gagalPertama.gagal };
   }
 
   const daftarLink = {};
-  hasilTiapPut.forEach(function (r) { if (r.linkDrive) daftarLink[r.k] = r.linkDrive; });
+  hasilList.forEach(function (r) { if (r.linkDrive) daftarLink[r.k] = r.linkDrive; });
 
   return { sukses: true, link: daftarLink };
 }
@@ -456,15 +708,24 @@ function labelBerkasSimpanBaru(layanan) {
   };
 }
 
-function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
+function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   function eksekusiSimpan() {
     google.script.run
       .withSuccessHandler(function (response) {
+        if (typeof pulihkanTombol === 'function') pulihkanTombol();
         loadingOverlay.classList.add('hidden');
-        if (response.sukses) { invalidateCacheDataTransaksi(); tampilkanToast(response.pesan, 'sukses'); formPembayaran.reset(); btnResetForm.click(); }
-        else { tampilkanToast("Gagal menyimpan: " + response.pesan, 'gagal', { durasi: 6000 }); }
+        if (response.sukses) {
+          invalidateCacheDataTransaksi();
+          hapusDrafLokalForm();
+          tampilkanToast(response.pesan, 'sukses');
+          formPembayaran.reset();
+          btnResetForm.click();
+        } else {
+          tampilkanToast("Gagal menyimpan: " + response.pesan, 'gagal', { durasi: 6000 });
+        }
       })
       .withFailureHandler(function (errSimpan) {
+        if (typeof pulihkanTombol === 'function') pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         tampilkanToast(pesanErrorRamah(errSimpan), 'gagal', { durasi: 6000 });
       })
@@ -495,6 +756,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
     berkasUntukUpload
   ).then(function (hasilUpload) {
     if (!hasilUpload || !hasilUpload.sukses) {
+      if (typeof pulihkanTombol === 'function') pulihkanTombol();
       loadingOverlay.classList.add('hidden');
       tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), 'gagal', { durasi: 6000 });
       return;
@@ -504,18 +766,33 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek) {
     loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
     eksekusiSimpan();
   }).catch(function (errUpload) {
+    if (typeof pulihkanTombol === 'function') pulihkanTombol();
     loadingOverlay.classList.add('hidden');
     tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
   });
 }
 
 function prosesValidasiDanSimpan() {
+  const btnSimpan = document.getElementById('btn-simpan-data');
+  if (btnSimpan) {
+    btnSimpan.disabled = true;
+    btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
+  }
+
+  function pulihkanTombol() {
+    if (btnSimpan) {
+      btnSimpan.disabled = false;
+      btnSimpan.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
+
   loadingOverlay.classList.remove('hidden');
   loadingOverlay.querySelector('h3').innerText = "MEMVERIFIKASI DATA...";
 
   google.script.run
     .withSuccessHandler(function (status) {
       if (!status.valid && status.tolakCapil) {
+        pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         document.getElementById('teks-nama-capil').textContent = status.namaCapil || '-';
         document.getElementById('teks-nik-capil').textContent = status.nikCapil || inputNik.value || '-';
@@ -527,6 +804,7 @@ function prosesValidasiDanSimpan() {
       }
 
       if (!status.valid && status.tolakStatus2026) {
+        pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         document.getElementById('teks-nama-2026').textContent = status.nama2026 || '-';
         document.getElementById('teks-nik-2026').textContent = inputNik.value || '-';
@@ -536,12 +814,14 @@ function prosesValidasiDanSimpan() {
         return;
       }
       if (!status.valid && status.kuotaHabis) {
+        pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         document.getElementById('pesan-kuota-habis').textContent = status.pesan;
         document.getElementById('modal-kuota-habis').classList.remove('hidden');
         return;
       }
       if (!status.valid && status.temuan && status.temuan.length > 0) {
+        pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         const wrap = document.getElementById('daftar-temuan-duplikat');
         wrap.innerHTML = status.temuan.map(function (t) {
@@ -557,6 +837,7 @@ function prosesValidasiDanSimpan() {
         return;
       }
       if (!status.valid) {
+        pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         tampilkanToast(status.pesan, 'gagal', { durasi: 6000 });
         return;
@@ -565,14 +846,16 @@ function prosesValidasiDanSimpan() {
       loadingOverlay.querySelector('h3').innerText = "MEMBACA BERKAS...";
       kumpulkanDataForm()
         .then(function (dataObjek) {
-          panggilSimpanDataKeSheetSetelahUpload(dataObjek);
+          panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol);
         })
         .catch(function (errBaca) {
+          pulihkanTombol();
           loadingOverlay.classList.add('hidden');
           tampilkanToast("Gagal membaca berkas: " + (errBaca && errBaca.message ? errBaca.message : errBaca), 'gagal');
         });
     })
     .withFailureHandler(function (err) {
+      pulihkanTombol();
       loadingOverlay.classList.add('hidden');
       tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
     })
@@ -690,6 +973,22 @@ formPembayaran.addEventListener('submit', (e) => {
     tampilkanToast("Nomor kontak tidak valid! Harus diawali 08, tanpa spasi/simbol, dan panjang 10-13 digit.", "gagal");
     inputKontak.focus();
     return;
+  }
+
+  // Periksa apakah ada dokumen PDF yang melebihi batas 3.2 MB gateway upload
+  const semuaFileInput = formPembayaran.querySelectorAll('input[type="file"]');
+  for (let f = 0; f < semuaFileInput.length; f++) {
+    const fIn = semuaFileInput[f];
+    if (fIn.files && fIn.files[0]) {
+      const file = fIn.files[0];
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      if (isPdf && file.size > 3.2 * 1024 * 1024) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        tampilkanToast('Dokumen PDF "' + file.name + '" (' + mb + ' MB) melebihi batas 3.2 MB gateway upload. Mohon kompres file PDF terlebih dahulu.', 'gagal', { durasi: 7000 });
+        fIn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
   }
 
   // Tampilkan modal konfirmasi

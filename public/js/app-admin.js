@@ -2116,6 +2116,19 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
         const sakelarSec = document.getElementById('gp-sakelar-section');
         if (sakelarSec && !sakelarSec.classList.contains('hidden')) window.muatStatusSakelar();
       }
+      if (typeof window.periksaStatusAkses === 'function') {
+        window.periksaStatusAkses();
+      }
+    }
+
+    // Pembaruan Realtime Langsung untuk Panel Input Data
+    if (isAll || domains.includes('kuota') || domains.includes('penerima')) {
+      if (typeof window.jalankanCekKuota === 'function') {
+        const secInput = document.getElementById('panel-input');
+        if (secInput && !secInput.classList.contains('hidden')) {
+          window.jalankanCekKuota(true);
+        }
+      }
     }
   });
 

@@ -107,13 +107,21 @@ export async function cekKuotaTersedia(kecamatan: string, layanan: string, jumla
     if (jumlahTerpakai >= kuotaMaks) {
       return {
         tersedia: false,
+        terpakai: jumlahTerpakai,
+        maks: kuotaMaks,
+        sisa: 0,
         pesan: "Kuota Layanan " + layanan + " untuk Kecamatan " + kecamatan +
           " sudah terpenuhi (" + jumlahTerpakai + "/" + kuotaMaks +
           "). Silahkan hubungi Admin Dinas Sosial Kota Medan.",
       };
     }
 
-    return { tersedia: true, terpakai: jumlahTerpakai, maks: kuotaMaks };
+    return {
+      tersedia: true,
+      terpakai: jumlahTerpakai,
+      maks: kuotaMaks,
+      sisa: Math.max(0, kuotaMaks - jumlahTerpakai),
+    };
   } catch (error) {
     return { tersedia: false, pesan: "Error cek kuota: " + String(error) };
   }
@@ -239,9 +247,20 @@ export async function cekKuotaRealtime(token: string, kecamatan: string, layanan
   }
   const hasil = await cekKuotaTersedia(kecamatan, layanan);
   if (!hasil.tersedia) {
-    return { blokir: true, pesan: hasil.pesan };
+    return {
+      blokir: true,
+      pesan: hasil.pesan,
+      terpakai: hasil.terpakai,
+      maks: hasil.maks,
+      sisa: hasil.sisa ?? 0,
+    };
   }
-  return { blokir: false, terpakai: hasil.terpakai, maks: hasil.maks };
+  return {
+    blokir: false,
+    terpakai: hasil.terpakai,
+    maks: hasil.maks,
+    sisa: hasil.sisa ?? Math.max(0, (hasil.maks || 0) - (hasil.terpakai || 0)),
+  };
 }
 
 // Port dari validasiDataBaru() + validasiDataBaru_() digabung jadi satu fungsi (perilaku identik):

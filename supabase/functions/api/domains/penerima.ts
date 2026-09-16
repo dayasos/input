@@ -413,50 +413,70 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
       };
     }
 
-    // ── Hitung nomor urut (serial per tahun, aman dari race condition via unique index) ──
-    const rowsNomor = await sql`
-      select coalesce(max(nomor_urut), 0) + 1 as next_nomor
-      from penerima where tahun = ${TAHUN_AKTIF}
-    `;
-    const nomorUrut = Number(rowsNomor[0]?.next_nomor) || 1;
+    // ── Hitung nomor urut & INSERT ke Postgres dengan retry otomatis jika terjadi tabrakan nomor urut ──
+    // (Serial per tahun dengan unique index uq_penerima_nomor_urut. Jika dua operator submit bersamaan,
+    // percobaan kedua/ketiga akan menghitung ulang nomor urut baru secara instan).
+    let insertSukses = false;
+    const maksPercobaan = 3;
+    let lastError: unknown = null;
 
-    // ── INSERT ke Postgres + enqueue sinkronisasi ke Sheets, SATU transaksi ──
-    // (sync_worker memproses `sync_outbox` async, baca ULANG baris ini fresh saat diproses —
-    // lihat catatan desain di supabase/functions/sync-worker/index.ts — jadi payload outbox di
-    // sini sengaja kosong `{}`, cukup entity_ref utk sync-worker tahu baris mana yang harus dibaca.)
-    // deno-lint-ignore no-explicit-any
-    await sql.begin(async (trx: any) => {
-      const rows = await trx`
-        insert into penerima (
-          tahun, nomor_urut,
-          nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
-          layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan,
-          nama_rekening, nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
-          link_ktp, link_buku_rekening, link_surat_permohonan, link_pernyataan_satu_bantuan,
-          link_domisili_kelurahan, link_formulir_pendataan, link_berkas_pendukung,
-          link_foto_plank_rumah_ibadah, link_foto_lokasi_ibadah, link_foto_kegiatan_belajar,
-          link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah,
-          id_folder_berkas, link_koordinat_lokasi,
-          status_verifikasi, catatan_perbedaan_nama,
-          dibuat_oleh_akun_id, sync_status
-        ) values (
-          ${TAHUN_AKTIF}, ${nomorUrut},
-          ${nama}, ${nik}, ${jenisKelamin}, ${tempatLahir}, ${tanggalLahirISO}, ${alamat},
-          ${layanan}, ${rapikanTeks(tempatTugas)}, ${rapikanTeks(alamatTugas)},
-          ${kecamatan}, ${kelurahan},
-          ${namaRekening}, ${nomorRekening}, ${kantorCabang}, ${noKontak}, ${statusBpjs},
-          ${umurHitung},
-          ${linkKtp}, ${linkBukuRekening}, ${linkSuratPermohon}, ${linkPernyataan},
-          ${linkDomisili}, ${linkFormulirPendataan}, ${linkBerkasPendukung},
-          ${linkFotoPlank}, ${linkFotoIbadah}, ${linkFotoKegiatan},
-          ${linkRekomendasiBkm}, ${linkRekomendasiRi},
-          ${idFolderBerkas}, ${koordinatLink},
-          'Proses Verifikasi', ${catatanPerbedaanNama},
-          ${sesi.akunId}, 'SUKSES'
-        )
-        returning id
-      `;
-    });
+    for (let percobaan = 0; percobaan < maksPercobaan; percobaan++) {
+      try {
+        const rowsNomor = await sql`
+          select coalesce(max(nomor_urut), 0) + 1 as next_nomor
+          from penerima where tahun = ${TAHUN_AKTIF}
+        `;
+        const nomorUrut = Number(rowsNomor[0]?.next_nomor) || 1;
+
+        // deno-lint-ignore no-explicit-any
+        await sql.begin(async (trx: any) => {
+          await trx`
+            insert into penerima (
+              tahun, nomor_urut,
+              nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
+              layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan,
+              nama_rekening, nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
+              link_ktp, link_buku_rekening, link_surat_permohonan, link_pernyataan_satu_bantuan,
+              link_domisili_kelurahan, link_formulir_pendataan, link_berkas_pendukung,
+              link_foto_plank_rumah_ibadah, link_foto_lokasi_ibadah, link_foto_kegiatan_belajar,
+              link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah,
+              id_folder_berkas, link_koordinat_lokasi,
+              status_verifikasi, catatan_perbedaan_nama,
+              dibuat_oleh_akun_id, sync_status
+            ) values (
+              ${TAHUN_AKTIF}, ${nomorUrut},
+              ${nama}, ${nik}, ${jenisKelamin}, ${tempatLahir}, ${tanggalLahirISO}, ${alamat},
+              ${layanan}, ${rapikanTeks(tempatTugas)}, ${rapikanTeks(alamatTugas)},
+              ${kecamatan}, ${kelurahan},
+              ${namaRekening}, ${nomorRekening}, ${kantorCabang}, ${noKontak}, ${statusBpjs},
+              ${umurHitung},
+              ${linkKtp}, ${linkBukuRekening}, ${linkSuratPermohon}, ${linkPernyataan},
+              ${linkDomisili}, ${linkFormulirPendataan}, ${linkBerkasPendukung},
+              ${linkFotoPlank}, ${linkFotoIbadah}, ${linkFotoKegiatan},
+              ${linkRekomendasiBkm}, ${linkRekomendasiRi},
+              ${idFolderBerkas}, ${koordinatLink},
+              'Proses Verifikasi', ${catatanPerbedaanNama},
+              ${sesi.akunId}, 'SUKSES'
+            )
+            returning id
+          `;
+        });
+
+        insertSukses = true;
+        break;
+      } catch (err) {
+        lastError = err;
+        const msgErr = String(err);
+        if (msgErr.includes("uq_penerima_nomor_urut") && percobaan < maksPercobaan - 1) {
+          // Jeda acak (jitter 40-120ms) agar tidak bentrok lagi
+          await new Promise((res) => setTimeout(res, 40 + Math.random() * 80));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!insertSukses) throw lastError;
 
     return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
   } catch (error) {

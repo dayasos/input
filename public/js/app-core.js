@@ -427,6 +427,7 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
     tabInput.style.pointerEvents = '';
   }
 }
+window.periksaStatusAkses = periksaStatusAkses;
 
 document.getElementById('btn-retur-kematian').addEventListener('click', function () {
   if (!pastikanLogin()) return;
@@ -932,11 +933,21 @@ function sembunyikanPeringatan(idElemen) {
   el.innerText = '';
 }
 
-inputNik.addEventListener('blur', function () {
+let debounceNikTimer = null;
+let nikTerakhirDicek = '';
+function triggerCekNik(force) {
   const nik = inputNik.value.trim();
+  if (nik.length !== 16) {
+    nikTerakhirDicek = '';
+    sembunyikanPeringatan('peringatan-nik');
+    bukaKunciForm('NIK');
+    return;
+  }
+  if (!force && nik === nikTerakhirDicek) return;
+  nikTerakhirDicek = nik;
+
   sembunyikanPeringatan('peringatan-nik');
   bukaKunciForm('NIK');
-  if (nik.length !== 16) return;
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -947,13 +958,41 @@ inputNik.addEventListener('blur', function () {
     })
     .withFailureHandler(function () { /* diam; validasi final saat submit tetap jadi jaring pengaman */ })
     .cekNikRealtime(dataPengguna.token, nik);
+}
+
+inputNik.addEventListener('blur', function () {
+  triggerCekNik(true);
 });
 
-inputNoRek.addEventListener('blur', function () {
+inputNik.addEventListener('input', function (e) {
+  e.target.value = e.target.value.replace(/[^0-9]/g, '');
+  clearTimeout(debounceNikTimer);
+  if (e.target.value.length === 16) {
+    debounceNikTimer = setTimeout(function () {
+      triggerCekNik(false);
+    }, 400);
+  } else {
+    nikTerakhirDicek = '';
+    sembunyikanPeringatan('peringatan-nik');
+    bukaKunciForm('NIK');
+  }
+});
+
+let debounceRekTimer = null;
+let rekTerakhirDicek = '';
+function triggerCekRekening(force) {
   const rek = inputNoRek.value.trim();
+  if (rek.length !== 14) {
+    rekTerakhirDicek = '';
+    sembunyikanPeringatan('peringatan-rekening');
+    bukaKunciForm('REKENING');
+    return;
+  }
+  if (!force && rek === rekTerakhirDicek) return;
+  rekTerakhirDicek = rek;
+
   sembunyikanPeringatan('peringatan-rekening');
   bukaKunciForm('REKENING');
-  if (rek.length !== 14) return;
 
   google.script.run
     .withSuccessHandler(function (res) {
@@ -964,6 +1003,28 @@ inputNoRek.addEventListener('blur', function () {
     })
     .withFailureHandler(function () { })
     .cekRekeningRealtime(dataPengguna.token, rek);
+}
+
+inputNoRek.addEventListener('blur', function () {
+  triggerCekRekening(true);
+});
+
+inputNoRek.addEventListener('input', function (e) {
+  e.target.value = e.target.value.replace(/[^0-9]/g, '');
+  clearTimeout(debounceRekTimer);
+  if (e.target.value.length === 14) {
+    debounceRekTimer = setTimeout(function () {
+      triggerCekRekening(false);
+    }, 400);
+  } else {
+    rekTerakhirDicek = '';
+    sembunyikanPeringatan('peringatan-rekening');
+    bukaKunciForm('REKENING');
+  }
+});
+
+inputKontak.addEventListener('input', function (e) {
+  e.target.value = e.target.value.replace(/[^0-9]/g, '');
 });
 
 function kunciTempatTugas() {
@@ -1030,28 +1091,76 @@ function jalankanCekTempatTugas() {
 inputTempatTugas.addEventListener('blur', jalankanCekTempatTugas);
 inputAlamatTugas.addEventListener('blur', jalankanCekTempatTugas);
 
-function jalankanCekKuota() {
-  bukaKunciForm('KUOTA');
-  const kec = controlKecamatan.value;
-  const lay = selectLayanan.value;
-  if (!kec || !lay) return;
+function perbaruiTampilanKuotaInput(res, kec, lay) {
+  const badge = document.getElementById('badge-kuota-input-realtime');
+  const info = document.getElementById('info-kuota-layanan');
+  if (!kec || !lay) {
+    if (badge) { badge.className = 'hidden'; badge.innerHTML = ''; }
+    if (info) { info.className = 'hidden'; info.innerHTML = ''; }
+    return;
+  }
+
+  if (!res) return;
+
+  const maks = res.maks || 0;
+  const terpakai = res.terpakai || 0;
+  const sisa = res.sisa != null ? res.sisa : Math.max(0, maks - terpakai);
+  const isPenuh = Boolean(res.blokir) || (maks > 0 && sisa <= 0);
+
+  if (badge) {
+    badge.classList.remove('hidden');
+    badge.classList.add('flex');
+    if (isPenuh) {
+      badge.className = 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse';
+      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Kuota Penuh (' + terpakai + '/' + maks + ')</span>';
+    } else if (sisa <= 3) {
+      badge.className = 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40';
+      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span><span>Sisa ' + sisa + ' dari ' + maks + ' kuota</span>';
+    } else {
+      badge.className = 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>Kuota Tersedia: ' + sisa + ' / ' + maks + '</span>';
+    }
+  }
+
+  if (info) {
+    info.classList.remove('hidden');
+    info.classList.add('flex');
+    if (isPenuh) {
+      info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-bold text-rose-600';
+      info.innerHTML = '<span>⚠️ Kuota layanan untuk ' + kec + ' telah terpenuhi (' + terpakai + '/' + maks + ')</span>';
+    } else {
+      info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-semibold text-emerald-600';
+      info.innerHTML = '<span>🟢 Kuota tersedia: ' + sisa + ' dari ' + maks + ' (Terpakai: ' + terpakai + ')</span>';
+    }
+  }
+}
+
+function jalankanCekKuota(isSilent) {
+  const kec = controlKecamatan ? controlKecamatan.value : '';
+  const lay = selectLayanan ? selectLayanan.value : '';
+  if (!kec || !lay) {
+    bukaKunciForm('KUOTA');
+    perbaruiTampilanKuotaInput(null, '', '');
+    return;
+  }
 
   google.script.run
     .withSuccessHandler(function (res) {
+      perbaruiTampilanKuotaInput(res, kec, lay);
       if (res && res.blokir) {
-        tampilkanToast(res.pesan, 'gagal', { durasi: 6000 });
+        if (!isSilent) tampilkanToast(res.pesan, 'gagal', { durasi: 6000 });
         kunciDariBlokSetelah('KUOTA', 0, null); // field ini di luar semua fieldset -> kunci semuanya
+      } else {
+        bukaKunciForm('KUOTA');
       }
     })
     .withFailureHandler(function () { })
     .cekKuotaRealtime(dataPengguna.token, kec, lay);
 }
-controlKecamatan.addEventListener('change', jalankanCekKuota);
-selectLayanan.addEventListener('change', jalankanCekKuota);
 
-[inputNik, inputNoRek, inputKontak].forEach(input => {
-  input.addEventListener('input', (e) => { e.target.value = e.target.value.replace(/[^0-9]/g, ''); });
-});
+window.jalankanCekKuota = jalankanCekKuota;
+controlKecamatan.addEventListener('change', function () { jalankanCekKuota(false); });
+selectLayanan.addEventListener('change', function () { jalankanCekKuota(false); });
 
 (function () {
   const ID_DIKECUALIKAN = [
