@@ -2128,28 +2128,23 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
 
       const channel = client.channel('djpm-sync');
 
+      // 1. Tangkap perubahan dari Database via Event Bus Bebas-PII (CDC Realtime)
       channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'penerima_2027' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['penerima', 'dashboard', 'kuota'], false);
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'realtime_event_bus' }, function (payload) {
+          const domain = (payload && payload.new && payload.new.domain) || '*';
+          if (window.djpmCache) {
+            if (domain === 'penerima') {
+              window.djpmCache.invalidate(['penerima', 'dashboard', 'kuota'], false);
+            } else if (domain === 'data_detail') {
+              window.djpmCache.invalidate(['penerima_detail', 'dashboard', 'data_detail'], false);
+            } else if (domain === 'kuota') {
+              window.djpmCache.invalidate(['kuota', 'dashboard'], false);
+            } else {
+              window.djpmCache.invalidate([domain], false);
+            }
+          }
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'penerima' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['penerima', 'dashboard', 'kuota'], false);
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'kuota' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['kuota', 'dashboard'], false);
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'setelan' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['setelan'], false);
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'akun' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['akun'], false);
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'data_detail_2027' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['penerima_detail', 'dashboard', 'data_detail'], false);
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'data_detail' }, function () {
-          if (window.djpmCache) window.djpmCache.invalidate(['penerima_detail', 'dashboard', 'data_detail'], false);
-        })
+        // 2. Tangkap penyiaran langsung antar-browser (Instant Web Broadcast)
         .on('broadcast', { event: 'MUTATION' }, function (msg) {
           const payload = msg && msg.payload;
           const domains = (payload && payload.domains) || ['*'];
@@ -2164,6 +2159,14 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
             updateStatusBadge('connecting');
           }
         });
+
+      // Auto-reconnect jika tab kembali fokus atau perangkat kembali online
+      window.addEventListener('online', function () {
+        if (channel && channel.state !== 'joined') {
+          updateStatusBadge('connecting');
+          channel.subscribe();
+        }
+      });
 
       window.djpmRealtimeChannel = channel;
       window.djpmSupabaseClient = client;

@@ -217,12 +217,13 @@ export default async function handler(req, res) {
 
     return res.status(200).json(data);
   } catch (err) {
-    console.error(`Vercel Proxy Error for action [${payloadObj.action}] (Supabase Edge Function):`, err);
+    const backendName = targetUrl.includes('script.google.com') ? 'Google Drive Microservice (Apps Script)' : 'Supabase Edge Function';
+    console.error(`Vercel Proxy Error for action [${payloadObj.action}] (${backendName}):`, err);
 
     // Bedakan antara respon bukan JSON (parse error) vs kesalahan jaringan/timeout
     if (err instanceof SyntaxError) {
       return res.status(502).json({
-        error: 'Supabase Edge Function tidak mengembalikan respon JSON valid. Pastikan Function aktif dan dapat diakses.',
+        error: `${backendName} tidak mengembalikan respon JSON valid. Pastikan endpoint aktif dan dapat diakses.`,
         action: payloadObj.action,
         details: text ? text.slice(0, 500) : err.message,
         usedUrl: targetUrl
@@ -232,7 +233,7 @@ export default async function handler(req, res) {
     const causeStr = err.cause ? ` (Penyebab: ${err.cause.message || err.cause.code || String(err.cause)})` : '';
     const errString = err instanceof Error ? err.message : String(err);
     return res.status(500).json({
-      error: `Terjadi kesalahan koneksi antara server Vercel dan Supabase Edge Function. Detail: ${errString}${causeStr}`,
+      error: `Terjadi kesalahan koneksi antara server Vercel dan ${backendName}. Detail: ${errString}${causeStr}`,
       action: payloadObj.action,
       details: errString,
       cause: causeStr,

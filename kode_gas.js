@@ -84,12 +84,50 @@ function ambilSesi_(token) {
     if (!token) return null;
     const cache = CacheService.getScriptCache();
     const data = cache.get("sesi_" + token);
-    if (!data) return null;
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        return null;
+    if (data) {
+        try {
+            return JSON.parse(data);
+        } catch (e) { }
     }
+
+    // Validasi token langsung ke Supabase Edge Function jika tidak ada di CacheService
+    try {
+        const scriptProperties = PropertiesService.getScriptProperties();
+        const EXPECTED_SECRET = "DJPM2027_DEFAULT_SECRET";
+        const secret = scriptProperties.getProperty('GAS_SECRET_TOKEN') || EXPECTED_SECRET;
+        const supabaseApiUrl = scriptProperties.getProperty('SUPABASE_EDGE_FUNCTION_URL') ||
+            "https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api";
+
+        const resp = UrlFetchApp.fetch(supabaseApiUrl, {
+            method: "post",
+            contentType: "application/json",
+            payload: JSON.stringify({
+                action: "pulihkanSesi",
+                args: [token],
+                _secret: secret
+            }),
+            muteHttpExceptions: true
+        });
+
+        if (resp.getResponseCode() === 200) {
+            const resJson = JSON.parse(resp.getContentText());
+            if (resJson && resJson.result && resJson.result.sukses && resJson.result.role) {
+                const dataPengguna = {
+                    username: resJson.result.username,
+                    role: resJson.result.role,
+                    kecamatan: resJson.result.kecamatan,
+                    userId: resJson.result.userId || ""
+                };
+                // Simpan ke cache 1 jam (3600 detik) agar upload berkas berikutnya instan
+                cache.put("sesi_" + token, JSON.stringify(dataPengguna), 3600);
+                return dataPengguna;
+            }
+        }
+    } catch (errSupabase) {
+        // Jika terjadi timeout atau kendala jaringan, biarkan return null
+    }
+
+    return null;
 }
 
 function wajibSesi_(token) {
