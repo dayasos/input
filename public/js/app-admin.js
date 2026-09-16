@@ -540,10 +540,16 @@ function tampilkanModalUpdate() {
             elUser.value = "";
             try { localStorage.setItem('dana_jasa_username', res.usernameBaru); } catch (e) { }
             setTimeout(function () {
-              alert("Username berhasil diubah menjadi \"" + res.usernameBaru + "\".\nSilakan login ulang dengan username baru.");
-              dataPengguna = { username: "", role: "", kecamatan: "", token: "" };
-              location.href = location.href.split('?')[0] + '?t=' + Date.now();
-            }, 800);
+              tampilkanPesanModal({
+                judul: "Username Berhasil Diperbarui",
+                pesan: "Username berhasil diubah menjadi \"" + res.usernameBaru + "\".\nSilakan login kembali dengan username baru Anda.",
+                tipe: "success",
+                teksTombol: "Login Ulang"
+              }).then(function () {
+                dataPengguna = { username: "", role: "", kecamatan: "", token: "" };
+                location.href = location.href.split('?')[0] + '?t=' + Date.now();
+              });
+            }, 500);
           }
         } else {
           tampilPesan(res ? res.pesan : "Gagal menyimpan perubahan.", false);
@@ -649,17 +655,24 @@ function tampilkanModalUpdate() {
   }
 
   function konfirmasiToggleSakelar(buka) {
-    const aksi = buka ? "membuka" : "menutup";
+    const aksi = buka ? "Membuka" : "Menutup";
     const dampak = buka
       ? "Semua admin kecamatan dan kemenag akan bisa mulai menginput dan mengedit data."
       : "Semua admin kecamatan dan kemenag tidak akan bisa menginput atau mengedit data sampai Anda membuka kembali.";
-    if (!confirm("Anda yakin ingin " + aksi + " periode input?\n\n" + dampak + "\n\nAdmin utama tetap bebas kapan saja.")) return;
 
-    const btn = document.getElementById('sakelar-toggle');
-    if (btn) { btn.disabled = true; btn.textContent = "⏳ MEMPROSES..."; }
+    konfirmasiAksi({
+      judul: aksi + " Periode Input Data",
+      pesan: "Anda yakin ingin " + aksi.toLowerCase() + " periode input?\n\n" + dampak + "\n\n(Catatan: Admin utama tetap bebas kapan saja).",
+      tipe: buka ? "info" : "warning",
+      teksBatal: "Batal",
+      teksKonfirmasi: "Ya, " + aksi
+    }).then(function (setuju) {
+      if (!setuju) return;
+      const btn = document.getElementById('sakelar-toggle');
+      if (btn) { btn.disabled = true; btn.textContent = "⏳ MEMPROSES..."; }
 
-    google.script.run
-      .withSuccessHandler(function (res) {
+      google.script.run
+        .withSuccessHandler(function (res) {
         if (res && res.sukses) {
           let pesanSukses = "Sakelar berhasil diubah. Perubahan langsung berlaku untuk user yang login berikutnya.";
           if (res.cleanup > 0) {
@@ -869,10 +882,16 @@ function tampilkanModalUpdate() {
   });
 
   function eksekusiAksiPerUser(userId, aksi) {
-    const namaAksi = aksi === "BUKA" ? "membuka" : (aksi === "TUTUP" ? "menutup" : "mereset");
-    if (!confirm("Anda yakin ingin " + namaAksi + " akses untuk user ini?\n\nUser ID: " + userId)) return;
-
-    if (aksi === "RESET") {
+    const namaAksi = aksi === "BUKA" ? "Membuka" : (aksi === "TUTUP" ? "Menutup" : "Mereset");
+    konfirmasiAksi({
+      judul: namaAksi + " Akses Pengguna",
+      pesan: "Anda yakin ingin " + namaAksi.toLowerCase() + " akses untuk user ini?\n\nUser ID: " + userId,
+      tipe: aksi === "TUTUP" ? "warning" : "info",
+      teksBatal: "Batal",
+      teksKonfirmasi: "Ya, " + namaAksi
+    }).then(function (setuju) {
+      if (!setuju) return;
+      if (aksi === "RESET") {
       google.script.run
         .withSuccessHandler(function (res) { hasilAksiPerUser(res); })
         .withFailureHandler(function (err) { tampilkanToast(pesanErrorRamah(err), "gagal"); })
@@ -989,11 +1008,17 @@ function tampilkanModalUpdate() {
     if (kec === undefined || kec === null) { tampilkanToast("Pilih kecamatan dulu.", "gagal"); return; }
 
     const kecLabel = kec || "(TANPA KECAMATAN)";
-    const namaAksi = bkAksiTerpilih === "BUKA" ? "membuka" : (bkAksiTerpilih === "TUTUP" ? "menutup" : "mereset");
-    if (!confirm("Anda yakin ingin " + namaAksi + " akses untuk SEMUA user di " + kecLabel + "?")) return;
-
-    document.getElementById('bk-eksekusi').disabled = true;
-    document.getElementById('bk-eksekusi').textContent = "Memproses...";
+    const namaAksi = bkAksiTerpilih === "BUKA" ? "Membuka" : (bkAksiTerpilih === "TUTUP" ? "Menutup" : "Mereset");
+    konfirmasiAksi({
+      judul: namaAksi + " Akses Massal Kecamatan",
+      pesan: "Anda yakin ingin " + namaAksi.toLowerCase() + " akses untuk SEMUA user di " + kecLabel + "?",
+      tipe: bkAksiTerpilih === "TUTUP" ? "warning" : "info",
+      teksBatal: "Batal",
+      teksKonfirmasi: "Ya, " + namaAksi
+    }).then(function (setuju) {
+      if (!setuju) return;
+      document.getElementById('bk-eksekusi').disabled = true;
+      document.getElementById('bk-eksekusi').textContent = "Memproses...";
 
     google.script.run
       .withSuccessHandler(function (res) {
@@ -2053,12 +2078,18 @@ function bukaModalResetSandiUser(username) {
 }
 
 function konfirmasiHapusUser(username) {
-  if (!confirm('Apakah Anda yakin ingin MENGHAPUS akun pengguna "' + username + '"?\nTindakan ini tidak dapat dibatalkan!')) return;
+  konfirmasiAksi({
+    judul: "Hapus Akun Pengguna",
+    pesan: "Apakah Anda yakin ingin MENGHAPUS akun pengguna \"" + username + "\"?\n\nTindakan ini bersifat permanen dan tidak dapat dibatalkan!",
+    tipe: "danger",
+    teksBatal: "Batal",
+    teksKonfirmasi: "Ya, Hapus Akun"
+  }).then(function (setuju) {
+    if (!setuju) return;
+    tampilkanToast('Menghapus akun ' + username + '...', 'proses');
 
-  tampilkanToast('Menghapus akun ' + username + '...', 'info');
-
-  google.script.run
-    .withSuccessHandler(function (res) {
+    google.script.run
+      .withSuccessHandler(function (res) {
       if (res && res.sukses) {
         tampilkanToast(res.pesan, 'sukses');
         muatDaftarUserLengkap();

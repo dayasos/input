@@ -389,7 +389,9 @@ class GoogleScriptRunProxy {
                     }
                     const panelRekap = document.getElementById('panel-rekap');
                     if (panelRekap) panelRekap.classList.add('hidden');
-                    alert("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+                    if (typeof tampilkanToast === "function") {
+                      tampilkanToast("Sesi Anda telah berakhir. Silakan login kembali.", "peringatan", { durasi: 6000 });
+                    }
                   }
                 }
 
@@ -424,7 +426,9 @@ class GoogleScriptRunProxy {
                   }
                   const panelRekap = document.getElementById('panel-rekap');
                   if (panelRekap) panelRekap.classList.add('hidden');
-                  alert("Sesi Anda telah berakhir. Silakan login kembali untuk melanjutkan.");
+                  if (typeof tampilkanToast === "function") {
+                    tampilkanToast("Sesi Anda telah berakhir. Silakan login kembali.", "peringatan", { durasi: 6000 });
+                  }
                 }
               }
 

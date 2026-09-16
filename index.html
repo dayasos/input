@@ -14,9 +14,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DJPM 2027">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
     .glass-card {
@@ -710,50 +713,86 @@
             Total Data: Dimuat
           </div>
         </div>
-        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
+        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-x-auto pb-1">
           <!-- Dropdown Tahun -->
-          <div class="flex items-center gap-2 bg-slate-50 border-2 border-sky-400 rounded-lg px-3 py-1.5">
-            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">📅
-              Tahun</span>
+          <div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-sm text-xs shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span class="font-bold text-slate-500 uppercase tracking-wider text-[11px]">Tahun</span>
             <select id="select-tahun-data" onchange="gantTahunData()"
-              class="text-sm font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer">
+              class="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer">
               <option value="2027">2027 (Aktif)</option>
             </select>
           </div>
+
+          <!-- Tools Kelompok Admin Utama -->
           <button id="btn-dashboard-progres"
-            class="hidden bg-teal-700 hover:bg-teal-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
-            📊 Dashboard
+            class="hidden bg-slate-900 hover:bg-slate-800 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span>Dashboard</span>
           </button>
           <button id="btn-progres-kuota"
-            class="hidden bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
-            📈 Progres Kuota
+            class="hidden bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+            <span>Progres Kuota</span>
           </button>
           <button id="btn-kelola-kuota"
-            class="hidden bg-amber-700 hover:bg-amber-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
-            ⚙️ Kelola Kuota
+            class="hidden bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Kelola Kuota</span>
           </button>
+
+          <!-- Ekspor & Data Detail -->
           <button id="btn-export-xlsx"
-            class="bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5"
+            class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
             title="Ekspor hanya data yang berstatus Memenuhi Syarat ke Excel">
-            📥 Export Excel (✅ MS)
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Export Excel</span>
           </button>
           <button id="btn-data-detail" onclick="tampilkanDataDetail()"
-            class="bg-indigo-700 hover:bg-indigo-800 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5"
+            class="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
             title="Rekap data Memenuhi Syarat, sumber untuk proses Pembayaran">
-            🔎 Data Detail
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>Data Detail</span>
           </button>
+
           <button id="btn-refresh-data"
-            class="hidden bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5"
+            class="hidden bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
             title="Refresh Data">
-            🔄 Refresh
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Refresh</span>
           </button>
+
+          <!-- Aksi Massal -->
           <button id="btn-verifikasi-massal"
-            class="hidden bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
-            ✅ Memenuhi Syarat
+            class="hidden bg-amber-600 hover:bg-amber-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
+            title="Tandai data yang proses verifikasi menjadi Memenuhi Syarat">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Verifikasi Semua</span>
           </button>
           <button id="btn-salin-wa-berkas"
-            class="hidden bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-xs font-semibold transition shadow-sm flex items-center gap-1.5">
-            📋 WhatsApp
+            class="hidden bg-teal-600 hover:bg-teal-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
+            title="Salin daftar perbaikan berkas untuk WhatsApp">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+            <span>Salin WA</span>
           </button>
         </div>
       </div>
@@ -1072,9 +1111,9 @@
       </div>
     </div>
 
-    <!-- Kontainer Toast/Notifikasi Ringan (lihat fungsi tampilkanToast di script utama) -->
+    <!-- Kontainer Toast/Notifikasi Elegan & Responsif -->
     <div id="toast-container"
-      class="fixed top-4 right-4 z-[500] flex flex-col gap-2 items-end pointer-events-none max-w-[90vw]"></div>
+      class="fixed top-4 right-4 sm:right-6 z-[500] flex flex-col gap-2.5 items-end pointer-events-none max-w-[92vw] sm:max-w-md"></div>
 
     <!-- Modal Pembaruan Sistem -->
     <div id="modal-update-sistem"
@@ -2509,6 +2548,30 @@
                 d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
             <span>Ya, Keluar</span>
+          </button>
+        </div>
+    </div>
+
+    <!-- Modal Konfirmasi & Dialog Pesan Universal Bertema Profesional -->
+    <div id="modal-konfirmasi-universal"
+      class="hidden fixed inset-0 z-[350] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-opacity duration-200"
+      onclick="if(event.target===this)window._tutupModalKonfirmasiUniversal(false)">
+      <div
+        class="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100 overflow-hidden transform transition-all p-6 text-center animate-in fade-in zoom-in duration-150">
+        <div id="modal-konfirm-icon-wrapper"
+          class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-4 shadow-inner ring-8 transition-colors">
+          <span id="modal-konfirm-icon-svg" class="w-7 h-7 flex items-center justify-center"></span>
+        </div>
+        <h3 id="modal-konfirm-judul" class="text-base font-bold text-slate-900 mb-1.5 leading-snug">Konfirmasi Aksi</h3>
+        <p id="modal-konfirm-pesan" class="text-xs text-slate-600 mb-5 leading-relaxed whitespace-pre-line"></p>
+        <div id="modal-konfirm-wadah-tombol" class="flex gap-2.5">
+          <button type="button" id="modal-konfirm-btn-batal" onclick="window._tutupModalKonfirmasiUniversal(false)"
+            class="w-1/2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs rounded-xl transition">
+            Batal
+          </button>
+          <button type="button" id="modal-konfirm-btn-ya" onclick="window._tutupModalKonfirmasiUniversal(true)"
+            class="w-1/2 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
+            <span id="modal-konfirm-teks-ya">Lanjutkan</span>
           </button>
         </div>
       </div>

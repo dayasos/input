@@ -1192,7 +1192,7 @@ function setupPencarianRealtime() {
   inputCari.oninput = null;
   inputCari.oninput = function () {
     clearTimeout(penandaWaktuKetik);
-    penandaWaktuKetik = setTimeout(function () { aksiGantiFilter(); }, 300);
+    penandaWaktuKetik = setTimeout(function () { aksiGantiFilter(); }, 120);
   };
 }
 function aksiGantiFilter() { halamanSekarang = 1; saringDanTampilkanTabel(); }
@@ -1336,13 +1336,19 @@ function saringDanTampilkanTabel() {
 
 function badgeStatusVerifikasi(status, tanggalLapor) {
   const s = (status || "Proses Verifikasi").toString();
-  if (s === "Memenuhi Syarat") return `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">✅ Memenuhi Syarat</span>`;
-  if (s === "Tidak Memenuhi Syarat") return `<span class="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-1 rounded-full">❌ Tidak Memenuhi Syarat</span>`;
-  if (s === "Berkas Tidak Lengkap") {
-    if (tanggalLapor) return `<span class="bg-sky-100 text-sky-700 text-[10px] font-bold px-2 py-1 rounded-full">🔔 Sudah Dilaporkan</span>`;
-    return `<span class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full">📋 Berkas Tidak Lengkap</span>`;
+  if (s === "Memenuhi Syarat") {
+    return '<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-emerald-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>Memenuhi Syarat</span>';
   }
-  return `<span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded-full">⏳ Proses Verifikasi</span>`;
+  if (s === "Tidak Memenuhi Syarat") {
+    return '<span class="inline-flex items-center gap-1 bg-rose-50 text-rose-700 border border-rose-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-rose-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>Tidak Memenuhi</span>';
+  }
+  if (s === "Berkas Tidak Lengkap") {
+    if (tanggalLapor) {
+      return '<span class="inline-flex items-center gap-1 bg-sky-50 text-sky-700 border border-sky-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-sky-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>Sudah Dilaporkan</span>';
+    }
+    return '<span class="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-amber-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Berkas Kurang</span>';
+  }
+  return '<span class="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-slate-500 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>Proses Verifikasi</span>';
 }
 
 // Pembayaran Bank Sumut
@@ -2297,25 +2303,31 @@ document.getElementById('btn-export-xlsx').addEventListener('click', function ()
 });
 
 document.getElementById('btn-verifikasi-massal').addEventListener('click', function () {
-  const konfirmasi = confirm("Ini akan menandai SEMUA data yang masih berstatus 'Proses Verifikasi' menjadi 'Memenuhi Syarat', tanpa memandang filter yang sedang aktif. Data yang sudah ditandai 'Tidak Memenuhi Syarat' tidak akan tersentuh. Lanjutkan?");
-  if (!konfirmasi) return;
-
   const btn = this;
-  setTombolMemuat(btn, "Memproses...");
+  konfirmasiAksi({
+    judul: "Verifikasi Massal Memenuhi Syarat",
+    pesan: "Ini akan menandai SEMUA data yang masih berstatus 'Proses Verifikasi' menjadi 'Memenuhi Syarat', tanpa memandang filter yang sedang aktif.\n\nData yang sudah berstatus 'Tidak Memenuhi Syarat' tidak akan disentuh. Lanjutkan?",
+    tipe: "warning",
+    teksBatal: "Batal",
+    teksKonfirmasi: "Ya, Verifikasi Semua"
+  }).then(function (setuju) {
+    if (!setuju) return;
+    setTombolMemuat(btn, "Memproses...");
 
-  google.script.run
-    .withSuccessHandler(function (res) {
-      pulihkanTombol(btn);
-      if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal', { durasi: 6000 }); return; }
-      tampilkanToast('Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".', 'sukses');
-      invalidateCacheDataTransaksi();
-      inisialisasiMenuLihatData(); // muat ulang tabel supaya badge ter-update
-    })
-    .withFailureHandler(function (err) {
-      pulihkanTombol(btn);
-      tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
-    })
-    .verifikasiMassalMemenuhiSyarat(dataPengguna.token);
+    google.script.run
+      .withSuccessHandler(function (res) {
+        pulihkanTombol(btn);
+        if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal', { durasi: 6000 }); return; }
+        tampilkanToast('Selesai! ' + res.jumlah + ' data ditandai "Memenuhi Syarat".', 'sukses');
+        invalidateCacheDataTransaksi();
+        inisialisasiMenuLihatData(); // muat ulang tabel supaya badge ter-update
+      })
+      .withFailureHandler(function (err) {
+        pulihkanTombol(btn);
+        tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+      })
+      .verifikasiMassalMemenuhiSyarat(dataPengguna.token);
+  });
 });
 
 window.bukaModalKonfirmasiLogout = function () {

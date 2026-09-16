@@ -185,10 +185,31 @@ function sapaanWaktu() {
 }
 
 const KONFIG_TOAST = {
-  sukses: { border: "border-emerald-500", iconBg: "bg-emerald-100", iconColor: "text-emerald-600", ikon: "✓" },
-  gagal: { border: "border-red-500", iconBg: "bg-red-100", iconColor: "text-red-600", ikon: "✕" },
-  info: { border: "border-sky-500", iconBg: "bg-sky-100", iconColor: "text-sky-600", ikon: "i" },
-  proses: { border: "border-slate-400", iconBg: "bg-slate-100", iconColor: "text-slate-500", ikon: null }
+  sukses: {
+    border: "border-emerald-500",
+    iconBg: "bg-emerald-100 ring-4 ring-emerald-50 text-emerald-600",
+    ikonSvg: '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>'
+  },
+  gagal: {
+    border: "border-rose-500",
+    iconBg: "bg-rose-100 ring-4 ring-rose-50 text-rose-600",
+    ikonSvg: '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>'
+  },
+  peringatan: {
+    border: "border-amber-500",
+    iconBg: "bg-amber-100 ring-4 ring-amber-50 text-amber-600",
+    ikonSvg: '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>'
+  },
+  info: {
+    border: "border-sky-500",
+    iconBg: "bg-sky-100 ring-4 ring-sky-50 text-sky-600",
+    ikonSvg: '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" /></svg>'
+  },
+  proses: {
+    border: "border-sky-500",
+    iconBg: "bg-sky-100 ring-4 ring-sky-50 text-sky-600",
+    ikonSvg: '<span class="loader-kecil"></span>'
+  }
 };
 let _toastCounter = 0;
 
@@ -202,14 +223,14 @@ function tampilkanToast(pesan, jenis, opsi) {
   const id = "toast-" + (++_toastCounter);
   const el = document.createElement("div");
   el.id = id;
-  el.className = "bg-white " + cfg.border + " border-l-4 text-slate-700 text-sm font-medium rounded-lg shadow-lg ring-1 ring-slate-900/5 px-4 py-3 pr-8 flex items-start gap-3 max-w-sm w-max relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
-  const ikonHtml = cfg.ikon
-    ? '<span class="w-5 h-5 rounded-full ' + cfg.iconBg + ' ' + cfg.iconColor + ' flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5">' + cfg.ikon + '</span>'
-    : '<span class="w-5 h-5 rounded-full ' + cfg.iconBg + ' flex items-center justify-center shrink-0 mt-0.5"><span class="loader-kecil"></span></span>';
+  el.className = "bg-white/95 backdrop-blur-md " + cfg.border + " border-l-4 text-slate-800 text-xs font-semibold rounded-xl shadow-xl ring-1 ring-black/5 px-4 py-3 pr-8 flex items-start gap-3 max-w-sm w-full relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
+  const ikonHtml = '<span class="w-6 h-6 rounded-full ' + cfg.iconBg + ' flex items-center justify-center shrink-0 mt-0.5">' + cfg.ikonSvg + '</span>';
   el.innerHTML =
     ikonHtml +
-    '<span class="whitespace-pre-line leading-snug">' + (typeof esc === "function" ? esc(pesan) : String(pesan)) + '</span>' +
-    '<button type="button" aria-label="Tutup notifikasi" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600 text-base leading-none" onclick="tutupToast(\'' + id + '\')">&times;</button>';
+    '<div class="flex-1 whitespace-pre-line leading-relaxed pt-0.5">' + (typeof esc === "function" ? esc(pesan) : String(pesan)) + '</div>' +
+    '<button type="button" aria-label="Tutup notifikasi" class="absolute top-2.5 right-2.5 text-slate-400 hover:text-slate-700 transition" onclick="tutupToast(\'' + id + '\')">' +
+    '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>' +
+    '</button>';
   cont.appendChild(el);
 
   requestAnimationFrame(function () { el.classList.remove("opacity-0", "translate-x-4"); });
@@ -226,6 +247,133 @@ function tutupToast(id) {
   el.classList.add("opacity-0", "translate-x-4");
   setTimeout(function () { el.remove(); }, 300);
 }
+
+// =========================================================================
+// SISTEM MODAL KONFIRMASI & DIALOG PESAN UNIVERSAL (Pengganti confirm & alert)
+// =========================================================================
+let _resolveKonfirmasi = null;
+
+function _tutupModalKonfirmasiUniversal(hasil) {
+  const modal = document.getElementById('modal-konfirmasi-universal');
+  if (modal) modal.classList.add('hidden');
+  if (typeof _resolveKonfirmasi === "function") {
+    const fn = _resolveKonfirmasi;
+    _resolveKonfirmasi = null;
+    fn(!!hasil);
+  }
+}
+window._tutupModalKonfirmasiUniversal = _tutupModalKonfirmasiUniversal;
+
+function konfirmasiAksi(opsi) {
+  opsi = opsi || {};
+  const judul = opsi.judul || "Konfirmasi Tindakan";
+  const pesan = opsi.pesan || "Apakah Anda yakin ingin melanjutkan tindakan ini?";
+  const tipe = opsi.tipe || "info"; // 'danger' | 'warning' | 'info' | 'success'
+  const teksBatal = opsi.teksBatal || "Batal";
+  const teksKonfirmasi = opsi.teksKonfirmasi || "Lanjutkan";
+
+  const modal = document.getElementById('modal-konfirmasi-universal');
+  if (!modal) {
+    return Promise.resolve(window.confirm(pesan));
+  }
+
+  const judulEl = document.getElementById('modal-konfirm-judul');
+  const pesanEl = document.getElementById('modal-konfirm-pesan');
+  const iconWrap = document.getElementById('modal-konfirm-icon-wrapper');
+  const iconSvg = document.getElementById('modal-konfirm-icon-svg');
+  const btnBatal = document.getElementById('modal-konfirm-btn-batal');
+  const btnYa = document.getElementById('modal-konfirm-btn-ya');
+  const teksYa = document.getElementById('modal-konfirm-teks-ya');
+
+  if (judulEl) judulEl.textContent = judul;
+  if (pesanEl) pesanEl.textContent = pesan;
+  if (btnBatal) {
+    btnBatal.textContent = teksBatal;
+    btnBatal.classList.remove('hidden');
+  }
+  if (teksYa) teksYa.textContent = teksKonfirmasi;
+
+  if (iconWrap) {
+    iconWrap.className = "mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-4 shadow-inner ring-8 transition-colors";
+    if (tipe === "danger" || tipe === "hapus") {
+      iconWrap.classList.add("bg-rose-100", "text-rose-600", "ring-rose-50");
+      if (iconSvg) iconSvg.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>';
+    } else if (tipe === "warning" || tipe === "peringatan") {
+      iconWrap.classList.add("bg-amber-100", "text-amber-600", "ring-amber-50");
+      if (iconSvg) iconSvg.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+    } else if (tipe === "success" || tipe === "sukses") {
+      iconWrap.classList.add("bg-emerald-100", "text-emerald-600", "ring-emerald-50");
+      if (iconSvg) iconSvg.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+    } else {
+      iconWrap.classList.add("bg-sky-100", "text-sky-600", "ring-sky-50");
+      if (iconSvg) iconSvg.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+    }
+  }
+
+  if (btnYa) {
+    btnYa.className = "w-1/2 py-2.5 px-4 font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 active:scale-95 text-white";
+    if (tipe === "danger" || tipe === "hapus") {
+      btnYa.classList.add("bg-rose-600", "hover:bg-rose-700", "shadow-rose-500/20");
+    } else if (tipe === "warning" || tipe === "peringatan") {
+      btnYa.classList.add("bg-amber-600", "hover:bg-amber-700", "shadow-amber-500/20");
+    } else if (tipe === "success" || tipe === "sukses") {
+      btnYa.classList.add("bg-emerald-600", "hover:bg-emerald-700", "shadow-emerald-500/20");
+    } else {
+      btnYa.classList.add("bg-sky-600", "hover:bg-sky-700", "shadow-sky-500/20");
+    }
+  }
+
+  modal.classList.remove('hidden');
+
+  return new Promise(function (resolve) {
+    _resolveKonfirmasi = resolve;
+  });
+}
+window.konfirmasiAksi = konfirmasiAksi;
+
+function tampilkanPesanModal(opsi) {
+  opsi = opsi || {};
+  const judul = opsi.judul || "Informasi";
+  const pesan = opsi.pesan || "";
+  const tipe = opsi.tipe || "info";
+  const teksTombol = opsi.teksTombol || "Mengerti";
+
+  const btnBatal = document.getElementById('modal-konfirm-btn-batal');
+  const btnYa = document.getElementById('modal-konfirm-btn-ya');
+
+  if (btnBatal) btnBatal.classList.add('hidden');
+  if (btnYa) {
+    btnYa.classList.remove('w-1/2');
+    btnYa.classList.add('w-full');
+  }
+
+  return konfirmasiAksi({
+    judul: judul,
+    pesan: pesan,
+    tipe: tipe,
+    teksKonfirmasi: teksTombol
+  }).then(function (res) {
+    if (btnBatal) btnBatal.classList.remove('hidden');
+    if (btnYa) {
+      btnYa.classList.remove('w-full');
+      btnYa.classList.add('w-1/2');
+    }
+    return res;
+  });
+}
+window.tampilkanPesanModal = tampilkanPesanModal;
+
+// Tangani tombol keyboard Esc & Enter untuk modal konfirmasi universal
+window.addEventListener('keydown', function (e) {
+  const modal = document.getElementById('modal-konfirmasi-universal');
+  if (modal && !modal.classList.contains('hidden')) {
+    if (e.key === 'Escape') {
+      _tutupModalKonfirmasiUniversal(false);
+    } else if (e.key === 'Enter') {
+      _tutupModalKonfirmasiUniversal(true);
+    }
+  }
+});
 
 function setTombolMemuat(btn, teksMemuat) {
   if (!btn) return;
