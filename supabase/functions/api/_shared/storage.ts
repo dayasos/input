@@ -29,9 +29,8 @@ export type HasilUpload =
   | { sukses: true; url: string }
   | { sukses: false; pesan: string };
 
-// Signed READ url berumur panjang utk 1 path -- diekstrak jadi helper terpisah supaya bisa
-// dipakai baik oleh upload server-side lama (uploadBerkasKeStorage) maupun alur upload langsung
-// dari browser yang baru (dipanggil setelah browser selesai PUT, lihat domains/upload.ts).
+// Signed READ url berumur panjang utk 1 path -- dipanggil dari domains/upload.ts SETELAH
+// browser selesai PUT berkas langsung ke Storage (lihat konfirmasiUploadBerkas).
 export async function buatSignedUrlBaca(path: string): Promise<HasilUpload> {
   const { data, error } = await storageClient
     .from(NAMA_BUCKET_BERKAS)
@@ -62,23 +61,4 @@ export async function buatUrlUploadSigned(path: string): Promise<HasilUrlUpload>
     return { sukses: false, pesan: "Gagal membuat URL upload: " + (error ? error.message : "tidak diketahui") };
   }
   return { sukses: true, uploadUrl: data.signedUrl, token: data.token, path: data.path };
-}
-
-// Upload satu berkas ke Storage lalu langsung buat signed URL-nya (jalur SERVER-SIDE lama --
-// dipertahankan sebagai cadangan, sudah tidak dipanggil dari index.html sejak migrasi ke upload
-// langsung browser->Storage, lihat mintaUrlUploadBerkas/konfirmasiUploadBerkas di domains/upload.ts).
-export async function uploadBerkasKeStorage(
-  path: string,
-  bytes: Uint8Array,
-  contentType: string,
-): Promise<HasilUpload> {
-  const { error: errUpload } = await storageClient
-    .from(NAMA_BUCKET_BERKAS)
-    .upload(path, bytes, { contentType, upsert: true });
-
-  if (errUpload) {
-    return { sukses: false, pesan: "Gagal upload ke Storage: " + errUpload.message };
-  }
-
-  return buatSignedUrlBaca(path);
 }

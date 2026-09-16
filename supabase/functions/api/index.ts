@@ -19,9 +19,10 @@
 // - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
 // - dataDetail (ambilDataDetail — 2026-09-15, fitur baru murni Supabase, bukan porting dari
 //   Kode.gs; pengganti sheet eksternal "Data Detail" + formula QUERY() yang sudah dihapus total)
-// - upload (uploadSemuaBerkasKeSupabase — 2026-09-15, pengganti uploadSemuaBerkasKeDrive: upload
-//   berkas sekarang ke Supabase Storage bucket privat + signed URL, BUKAN lagi ke Google Drive.
-//   Kode.gs TIDAK diubah/dihapus, fungsi lamanya cuma tidak dipanggil lagi dari index.html.)
+// - upload (mintaUrlUploadBerkas + konfirmasiUploadBerkas — 2026-09-15, direvisi 2026-09-16:
+//   upload LANGSUNG browser->Supabase Storage via signed upload URL, bukan lagi lewat body
+//   request Vercel. Pengganti uploadSemuaBerkasKeDrive Kode.gs, yang dibiarkan tidak
+//   diubah/dihapus di sana, cuma tidak dipanggil lagi dari index.html.)
 //
 // Yang TIDAK diporting (sengaja):
 // - setHeaderUserId: utilitas sekali-jalan yang tidak dipanggil frontend (lihat setelan.ts)
@@ -52,7 +53,7 @@ import {
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
-import { konfirmasiUploadBerkas, mintaUrlUploadBerkas, uploadSemuaBerkasKeSupabase } from "./domains/upload.ts";
+import { konfirmasiUploadBerkas, mintaUrlUploadBerkas } from "./domains/upload.ts";
 import {
   ambilDaftarBatchPembayaran,
   ambilDetailBatchPembayaran,
@@ -118,7 +119,6 @@ const ALLOWED: Record<string, Handler> = {
   simpanDataKeSheet,
   editDataPenerima,
   ambilDataDetail,
-  uploadSemuaBerkasKeSupabase,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
   ambilTahunTersedia,
