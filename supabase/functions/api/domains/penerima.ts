@@ -391,25 +391,34 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
       return { sukses: false, pesan: "GAGAL: Data wajib tidak lengkap atau format NIK/Rekening salah." };
     }
 
-    // Tentukan instansi efektif untuk validasiDataBaru (port Kode.gs baris 1044-1054)
-    let instansiEfektif: string;
-    if (peranSesi === "KECAMATAN") {
-      instansiEfektif = "KECAMATAN";
-    } else if (listLayananKemenag.includes(peranSesi)) {
-      instansiEfektif = "KEMENAG";
-    } else {
-      instansiEfektif = listLayananKemenag.includes(layanan) ? "KEMENAG" : "KECAMATAN";
-    }
+    // Validasi akhir secara paralel untuk efisiensi (tanpa full round-trip validasiDataBaru internal)
+    const cekTempatTugasRelevan = LAYANAN_BATASI_TEMPAT_TUGAS.includes(layanan);
+    const tempatTugasTarget = rapikanTeks(tempatTugas);
+    const alamatTugasTarget = rapikanTeks(alamatTugas);
 
-    // Validasi duplikat + kuota via validasiDataBaru (reuse yang sudah ada di validasi.ts)
-    const cekUlang = await validasiDataBaru(
-      token, nik, layanan, tempatTugas, instansiEfektif, nomorRekening, kecamatan, alamatTugas,
-    );
-    if (!cekUlang.valid) {
+    const [rowsNik, rowsRek, rowsTempat, hasilKuota] = await Promise.all([
+      sql`select id from penerima where tahun = ${TAHUN_AKTIF} and nik = ${nik} limit 1`,
+      sql`select id from penerima where tahun = ${TAHUN_AKTIF} and nomor_rekening = ${nomorRekening} limit 1`,
+      cekTempatTugasRelevan
+        ? sql`
+            select id from penerima
+            where tahun = ${TAHUN_AKTIF} and layanan = ${layanan}
+              and tempat_tugas = ${tempatTugasTarget} and alamat_tugas = ${alamatTugasTarget}
+            limit 1
+          `
+        : Promise.resolve([]),
+      cekKuotaTersedia(kecamatan, layanan)
+    ]);
+
+    if (rowsNik.length > 0) return { sukses: false, pesan: "GAGAL: NIK sudah terdaftar (race condition). Coba lagi." };
+    if (rowsRek.length > 0) return { sukses: false, pesan: "GAGAL: Nomor rekening sudah terdaftar (race condition). Coba lagi." };
+    if (rowsTempat.length > 0) return { sukses: false, pesan: "GAGAL: Tempat tugas sudah memiliki penerima untuk layanan ini (race condition). Coba lagi." };
+    
+    if (!hasilKuota.tersedia) {
       return {
         sukses: false,
-        pesan: cekUlang.pesan,
-        kuotaHabis: (cekUlang as Record<string, unknown>).kuotaHabis || false,
+        pesan: hasilKuota.pesan,
+        kuotaHabis: true,
       };
     }
 

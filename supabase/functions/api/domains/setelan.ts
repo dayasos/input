@@ -81,12 +81,14 @@ interface AksesInput {
 // Port 1:1 dari cekAksesInputUser_() — dipakai statusInputKecKem sekarang, dan dipakai ulang
 // oleh simpanDataKeSheet & editDataPenerima (Fase 4).
 export async function cekAksesInputUser(userId: string): Promise<AksesInput> {
-  if (userId) {
-    const nilaiKhusus = await ambilSetelan(PREFIX_SAKELAR_USER + userId);
-    if (nilaiKhusus === "BUKA") return { ditutup: false, sumber: "KHUSUS", nilai: "BUKA" };
-    if (nilaiKhusus === "TUTUP") return { ditutup: true, sumber: "KHUSUS", nilai: "TUTUP" };
-  }
-  const ditutup = await inputKecKemDitutup();
+  const [nilaiKhusus, ditutup] = await Promise.all([
+    userId ? ambilSetelan(PREFIX_SAKELAR_USER + userId) : Promise.resolve(null),
+    inputKecKemDitutup(),
+  ]);
+  
+  if (nilaiKhusus === "BUKA") return { ditutup: false, sumber: "KHUSUS", nilai: "BUKA" };
+  if (nilaiKhusus === "TUTUP") return { ditutup: true, sumber: "KHUSUS", nilai: "TUTUP" };
+  
   return { ditutup, sumber: "MASTER", nilai: ditutup ? "TUTUP" : "BUKA" };
 }
 

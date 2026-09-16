@@ -569,8 +569,13 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     if (progressPersen) progressPersen.innerText = '0%';
     if (progressBar) progressBar.style.width = '0%';
     if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (0/${totalBerkas})`;
-    if (progressSub) progressSub.innerText = 'Memulai proses pengunggahan ke Google Drive...';
+    if (progressSub) progressSub.innerText = 'Menyiapkan pengunggahan berkas ke Google Drive...';
   }
+
+  // Pemanasan (Warmup) GAS untuk mencegah timeout saat cold start
+  try {
+    await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, {});
+  } catch (_e) { /* abaikan error warmup */ }
 
   function updateProgressUI(namaBerkas, sedangUnggah) {
     if (!progressContainer) return;
@@ -593,7 +598,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     let lastErrorMsg = null;
     for (let attempt = 0; attempt <= limitRetry; attempt++) {
       if (attempt > 0) {
-        if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}...`;
+        if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}... ⏱️`;
         await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
       } else {
         updateProgressUI(labelBerkas, true);
@@ -606,9 +611,18 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
           updateProgressUI(labelBerkas, false);
           return { k: k, linkDrive: res.link[k], gagal: null };
         }
-        lastErrorMsg = res ? res.pesan : 'Tidak ada respons dari server upload.';
+        if (res && res.pesan && res.pesan.includes('Batas waktu')) {
+          lastErrorMsg = 'Server upload Google Drive tidak merespons (cold start). Coba ulangi beberapa saat.';
+        } else {
+          lastErrorMsg = res ? res.pesan : 'Tidak ada respons dari server upload.';
+        }
       } catch (eNet) {
-        lastErrorMsg = 'Kendala jaringan (' + (eNet && eNet.message ? eNet.message : 'timeout') + ').';
+        const errMsg = eNet && eNet.message ? eNet.message : 'timeout';
+        if (errMsg.includes('Batas waktu')) {
+          lastErrorMsg = 'Server upload Google Drive tidak merespons (cold start). Coba ulangi beberapa saat.';
+        } else {
+          lastErrorMsg = 'Kendala jaringan (' + errMsg + ').';
+        }
       }
     }
 
