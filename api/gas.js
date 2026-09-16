@@ -215,11 +215,13 @@ export default async function handler(req, res) {
       });
     }
 
+    const causeStr = err.cause ? ` (Penyebab: ${err.cause.message || err.cause.code || String(err.cause)})` : '';
+    const errString = err instanceof Error ? err.message : String(err);
     return res.status(500).json({
-      error: 'Terjadi kesalahan koneksi antara server Vercel dan Supabase Edge Function.',
+      error: `Terjadi kesalahan koneksi antara server Vercel dan Supabase Edge Function. Detail: ${errString}${causeStr}`,
       action: payloadObj.action,
-      details: err.toString(),
-      cause: err.cause ? (err.cause.message || err.cause.code || String(err.cause)) : null,
+      details: errString,
+      cause: causeStr,
       usedUrl: targetUrl
     });
   }
