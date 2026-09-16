@@ -452,7 +452,7 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
           ${linkRekomendasiBkm}, ${linkRekomendasiRi},
           ${idFolderBerkas}, ${koordinatLink},
           'Proses Verifikasi', ${catatanPerbedaanNama},
-          ${sesi.akunId}, 'BERHASIL'
+          ${sesi.akunId}, 'SUKSES'
         )
         returning id
       `;
