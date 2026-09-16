@@ -91,7 +91,8 @@ export default async function handler(req, res) {
           headers: {
             'Content-Type': 'text/plain;charset=utf-8',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'application/json, text/plain, */*'
+            'Accept': 'application/json, text/plain, */*',
+            'Connection': 'close'
           },
           body: JSON.stringify({
             action: 'ping',
@@ -171,7 +172,8 @@ export default async function handler(req, res) {
   const requestHeaders = {
     'Content-Type': 'application/json',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*'
+    'Accept': 'application/json, text/plain, */*',
+    'Connection': 'close'
   };
 
   // Sertakan apikey dan Authorization Bearer token untuk Kong Gateway Supabase
