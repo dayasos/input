@@ -1078,17 +1078,16 @@ function masukSetelahAuth(res, usernameFallback) {
     }
   } else {
     if (typeof mulaiVersionCheck === "function") mulaiVersionCheck();
-    if (res.role === "UTAMA") {
-      terapkanHakAkses(res.role, res.kecamatan, false);
-    } else {
+    terapkanHakAkses(res.role, res.kecamatan, false);
+    if (res.role !== "UTAMA") {
       google.script.run
         .withSuccessHandler(function (st) {
           const ditutup = st && st.sukses ? !!st.ditutup : false;
-          terapkanHakAkses(res.role, res.kecamatan, ditutup);
+          if (ditutup) {
+            terapkanHakAkses(res.role, res.kecamatan, true);
+          }
         })
-        .withFailureHandler(function () {
-          terapkanHakAkses(res.role, res.kecamatan, false);
-        })
+        .withFailureHandler(function () { /* pertahankan status terbuka */ })
         .statusInputKecKem(res.token);
     }
   }
@@ -1328,13 +1327,32 @@ function masukSetelahAuth(res, usernameFallback) {
               opt.textContent = teksKapital;
               domisiliKelurahanForm.appendChild(opt);
             });
+
+            // Kunci kelurahan otomatis jika operator memiliki kelurahanTerkunci
+            if (dataPengguna && dataPengguna.kelurahanTerkunci) {
+              const kelTerkunci = dataPengguna.kelurahanTerkunci.trim().toUpperCase();
+              const cocok = Array.from(domisiliKelurahanForm.options).some(function (o) { return o.value === kelTerkunci; });
+              if (cocok) {
+                domisiliKelurahanForm.value = kelTerkunci;
+                domisiliKelurahanForm.disabled = true;
+                domisiliKelurahanForm.classList.add('bg-slate-100', 'cursor-not-allowed');
+                domisiliKelurahanForm.classList.remove('bg-white');
+              }
+            }
           } else {
             domisiliKelurahanForm.innerHTML = '<option value="">DATA KELURAHAN TIDAK DITEMUKAN</option>';
           }
         };
 
-        const tersimpan = cacheKelurahanByKecamatan[nilaiKecamatan];
-        if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+        let tersimpan = cacheKelurahanByKecamatan[nilaiKecamatan];
+        if (!tersimpan) {
+          try {
+            const raw = localStorage.getItem('cache_kel_' + nilaiKecamatan);
+            if (raw) tersimpan = JSON.parse(raw);
+          } catch (e) {}
+        }
+        if (tersimpan && tersimpan.data && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+          cacheKelurahanByKecamatan[nilaiKecamatan] = tersimpan;
           isiDropdownKelurahan(tersimpan.data);
           return;
         }
@@ -1343,7 +1361,9 @@ function masukSetelahAuth(res, usernameFallback) {
 
         google.script.run
           .withSuccessHandler(function (daftarKelurahan) {
-            cacheKelurahanByKecamatan[nilaiKecamatan] = { data: daftarKelurahan, waktu: Date.now() };
+            const entri = { data: daftarKelurahan, waktu: Date.now() };
+            cacheKelurahanByKecamatan[nilaiKecamatan] = entri;
+            try { localStorage.setItem('cache_kel_' + nilaiKecamatan, JSON.stringify(entri)); } catch (e) {}
             isiDropdownKelurahan(daftarKelurahan);
           })
           .withFailureHandler(function (error) {

@@ -83,12 +83,36 @@ window.addEventListener('keydown', function (e) {
   }
 });
 
+// Master Layanan Default Baseline (0ms Dropdown Initialization)
+let masterLayanan = {
+  kecamatan: [
+    "BILAL JENAZAH",
+    "PENGGALI KUBUR",
+    "IMAM MASJID",
+    "GURU MAGHRIB MENGAJI",
+    "PETUGAS GEREJA KATOLIK",
+    "GURU SEKOLAH MINGGU",
+    "PENATUA GEREJA",
+    "GURU SEKOLAH BUDDHA",
+    "GURU SEKOLAH HINDU",
+    "USTADZ/USTADZAH",
+    "PENGURUS RUMAH IBADAH"
+  ],
+  kemenag: [
+    "GURU SEKOLAH BUDDHA",
+    "GURU SEKOLAH HINDU",
+    "GURU SEKOLAH MINGGU",
+    "PENATUA GEREJA",
+    "GURU MAGHRIB MENGAJI"
+  ]
+};
+
 // Sistem Login & Sesi
 let dataPengguna = { username: "", role: "", kecamatan: "", token: "", userId: "", kelurahanTerkunci: "" };
 let panelAktif = "input"; // "input", "rekap"
 let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
 
-// Pulihkan Sesi
+// Pulihkan Sesi dengan Optimistic Instant Render (0ms)
 (function cobaPulihkanSesi() {
   const modalLoginEl = document.getElementById('modal-login');
 
@@ -103,17 +127,51 @@ let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
     return;
   }
 
+  // 1. Optimistic Instant Render (0ms): render profil subtitle dan buka kontrol navigasi seketika
+  try {
+    dataPengguna.username = sesiTersimpan.username || "";
+    dataPengguna.role = sesiTersimpan.role || "";
+    dataPengguna.kecamatan = sesiTersimpan.kecamatan || "";
+    dataPengguna.token = sesiTersimpan.token;
+    dataPengguna.userId = sesiTersimpan.userId || "";
+    dataPengguna.kelurahanTerkunci = "";
+
+    const uid = (dataPengguna.userId || "").toUpperCase().trim();
+    if (uid.indexOf("KELURAHAN ") === 0) {
+      dataPengguna.kelurahanTerkunci = uid.substring("KELURAHAN ".length).trim();
+    }
+
+    const elSubtitle = document.getElementById('info-admin-subtitle');
+    if (elSubtitle && dataPengguna.username) {
+      let teksSub = 'Administratur : ' + (sesiTersimpan.namaLengkap || dataPengguna.username);
+      if (dataPengguna.kelurahanTerkunci) {
+        teksSub += ' &nbsp;·&nbsp; Kelurahan ' + dataPengguna.kelurahanTerkunci;
+      }
+      elSubtitle.innerHTML = teksSub;
+    }
+
+    if (modalLoginEl) modalLoginEl.classList.add('hidden');
+    if (typeof terapkanHakAkses === "function" && dataPengguna.role) {
+      terapkanHakAkses(dataPengguna.role, dataPengguna.kecamatan, false);
+    }
+  } catch (_optErr) {
+    console.warn("Optimistic bootstrap:", _optErr);
+  }
+
+  // 2. Revalidasi sesi server di latar belakang (Background Validation)
   google.script.run
     .withSuccessHandler(function (res) {
       if (res && res.sukses) {
-        masukSetelahAuth(res);
+        if (typeof masukSetelahAuth === "function") {
+          masukSetelahAuth(res);
+        }
       } else {
         try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
         if (modalLoginEl) modalLoginEl.classList.remove('hidden');
       }
     })
     .withFailureHandler(function () {
-      if (modalLoginEl) modalLoginEl.classList.remove('hidden');
+      if (!dataPengguna.token && modalLoginEl) modalLoginEl.classList.remove('hidden');
     })
     .pulihkanSesi(sesiTersimpan.token);
 })();
@@ -296,6 +354,8 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (btnReturKematian) btnReturKematian.classList.remove('hidden');
   const btnKeluar = document.getElementById('btn-keluar-aplikasi');
   if (btnKeluar) btnKeluar.classList.remove('hidden');
+  const fabGantiPassword = document.getElementById('fab-ganti-password');
+  if (fabGantiPassword) fabGantiPassword.classList.remove('hidden');
   const btnProgresKuota = document.getElementById('btn-progres-kuota');
   if (btnProgresKuota) btnProgresKuota.classList.toggle('hidden', role !== "UTAMA");
   const btnKelolaKuota = document.getElementById('btn-kelola-kuota');
@@ -483,7 +543,6 @@ function esc(val) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-let masterLayanan = { kecamatan: [], kemenag: [] };
 let instansiAktif = "";
 
 const formPembayaran = document.getElementById('form-pembayaran');
@@ -555,23 +614,58 @@ tabInput.addEventListener('click', () => {
   document.getElementById('btn-refresh-data').classList.add('hidden');
 
   if (dataPengguna.role === "UTAMA" || dataPengguna.role === "") {
-    instansiAktif = "";
-    btnKec.className = "w-full py-3 px-4 rounded-lg font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200";
-    btnKem.className = "w-full py-3 px-4 rounded-lg font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200";
-    controlKecamatan.value = "";
-    controlKecamatan.disabled = true;
-    controlKecamatan.classList.add('bg-slate-100', 'cursor-not-allowed');
-    controlKecamatan.classList.remove('bg-white');
-    fsContainer.disabled = true;
-    fsContainer.classList.add('opacity-50', 'pointer-events-none');
-    formPembayaran.reset();
-    inputUmur.value = "";
-    setGembokSubFormulir(false);
-    evaluasiUploadKondisional();
+    if (!instansiAktif) {
+      btnKec.className = "w-full py-3 px-4 rounded-lg font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200";
+      btnKem.className = "w-full py-3 px-4 rounded-lg font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200";
+      controlKecamatan.value = "";
+      controlKecamatan.disabled = true;
+      controlKecamatan.classList.add('bg-slate-100', 'cursor-not-allowed');
+      controlKecamatan.classList.remove('bg-white');
+      fsContainer.disabled = true;
+      fsContainer.classList.add('opacity-50', 'pointer-events-none');
+      formPembayaran.reset();
+      inputUmur.value = "";
+      setGembokSubFormulir(false);
+      evaluasiUploadKondisional();
+    }
+  } else if (dataPengguna.role === "KECAMATAN") {
+    if (instansiAktif !== "KECAMATAN") {
+      murniGantiInstansi("KECAMATAN", btnKec, btnKem);
+    }
+    if (btnKem) { btnKem.disabled = true; btnKem.classList.add('opacity-40', 'cursor-not-allowed'); }
+    if (controlKecamatan && dataPengguna.kecamatan) {
+      controlKecamatan.value = dataPengguna.kecamatan;
+      controlKecamatan.disabled = true;
+      controlKecamatan.classList.add('bg-slate-100', 'cursor-not-allowed');
+      controlKecamatan.classList.remove('bg-white');
+      controlKecamatan.dispatchEvent(new Event('change'));
+    }
+    fsContainer.disabled = false;
+    fsContainer.classList.remove('opacity-50', 'pointer-events-none');
   } else if (isRoleKemenagBebas(dataPengguna.role)) {
-    formPembayaran.reset();
-    inputUmur.value = "";
-    setGembokSubFormulir(false);
+    if (instansiAktif !== "KEMENAG") {
+      murniGantiInstansi("KEMENAG", btnKem, btnKec);
+    }
+    if (btnKec) { btnKec.disabled = true; btnKec.classList.add('opacity-40', 'cursor-not-allowed'); }
+    controlKecamatan.disabled = false;
+    controlKecamatan.classList.remove('bg-slate-100', 'cursor-not-allowed');
+    controlKecamatan.classList.add('bg-white');
+    renderDropdownLayananTunggal(dataPengguna.role);
+    evaluasiUploadKondisional();
+  } else if (isRoleKemenagTerikat(dataPengguna.role)) {
+    if (instansiAktif !== "KEMENAG") {
+      murniGantiInstansi("KEMENAG", btnKem, btnKec);
+    }
+    if (btnKec) { btnKec.disabled = true; btnKec.classList.add('opacity-40', 'cursor-not-allowed'); }
+    if (controlKecamatan && dataPengguna.kecamatan) {
+      controlKecamatan.value = dataPengguna.kecamatan;
+      controlKecamatan.disabled = true;
+      controlKecamatan.classList.add('bg-slate-100', 'cursor-not-allowed');
+      controlKecamatan.classList.remove('bg-white');
+      controlKecamatan.dispatchEvent(new Event('change'));
+    }
+    fsContainer.disabled = false;
+    fsContainer.classList.remove('opacity-50', 'pointer-events-none');
     renderDropdownLayananTunggal(dataPengguna.role);
     evaluasiUploadKondisional();
   }

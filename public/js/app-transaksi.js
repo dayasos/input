@@ -1038,6 +1038,7 @@ const dataPerHalaman = 50;
 function invalidateCacheDataTransaksi() {
   waktuMasterDataLihat = 0;
   cacheDashboardProgres = {};
+  try { sessionStorage.removeItem('dana_jasa_lihat_cache'); } catch (e) {}
 }
 
 function perbaruiStatusDiMasterData(nomorBaris, statusBaru) {
@@ -1057,7 +1058,32 @@ function inisialisasiMenuLihatData() {
   if (btnVerifMassal) btnVerifMassal.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
   const btnSalinWA = document.getElementById('btn-salin-wa-berkas');
   if (btnSalinWA) btnSalinWA.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
-  document.getElementById('body-tabel-lihat').innerHTML = htmlSkeletonBaris(7, 5);
+
+  // Optimistic Instant Render: Coba pulihkan dari sessionStorage jika memori masih kosong
+  if (!masterDataLihat || masterDataLihat.length === 0) {
+    try {
+      const tersimpan = sessionStorage.getItem('dana_jasa_lihat_cache');
+      if (tersimpan) {
+        const parsed = JSON.parse(tersimpan);
+        if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
+          masterDataLihat = parsed.rows;
+          waktuMasterDataLihat = parsed.waktu || Date.now();
+          const infoTotal = document.getElementById('info-total-penerima');
+          if (infoTotal) infoTotal.innerText = "Total Data: " + masterDataLihat.length + " Baris";
+          membangunOpsiFilter(masterDataLihat);
+          saringDanTampilkanTabel();
+          setupPencarianRealtime();
+        }
+      }
+    } catch (e) {}
+  }
+
+  // Tampilkan skeleton hanya jika belum ada baris data sama sekali
+  const tbodyLihat = document.getElementById('body-tabel-lihat');
+  if (tbodyLihat && (!masterDataLihat || masterDataLihat.length === 0)) {
+    tbodyLihat.innerHTML = htmlSkeletonBaris(7, 5);
+  }
+
   google.script.run
     .withSuccessHandler(function (jsonResponse) {
       try {
@@ -1065,6 +1091,9 @@ function inisialisasiMenuLihatData() {
         if (response && response.sukses) {
           masterDataLihat = response.rows;
           waktuMasterDataLihat = Date.now();
+          try {
+            sessionStorage.setItem('dana_jasa_lihat_cache', JSON.stringify({ rows: response.rows, waktu: waktuMasterDataLihat }));
+          } catch (e) {}
           const infoTotal = document.getElementById('info-total-penerima');
           if (infoTotal) infoTotal.innerText = "Total Data: " + masterDataLihat.length + " Baris";
           if (masterDataLihat.length === 0) {
