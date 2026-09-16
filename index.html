@@ -6,6 +6,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistem Layanan Data Penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027</title>
   <link rel="icon" type="image/png" href="/logo-medan.png">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#0284c7">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="DJPM 2027">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
@@ -1194,6 +1201,70 @@
       </div>
     </div>
 
+    <!-- Modal: ajakan instal aplikasi (Android/Chrome/Edge -- pakai prompt instal bawaan
+         browser). z-index lebih tinggi dari modal-login (z-[500]) supaya tampil di atasnya
+         kalau kebetulan muncul bersamaan. -->
+    <div id="modal-install-app"
+      class="hidden fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div class="px-6 py-6 text-center">
+          <img src="/icons/icon-192.png" alt="Ikon Aplikasi"
+            class="w-16 h-16 object-contain mx-auto mb-3 rounded-xl shadow">
+          <h3 class="text-base font-bold text-slate-800">Instal Aplikasi DJPM 2027</h3>
+          <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+            Tambahkan ke layar utama perangkat Anda untuk akses lebih cepat, tanpa perlu membuka
+            browser dan mengetik alamat setiap kali.
+          </p>
+        </div>
+        <div class="px-6 pb-6 space-y-2">
+          <button onclick="window.installAplikasi()"
+            class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg shadow transition">
+            📲 Instal Sekarang
+          </button>
+          <button onclick="window.tutupModalInstall()"
+            class="w-full py-2 text-slate-500 hover:text-slate-700 text-xs font-medium transition">
+            Nanti Saja
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: instruksi manual instal utk iPhone/iPad (Safari tidak punya prompt instal
+         otomatis -- Apple mewajibkan Share > Add to Home Screen lewat interaksi user sendiri). -->
+    <div id="modal-install-ios"
+      class="hidden fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div class="px-6 py-6 text-center">
+          <img src="/icons/icon-192.png" alt="Ikon Aplikasi"
+            class="w-16 h-16 object-contain mx-auto mb-3 rounded-xl shadow">
+          <h3 class="text-base font-bold text-slate-800">Instal di iPhone/iPad</h3>
+          <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+            Tambahkan ke layar utama supaya lebih cepat diakses:
+          </p>
+        </div>
+        <div class="px-6 pb-2 space-y-3 text-left">
+          <div class="flex items-center gap-3">
+            <span class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">1</span>
+            <p class="text-xs text-slate-600">Ketuk tombol <strong>Share</strong> ⬆️ di bar Safari (bawah atau atas layar)</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">2</span>
+            <p class="text-xs text-slate-600">Gulir ke bawah, ketuk <strong>"Add to Home Screen"</strong> / "Tambah ke Layar Utama" ➕</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">3</span>
+            <p class="text-xs text-slate-600">Ketuk <strong>"Add"</strong> / "Tambah" di pojok kanan atas</p>
+          </div>
+        </div>
+        <div class="px-6 pt-4 pb-6">
+          <button onclick="window.tutupModalInstall()"
+            class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg shadow transition">
+            Mengerti
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal Temuan Duplikasi Data -->
     <div id="modal-temuan-duplikat"
       class="hidden fixed inset-0 z-[155] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -1941,6 +2012,90 @@
     </div>
 
     <script>
+      // =========================================================================
+      // PROMPT INSTAL APLIKASI (PWA) -- ditampilkan di kunjungan pertama (per sesi tab/
+      // browser, muncul lagi kalau tab/browser baru dibuka), selama aplikasi belum ter-install.
+      // TIDAK PERNAH muncul kalau sudah berjalan dalam mode standalone (sudah ter-install) --
+      // dicek lewat matchMedia('display-mode: standalone') / navigator.standalone (iOS).
+      // Android/Chrome/Edge dapat tombol "Instal Sekarang" (pakai prompt bawaan browser lewat
+      // event beforeinstallprompt); iPhone/iPad (Safari) TIDAK punya event itu sama sekali
+      // (batasan Apple) jadi ditampilkan instruksi manual "Share > Add to Home Screen".
+      // Listener didaftarkan di awal skrip ini (bukan di dalam suatu fungsi yang baru dipanggil
+      // belakangan) supaya tidak ada risiko kelewatan event yg bisa saja langsung ditembak
+      // browser begitu halaman selesai dievaluasi.
+      // =========================================================================
+      let promptInstalTersimpan = null;
+
+      function sudahTerinstalSebagaiPwa() {
+        try {
+          return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        } catch (e) { return false; }
+      }
+
+      function perangkatIOS() {
+        return /iphone|ipad|ipod/i.test(navigator.userAgent || navigator.vendor || '');
+      }
+
+      function cobaTampilkanModalInstall() {
+        if (sudahTerinstalSebagaiPwa()) return;
+        let sudahDitutup = false;
+        try { sudahDitutup = sessionStorage.getItem('djpm_install_prompt_ditutup') === '1'; } catch (e) { }
+        if (sudahDitutup) return;
+
+        if (promptInstalTersimpan) {
+          document.getElementById('modal-install-app').classList.remove('hidden');
+        } else if (perangkatIOS()) {
+          document.getElementById('modal-install-ios').classList.remove('hidden');
+        }
+      }
+
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        promptInstalTersimpan = e;
+        cobaTampilkanModalInstall();
+      });
+
+      window.addEventListener('appinstalled', function () {
+        try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
+        const modal = document.getElementById('modal-install-app');
+        if (modal) modal.classList.add('hidden');
+      });
+
+      window.installAplikasi = function () {
+        const modal = document.getElementById('modal-install-app');
+        if (!promptInstalTersimpan) { if (modal) modal.classList.add('hidden'); return; }
+        promptInstalTersimpan.prompt();
+        promptInstalTersimpan.userChoice.finally(function () {
+          promptInstalTersimpan = null;
+          if (modal) modal.classList.add('hidden');
+          try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
+        });
+      };
+
+      window.tutupModalInstall = function () {
+        const modalApp = document.getElementById('modal-install-app');
+        const modalIos = document.getElementById('modal-install-ios');
+        if (modalApp) modalApp.classList.add('hidden');
+        if (modalIos) modalIos.classList.add('hidden');
+        try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
+      };
+
+      // iOS tidak pernah menembak beforeinstallprompt -- tampilkan modal instruksi manual
+      // langsung, dgn jeda singkat supaya tidak numpuk persis bareng modal login saat halaman
+      // baru saja tampil.
+      if (perangkatIOS() && !sudahTerinstalSebagaiPwa()) {
+        setTimeout(cobaTampilkanModalInstall, 1200);
+      }
+
+      // Daftarkan service worker -- syarat installability Chrome/Edge/Android (butuh SW dgn
+      // listener 'fetch' supaya beforeinstallprompt bisa muncul). Lihat sw.js: sengaja TANPA
+      // caching apa pun, aplikasi data pemerintah yg berubah terus, cache berisiko data basi.
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () { /* diam saja, bukan fitur kritis */ });
+        });
+      }
+
       // =========================================================================
       // SISTEM LOGIN & SESI
       // =========================================================================
