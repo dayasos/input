@@ -35,6 +35,8 @@ import { cekKuotaTersedia } from "./validasi.ts";
 // hasil JSON.stringify() (bukan objek biasa), karena index.html memanggil JSON.parse(jsonResponse)
 // sendiri di withSuccessHandler (lihat index.html baris 3581). Bentuk tiap baris array TETAP
 // array-of-array posisional (bukan objek) — lihat pemakaian masterDataLihat[i][0..19] di index.html.
+
+
 export async function ambilDataLihatDataHakAkses(token: string): Promise<string> {
   let sesi;
   try {
@@ -413,7 +415,7 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     if (rowsNik.length > 0) return { sukses: false, pesan: "GAGAL: NIK sudah terdaftar (race condition). Coba lagi." };
     if (rowsRek.length > 0) return { sukses: false, pesan: "GAGAL: Nomor rekening sudah terdaftar (race condition). Coba lagi." };
     if (rowsTempat.length > 0) return { sukses: false, pesan: "GAGAL: Tempat tugas sudah memiliki penerima untuk layanan ini (race condition). Coba lagi." };
-    
+
     if (!hasilKuota.tersedia) {
       return {
         sukses: false,

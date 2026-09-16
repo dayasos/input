@@ -85,10 +85,10 @@ export async function cekAksesInputUser(userId: string): Promise<AksesInput> {
     userId ? ambilSetelan(PREFIX_SAKELAR_USER + userId) : Promise.resolve(null),
     inputKecKemDitutup(),
   ]);
-  
+
   if (nilaiKhusus === "BUKA") return { ditutup: false, sumber: "KHUSUS", nilai: "BUKA" };
   if (nilaiKhusus === "TUTUP") return { ditutup: true, sumber: "KHUSUS", nilai: "TUTUP" };
-  
+
   return { ditutup, sumber: "MASTER", nilai: ditutup ? "TUTUP" : "BUKA" };
 }
 
