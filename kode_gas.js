@@ -373,52 +373,69 @@ function uploadBerkasPenerima_(fileBlob, folderObj, jenisBerkas) {
     }
 }
 
+// Resolusi/pembuatan folder pendaftar butuh proteksi lock (cegah folder duplikat saat
+// beberapa berkas dari submission yang sama diupload paralel oleh browser). Dipisah dari
+// uploadSemuaBerkasKeDrive supaya lock HANYA membungkus bagian resolusi folder ini, bukan
+// proses tulis byte ke Drive (uploadBerkasPenerima_) yang lebih lambat -- sebelumnya lock
+// membungkus seluruh fungsi termasuk createFile(), jadi upload dari user lain yang tidak
+// bersinggungan folder pun ikut mengantre sampai 15 detik lalu gagal "Server sibuk".
+function resolveFolderPendaftarDenganLock_(K) {
+    const lock = LockService.getScriptLock();
+    try {
+        lock.waitLock(15000); // Kunci 15 detik untuk mencegah race condition folder duplikat
+    } catch (e) {
+        throw new Error("Server sibuk saat memproses folder, coba lagi sebentar.");
+    }
+    try {
+        return dapatkanFolderPendaftar_(K.kecamatan, K.layanan, K.nama, K.nik);
+    } finally {
+        lock.releaseLock();
+    }
+}
+
 function uploadSemuaBerkasKeDrive(token, konteks, berkasMap) {
     let sesi;
     try { sesi = wajibSesi_(token); }
     catch (e) { return { sukses: false, pesan: e.message }; }
 
-    const lock = LockService.getScriptLock();
-    try {
-        lock.waitLock(15000); // Kunci 15 detik untuk mencegah race condition folder duplikat
-    } catch (e) {
-        return { sukses: false, pesan: "Server sibuk saat memproses folder, coba lagi sebentar." };
+    const K = konteks || {};
+    const B = berkasMap || {};
+
+    const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
+    let totalPerkiraanByte = 0;
+    Object.keys(B).forEach(function (k) {
+        const item = B[k];
+        if (item && item.dataBase64) totalPerkiraanByte += item.dataBase64.length * 0.75;
+    });
+    if (totalPerkiraanByte > MAKS_TOTAL_BYTE_BERKAS) {
+        return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar." };
     }
 
+    for (const kunci in B) {
+        const item = B[kunci];
+        if (!item || !item.dataBase64) continue;
+        const labelUntukPesan = item.label || kunci;
+        const pesanErrorBerkas = validasiBerkasSebelumUpload_(item, labelUntukPesan);
+        if (pesanErrorBerkas) return { sukses: false, pesan: "GAGAL: " + pesanErrorBerkas };
+    }
+
+    const folderIdTersimpan = (K.folderId || "").toString().trim();
+    let folderPendaftar;
     try {
-        const K = konteks || {};
-        const B = berkasMap || {};
-
-        const MAKS_TOTAL_BYTE_BERKAS = 60 * 1024 * 1024;
-        let totalPerkiraanByte = 0;
-        Object.keys(B).forEach(function (k) {
-            const item = B[k];
-            if (item && item.dataBase64) totalPerkiraanByte += item.dataBase64.length * 0.75;
-        });
-        if (totalPerkiraanByte > MAKS_TOTAL_BYTE_BERKAS) {
-            return { sukses: false, pesan: "GAGAL: Total ukuran seluruh berkas terlalu besar." };
-        }
-
-        for (const kunci in B) {
-            const item = B[kunci];
-            if (!item || !item.dataBase64) continue;
-            const labelUntukPesan = item.label || kunci;
-            const pesanErrorBerkas = validasiBerkasSebelumUpload_(item, labelUntukPesan);
-            if (pesanErrorBerkas) return { sukses: false, pesan: "GAGAL: " + pesanErrorBerkas };
-        }
-
-        const folderIdTersimpan = (K.folderId || "").toString().trim();
-        let folderPendaftar;
         if (folderIdTersimpan) {
             try {
                 folderPendaftar = DriveApp.getFolderById(folderIdTersimpan);
             } catch (eFolder) {
-                folderPendaftar = dapatkanFolderPendaftar_(K.kecamatan, K.layanan, K.nama, K.nik);
+                folderPendaftar = resolveFolderPendaftarDenganLock_(K);
             }
         } else {
-            folderPendaftar = dapatkanFolderPendaftar_(K.kecamatan, K.layanan, K.nama, K.nik);
+            folderPendaftar = resolveFolderPendaftarDenganLock_(K);
         }
+    } catch (eLock) {
+        return { sukses: false, pesan: eLock.message };
+    }
 
+    try {
         const hasil = {};
         for (const kunci in B) {
             const item = B[kunci];
@@ -432,7 +449,5 @@ function uploadSemuaBerkasKeDrive(token, konteks, berkasMap) {
         return { sukses: true, link: hasil };
     } catch (e) {
         return { sukses: false, pesan: "Gagal upload berkas: " + e.toString() };
-    } finally {
-        lock.releaseLock();
     }
 }
