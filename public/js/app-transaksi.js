@@ -1347,17 +1347,17 @@ function saringDanTampilkanTabel() {
   for (let k = indeksAwal; k < indeksAkhir; k++) {
     const row = dataLolosSaring[k];
     barisTabelHtml += `
-  <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-    <td class="px-4 py-3 text-center font-medium text-slate-400">${nomorUrut++}</td>
-    <td class="px-4 py-3 font-semibold text-slate-800 break-words">${esc(row[1]) || '-'}</td>
-    <td class="px-4 py-3 font-mono text-xs text-slate-600 break-words">${esc(row[2]) || '-'}</td>
-    <td class="px-4 py-3 break-words"><span class="bg-slate-100 text-slate-700 text-[11px] px-2 py-0.5 rounded-full font-medium inline-block">${esc(row[7]) || '-'}</span></td>
-    <td class="px-4 py-3 text-xs text-slate-600 break-words">${esc(row[10]) || '-'}</td>
-    <td class="px-4 py-3 text-xs text-slate-600 break-words">${esc(row[11]) || '-'}</td>
-    <td class="px-4 py-3 text-center">${badgeStatusVerifikasi(row[18], row[19])}</td>
-    <td class="px-4 py-3 text-center">
-      <div class="flex flex-col items-center gap-1.5">
-        <button onclick="tampilkanDetailKeModalOnDemand(${row[0]})" class="inline-flex items-center justify-center gap-1.5 w-full px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-lg font-semibold text-xs transition shadow-2xs">
+  <tr class="hover:bg-sky-50/40 transition-colors duration-150 border-b border-slate-100/90">
+    <td class="w-14 px-3 py-3 text-center font-medium text-xs text-slate-400 align-middle whitespace-nowrap">${nomorUrut++}</td>
+    <td class="px-4 py-3 font-semibold text-slate-800 break-words align-middle min-w-[200px]">${esc(row[1]) || '-'}</td>
+    <td class="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap align-middle">${esc(row[2]) || '-'}</td>
+    <td class="px-4 py-3 whitespace-nowrap align-middle min-w-[150px]"><span class="bg-slate-100 text-slate-700 text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-block">${esc(row[7]) || '-'}</span></td>
+    <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(row[10]) || '-'}</td>
+    <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(row[11]) || '-'}</td>
+    <td class="px-4 py-3 text-center whitespace-nowrap align-middle min-w-[160px]">${badgeStatusVerifikasi(row[18], row[19])}</td>
+    <td class="w-24 px-4 py-3 text-center whitespace-nowrap align-middle">
+      <div class="flex items-center justify-center">
+        <button onclick="tampilkanDetailKeModalOnDemand(${row[0]})" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-lg font-semibold text-xs transition shadow-2xs">
           <svg class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -1859,25 +1859,37 @@ function halamanBerikutnya() {
 
     const catatanNamaBeda = d[37] || "";
 
-    h += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+    h += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">`;
     for (let i = 0; i < labelKolom.length; i++) {
       const v = d[i] !== undefined && d[i] !== "" ? d[i] : "-";
-      h += `<div class="bg-slate-50 rounded-lg px-4 py-2.5 border border-slate-100"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">${esc(labelKolom[i])}</p><p class="text-sm font-medium text-slate-800 break-words">${esc(String(v))}</p></div>`;
+      h += `<div class="bg-slate-50/80 hover:bg-slate-100/70 rounded-xl px-4 py-2.5 border border-slate-100/90 transition-colors">
+        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">${esc(labelKolom[i])}</p>
+        <p class="text-xs sm:text-sm font-semibold text-slate-800 break-words">${esc(String(v))}</p>
+      </div>`;
 
       // Nama Rekening ada di index 12 — sisipkan catatan tepat di bawahnya (kalau ada)
       if (i === 12 && catatanNamaBeda) {
-        h += `<div class="col-span-1 sm:col-span-2 bg-amber-50/60 border border-amber-100 rounded-lg px-4 py-2"><p class="text-xs text-amber-700"><span class="font-semibold">📝 Catatan:</span> ${esc(catatanNamaBeda)}</p></div>`;
+        h += `<div class="col-span-1 sm:col-span-2 lg:col-span-3 bg-amber-50/80 border border-amber-200/80 rounded-xl px-4 py-2.5">
+          <p class="text-xs text-amber-800"><span class="font-bold">📝 Catatan Nama Berbeda:</span> ${esc(catatanNamaBeda)}</p>
+        </div>`;
       }
     }
     h += `</div>`;
 
     // Berkas sesuai layanan
     const berkasList = getBerkasSesuaiLayanan(d[7]);
-    h += `<div class="mt-4 border-t border-slate-200 pt-4"><p class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Berkas & Dokumen</p><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">`;
+    h += `<div class="mt-5 border-t border-slate-200/80 pt-4">
+      <p class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <span>📁</span> <span>Berkas & Dokumen Pendukung</span>
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
     berkasList.forEach(function (b) {
       const lnk = d[b.idx];
       const ada = lnk && lnk.toString().startsWith("http");
-      h += `<div class="flex items-center justify-between bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 gap-2"><p class="text-xs font-medium text-slate-700 truncate">${esc(b.label)}</p>${ada ? `<a href="${lnk}" target="_blank" class="shrink-0 text-[11px] font-semibold text-white bg-sky-500 hover:bg-sky-600 px-2.5 py-1 rounded-md">Buka ↗</a>` : `<span class="shrink-0 text-[11px] text-slate-400 italic">Tidak ada</span>`}</div>`;
+      h += `<div class="flex items-center justify-between bg-slate-50/90 border border-slate-200/80 rounded-xl px-3.5 py-2.5 gap-2">
+        <p class="text-xs font-semibold text-slate-700 truncate">${esc(b.label)}</p>
+        ${ada ? `<a href="${lnk}" target="_blank" class="shrink-0 text-[11px] font-semibold text-white bg-sky-600 hover:bg-sky-700 active:scale-95 px-3 py-1 rounded-lg transition shadow-2xs">Buka ↗</a>` : `<span class="shrink-0 text-[11px] text-slate-400 italic">Tidak ada</span>`}
+      </div>`;
     });
     h += `</div></div>`;
     // Riwayat edit
@@ -2017,41 +2029,56 @@ function halamanBerikutnya() {
   }
   function renderEdit(d) {
     berkasBaruMap = {};
-    let h = `<div class="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-4 text-xs text-sky-800">✏️  Mode edit aktif. Ubah kolom yang diperlukan lalu klik <strong>Simpan Perubahan</strong>.</div>`;
-    h += `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">`;
+    let h = `<div class="bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 mb-4 text-xs text-sky-800 flex items-center gap-2">
+      <span class="text-base">✏️</span>
+      <span>Mode edit aktif. Ubah data yang diperlukan lalu klik <strong>Simpan Perubahan</strong> di bagian bawah.</span>
+    </div>`;
+    h += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">`;
     for (let i = 0; i < 18; i++) {
       const label = ["No. Urut", "Nama Lengkap", "NIK", "Jenis Kelamin", "Tempat Lahir", "Tanggal Lahir", "Alamat Domisili", "Jenis Layanan", "Tempat Tugas", "Alamat Tugas", "Kecamatan", "Kelurahan", "Nama Rekening", "Nomor Rekening", "Kantor Cabang", "No. Kontak", "Status BPJS TK", "Umur"][i];
       const v = d[i] !== undefined ? String(d[i]) : "";
       const kolDef = KOLOM_TEKS[i];
       if (!kolDef) {
-        h += `<div class="bg-slate-100 rounded-lg px-4 py-2.5 border border-slate-200 opacity-60"><p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">${esc(label)}</p><p class="text-sm text-slate-500">${esc(v || "-")}</p></div>`;
+        h += `<div class="bg-slate-100/70 rounded-xl px-4 py-2.5 border border-slate-200/80 opacity-70">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">${esc(label)}</p>
+          <p class="text-xs sm:text-sm font-medium text-slate-600">${esc(v || "-")}</p>
+        </div>`;
       } else if (kolDef.type === 'select') {
-        h += `<div class="bg-white rounded-lg px-4 py-2.5 border border-sky-300"><p class="text-[10px] font-semibold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}</p><select id="edit-${i}" class="w-full border border-slate-300 rounded-md p-1.5 text-sm focus:outline-none focus:border-sky-500" style="text-transform:none">`;
+        h += `<div class="bg-white rounded-xl px-4 py-2.5 border border-sky-300 shadow-2xs">
+          <p class="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}</p>
+          <select id="edit-${i}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">`;
         const vNorm = v.toString().trim().toUpperCase();
         kolDef.opsi.forEach(function (o) { h += `<option value="${o}"${vNorm === o.toUpperCase() ? " selected" : ""}>${o}</option>`; });
         h += `</select></div>`;
       } else {
-        h += `<div class="bg-white rounded-lg px-4 py-2.5 border border-sky-300"><p class="text-[10px] font-semibold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}${kolDef.hint ? ` <span class="font-normal text-slate-400 normal-case">${esc(kolDef.hint)}</span>` : ""}</p><input id="edit-${i}" type="text" value="${esc(v)}" class="w-full border border-slate-300 rounded-md p-1.5 text-sm focus:outline-none focus:border-sky-500" style="text-transform:none"></div>`;
+        h += `<div class="bg-white rounded-xl px-4 py-2.5 border border-sky-300 shadow-2xs">
+          <p class="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}${kolDef.hint ? ` <span class="font-normal text-slate-400 normal-case">${esc(kolDef.hint)}</span>` : ""}</p>
+          <input id="edit-${i}" type="text" value="${esc(v)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">
+        </div>`;
       }
     }
     h += `</div>`;
     // Berkas sesuai layanan
     const berkasList = getBerkasSesuaiLayanan(d[7]);
-    h += `<div class="mt-4 border-t border-slate-200 pt-4"><p class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-3">Berkas & Dokumen <span class="font-normal text-slate-400 normal-case">(klik Ganti untuk mengupload file baru)</span></p><div class="grid grid-cols-1 sm:grid-cols-2 gap-2">`;
+    h += `<div class="mt-5 border-t border-slate-200/80 pt-4">
+      <p class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+        <span>📁</span> <span>Berkas & Dokumen</span> <span class="font-normal text-slate-400 text-[11px] normal-case">(klik "Ganti File" jika ingin mengunggah berkas pengganti)</span>
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
     berkasList.forEach(function (b) {
       const idx = b.idx;
       const lnk = d[idx];
       const ada = lnk && lnk.toString().startsWith("http");
-      h += `<div class="flex flex-col gap-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+      h += `<div class="flex flex-col gap-2 bg-slate-50/90 border border-slate-200/80 rounded-xl px-3.5 py-3">
         <div class="flex items-center justify-between gap-2">
-          <p class="text-xs font-medium text-slate-700">${esc(b.label)}</p>
-          ${ada ? `<a href="${lnk}" target="_blank" class="shrink-0 text-[11px] font-semibold text-white bg-slate-500 hover:bg-slate-600 px-2 py-0.5 rounded-md">Lihat</a>` : ""}
+          <p class="text-xs font-semibold text-slate-700 truncate">${esc(b.label)}</p>
+          ${ada ? `<a href="${lnk}" target="_blank" class="shrink-0 text-[11px] font-semibold text-white bg-slate-600 hover:bg-slate-700 active:scale-95 px-2.5 py-0.5 rounded-md transition">Lihat ↗</a>` : ""}
         </div>
         <div class="flex items-center gap-2">
-          <label class="shrink-0 cursor-pointer text-[11px] font-semibold text-white bg-sky-600 hover:bg-sky-700 px-2.5 py-1 rounded-md">
+          <label class="shrink-0 cursor-pointer text-[11px] font-semibold text-white bg-sky-600 hover:bg-sky-700 active:scale-95 px-3 py-1 rounded-lg transition shadow-2xs">
             Ganti File <input type="file" class="hidden" accept="image/*,.pdf" data-berkas-idx="${idx}" onchange="window._pilihBerkasEdit(this)">
           </label>
-          <span id="label-berkas-${idx}" class="text-[11px] text-slate-400 truncate">${ada ? "File ada" : "Belum ada"}</span>
+          <span id="label-berkas-${idx}" class="text-[11px] text-slate-500 truncate">${ada ? "File ada" : "Belum ada"}</span>
         </div>
       </div>`;
     });

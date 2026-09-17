@@ -1009,7 +1009,7 @@ tabTools.addEventListener('click', () => {
 
     var tbody = document.getElementById('body-tabel-lihat');
     if (!halIni.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-400 italic">Tidak ada data sesuai filter.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400 italic">Tidak ada data sesuai filter.</td></tr>';
       perbaruiElemenNavigasi(1, 1);
       return;
     }
@@ -1018,15 +1018,15 @@ tabTools.addEventListener('click', () => {
       var no = awal + i + 1;
       var status = (r[5] || '-').toString().trim().toUpperCase();
       var warna = STATUS_WARNA[status] || 'bg-red-100 text-red-700 border-red-200';
-      return `<tr class="hover:bg-slate-50 transition">
-        <td class="px-4 py-3 text-center text-xs text-slate-400">${no}</td>
-        <td class="px-4 py-3 font-medium break-words">${esc(r[0] || '-')}</td>
-        <td class="px-4 py-3 font-mono text-xs break-words">${esc(r[1] || '-')}</td>
-        <td class="px-4 py-3 text-xs break-words">${esc(r[2] || '-')}</td>
-        <td class="px-4 py-3 text-xs break-words">${esc(r[3] || '-')}</td>
-        <td class="px-4 py-3 text-xs break-words">${esc(r[4] || '-')}</td>
-        <td class="px-4 py-3 text-center">
-          <span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${warna}">${esc(status)}</span>
+      return `<tr class="hover:bg-sky-50/40 transition-colors duration-150 border-b border-slate-100/90">
+        <td class="w-14 px-3 py-3 text-center font-medium text-xs text-slate-400 align-middle whitespace-nowrap">${no}</td>
+        <td class="px-4 py-3 font-semibold text-slate-800 break-words align-middle min-w-[200px]">${esc(r[0] || '-')}</td>
+        <td class="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap align-middle">${esc(r[1] || '-')}</td>
+        <td class="px-4 py-3 whitespace-nowrap align-middle min-w-[150px]"><span class="bg-slate-100 text-slate-700 text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-block">${esc(r[2] || '-')}</span></td>
+        <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(r[3] || '-')}</td>
+        <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(r[4] || '-')}</td>
+        <td class="px-4 py-3 text-center whitespace-nowrap align-middle min-w-[140px]">
+          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border shadow-2xs ${warna}">${esc(status)}</span>
         </td>
       </tr>`;
     }).join('');

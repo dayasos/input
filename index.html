@@ -928,29 +928,34 @@
         </div>
       </div>
 
-      <div class="sm:hidden flex items-center justify-between text-[11px] text-slate-500 mb-1 px-1">
-        <span class="flex items-center gap-1 font-medium"><span>👉</span> Geser tabel ke kanan untuk melihat status &
-          tombol aksi</span>
+      <div
+        class="sm:hidden flex items-center justify-between text-xs text-slate-500 bg-slate-50/90 px-3 py-2 rounded-xl mb-2 border border-slate-200/60 shadow-2xs">
+        <span class="flex items-center gap-1.5 font-medium">
+          <span class="text-sm">👉</span>
+          <span>Geser tabel ke samping untuk melihat detail status & tombol aksi</span>
+        </span>
       </div>
-      <div class="overflow-x-auto rounded-xl border border-slate-200 shadow-2xs">
-        <table class="w-full min-w-[850px] text-left border-collapse bg-white table-fixed">
+      <div class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xs">
+        <table class="w-full min-w-[920px] text-left border-collapse bg-white table-auto">
           <thead>
-            <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
-              <th class="px-4 py-3 text-center border-b border-slate-200 w-[4%]">No</th>
-              <th class="px-4 py-3 border-b border-slate-200 w-[19%]">Nama Penerima</th>
-              <th class="px-4 py-3 border-b border-slate-200 w-[11%]">NIK / No. KTP</th>
-              <th class="px-4 py-3 border-b border-slate-200 w-[16%]">Jenis Layanan</th>
-              <th class="px-4 py-3 border-b border-slate-200 w-[12%]">Kecamatan</th>
-              <th class="px-4 py-3 border-b border-slate-200 w-[12%]">Kelurahan</th>
-              <th id="th-verifikasi" class="px-4 py-3 border-b border-slate-200 text-center w-[17%]">Verifikasi</th>
-              <th id="th-status-tahun" class="px-4 py-3 border-b border-slate-200 text-center hidden w-[18%]">Status
-              </th>
-              <th id="th-aksi-lihat" class="px-4 py-3 border-b border-slate-200 text-center w-[9%]">Aksi</th>
+            <tr
+              class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">
+              <th class="w-14 px-3 py-3.5 text-center whitespace-nowrap align-middle">No</th>
+              <th class="px-4 py-3.5 min-w-[200px] whitespace-nowrap align-middle">Nama Penerima</th>
+              <th class="px-4 py-3.5 whitespace-nowrap align-middle">NIK / No. KTP</th>
+              <th class="px-4 py-3.5 min-w-[150px] whitespace-nowrap align-middle">Jenis Layanan</th>
+              <th class="px-4 py-3.5 min-w-[130px] whitespace-nowrap align-middle">Kecamatan</th>
+              <th class="px-4 py-3.5 min-w-[130px] whitespace-nowrap align-middle">Kelurahan</th>
+              <th id="th-verifikasi" class="px-4 py-3.5 text-center min-w-[160px] whitespace-nowrap align-middle">
+                Verifikasi</th>
+              <th id="th-status-tahun"
+                class="px-4 py-3.5 text-center min-w-[140px] whitespace-nowrap align-middle hidden">Status</th>
+              <th id="th-aksi-lihat" class="w-24 px-4 py-3.5 text-center whitespace-nowrap align-middle">Aksi</th>
             </tr>
           </thead>
           <tbody id="body-tabel-lihat" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
             <tr>
-              <td colspan="8" class="px-4 py-8 text-center text-slate-400 italic">
+              <td colspan="8" class="px-4 py-12 text-center text-slate-400 italic">
                 Belum ada data. Silakan klik tombol "LIHAT DATA" di menu atas untuk memuat dari server.
               </td>
             </tr>
@@ -1085,33 +1090,43 @@
     </section>
 
     <div id="modal-detail-penerima"
-      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-      <div class="bg-white rounded-2xl max-w-2xl w-full shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
-        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
-          <h3 class="text-base font-bold text-slate-800 tracking-wide uppercase">Detail Lengkap Data Penerima</h3>
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div
+        class="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg sm:max-w-3xl lg:max-w-5xl shadow-2xl border border-slate-200/80 flex flex-col max-h-[94vh] sm:max-h-[90vh] transition-all transform">
+        <div
+          class="shrink-0 flex justify-between items-center px-5 sm:px-7 py-4 border-b border-slate-100 bg-white rounded-t-2xl sm:rounded-t-3xl">
+          <div class="flex items-center gap-2.5">
+            <span class="text-xl">📄</span>
+            <div>
+              <h3 class="text-sm sm:text-base font-bold text-slate-800 tracking-wide uppercase">Detail Lengkap Data
+                Penerima</h3>
+              <p class="text-[11px] text-slate-400">Informasi biodata, tempat tugas, rekening, dan verifikasi berkas</p>
+            </div>
+          </div>
           <button id="tutup-modal-detail"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+            class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
         </div>
-        <div id="isi-konten-detail" class="p-6 overflow-y-auto text-sm text-slate-700 space-y-3">
+        <div id="isi-konten-detail"
+          class="flex-1 overflow-y-auto p-4 sm:p-6 text-sm text-slate-700 space-y-4 overscroll-contain">
         </div>
         <div
-          class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-2xl gap-2">
-          <div class="flex gap-2">
+          class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex flex-wrap justify-between items-center rounded-b-2xl sm:rounded-b-3xl gap-2.5">
+          <div class="flex flex-wrap gap-2">
             <button id="btn-edit-detail"
-              class="hidden px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+              class="hidden px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
               ✏️ Edit Data
             </button>
             <button id="btn-simpan-edit"
-              class="hidden px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+              class="hidden px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
               💾 Simpan Perubahan
             </button>
             <button id="btn-batal-edit"
-              class="hidden px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
+              class="hidden px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
               Batal Edit
             </button>
           </div>
           <button onclick="document.getElementById('modal-detail-penerima').classList.add('hidden')"
-            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
+            class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
             Tutup Detail
           </button>
         </div>
@@ -1120,41 +1135,45 @@
 
     <!-- Modal: rekap "Data Detail" (Memenuhi Syarat, sumber proses Pembayaran) -->
     <div id="modal-data-detail"
-      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 overflow-y-auto">
-      <div class="bg-white rounded-2xl max-w-6xl w-full shadow-xl border border-slate-100 flex flex-col max-h-[90vh]">
-        <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">
+      <div
+        class="bg-white rounded-2xl sm:rounded-3xl max-w-7xl w-full shadow-2xl border border-slate-200/80 flex flex-col max-h-[94vh] sm:max-h-[90vh] transition-all transform">
+        <div
+          class="shrink-0 flex justify-between items-center px-5 sm:px-7 py-4 border-b border-slate-100 bg-white rounded-t-2xl sm:rounded-t-3xl">
           <div>
-            <h3 class="text-base font-bold text-slate-800 tracking-wide uppercase">Data Detail</h3>
+            <h3 class="text-sm sm:text-base font-bold text-slate-800 tracking-wide uppercase">Data Detail Rekapitulasi
+            </h3>
             <p class="text-xs text-slate-500 mt-0.5">Rekap penerima Memenuhi Syarat sesuai hak akses Anda.</p>
           </div>
           <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+            class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
         </div>
-        <div class="p-6 overflow-y-auto text-sm text-slate-700">
-          <div class="overflow-x-auto rounded-lg border border-slate-200">
-            <table class="w-full text-left border-collapse bg-white whitespace-nowrap">
+        <div class="flex-1 p-4 sm:p-6 overflow-y-auto text-sm text-slate-700 overscroll-contain">
+          <div class="overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
+            <table class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
               <thead>
-                <tr class="bg-slate-800 text-white text-xs font-semibold tracking-wider uppercase">
-                  <th class="px-3 py-2 text-center border-b border-slate-200">No</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Nama</th>
-                  <th class="px-3 py-2 border-b border-slate-200">NIK</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Jenis Kelamin</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Tempat Lahir</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Tanggal Lahir</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Alamat</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Layanan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Tempat Tugas</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Alamat Tugas</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Kecamatan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Kelurahan</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Nama Rekening</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Nomor Rekening</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Kantor Cabang</th>
-                  <th class="px-3 py-2 border-b border-slate-200">No. Kontak</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Status BPJS TK</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Umur</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Status</th>
-                  <th class="px-3 py-2 border-b border-slate-200">Tgl Status</th>
+                <tr
+                  class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">
+                  <th class="px-3.5 py-3 text-center border-b border-slate-700/80">No</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Nama</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">NIK</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Jenis Kelamin</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Tempat Lahir</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Tanggal Lahir</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Alamat</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Layanan</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Tempat Tugas</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Alamat Tugas</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Kecamatan</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Kelurahan</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Nama Rekening</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Nomor Rekening</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Kantor Cabang</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">No. Kontak</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Status BPJS TK</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Umur</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Status</th>
+                  <th class="px-3.5 py-3 border-b border-slate-700/80">Tgl Status</th>
                 </tr>
               </thead>
               <tbody id="body-tabel-data-detail" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
@@ -1162,10 +1181,11 @@
             </table>
           </div>
         </div>
-        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center rounded-b-2xl">
-          <span id="info-total-data-detail" class="text-xs text-slate-500"></span>
+        <div
+          class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex justify-between items-center rounded-b-2xl sm:rounded-b-3xl">
+          <span id="info-total-data-detail" class="text-xs text-slate-500 font-medium"></span>
           <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
-            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">
+            class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
             Tutup
           </button>
         </div>
