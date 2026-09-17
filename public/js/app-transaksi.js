@@ -2127,14 +2127,14 @@ function halamanBerikutnya() {
             btnEdit.classList.remove('hidden');
             // Reload detail dari server agar data segar
             ambilDanTampilkanDetail(nomorBarisAktif);
-            
+
             // OPTIMISTIC UPDATE: Update data lokal di masterDataLihat agar tabel instan berubah
-            const barisTarget = masterDataLihat.find(function(r) { return r[0] == nomorBarisAktif; });
+            const barisTarget = masterDataLihat.find(function (r) { return r[0] == nomorBarisAktif; });
             if (barisTarget) {
-              Object.keys(teks).forEach(function(i) { barisTarget[Number(i)] = teks[i]; });
+              Object.keys(teks).forEach(function (i) { barisTarget[Number(i)] = teks[i]; });
               saringDanTampilkanTabel(); // Render seketika 0ms
             }
-            
+
             // Invalidate cache saja, fetch ulang akan terjadi secara asinkron di belakang 
             // layar saat inisialisasiMenuLihatData dipanggil (SWR)
             invalidateCacheDataTransaksi();
