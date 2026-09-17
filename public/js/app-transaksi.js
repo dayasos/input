@@ -460,13 +460,6 @@ if (typeof formPembayaran !== 'undefined' && formPembayaran) {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
 
-      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-      if (isPdf && file.size > 3.2 * 1024 * 1024) {
-        const mb = (file.size / (1024 * 1024)).toFixed(1);
-        tampilkanToast('⚠️ Dokumen PDF "' + file.name + '" (' + mb + ' MB) melebihi batas 3.2 MB gateway upload. Mohon kompres file PDF terlebih dahulu.', 'gagal', { durasi: 7000 });
-        input.value = '';
-        return;
-      }
 
       if (file.size > 25 * 1024 * 1024) {
         tampilkanToast('⚠️ Berkas "' + file.name + '" melebihi 25 MB. Mohon pilih berkas dengan ukuran lebih kecil.', 'gagal', { durasi: 6000 });
