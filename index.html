@@ -13,6 +13,17 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DJPM 2027">
+  <script>
+    // Early capture untuk event beforeinstallprompt agar tidak pernah terlewat
+    window.__pwaInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.__pwaInstallPrompt = e;
+      if (typeof window.onPwaPromptReady === 'function') {
+        window.onPwaPromptReady(e);
+      }
+    });
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,6 +31,22 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
     rel="stylesheet">
   <style>
+    @keyframes slideDownTopCenter {
+      from {
+        opacity: 0;
+        transform: translate(-50%, -24px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+    }
+
+    .banner-pwa-masuk {
+      animation: slideDownTopCenter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
     body {
       font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
@@ -162,6 +189,17 @@
           </button>
         </nav>
         <div class="flex items-center gap-2">
+          <!-- Tombol Pasang PWA di Header (muncul jika browser mendukung instalasi PWA) -->
+          <button id="btn-header-install-pwa" type="button" onclick="window.installAplikasi()"
+            class="hidden bg-sky-600/90 hover:bg-sky-500 active:scale-95 border border-sky-400/50 text-white px-3 h-10 rounded-lg shadow items-center justify-center gap-1.5 text-xs font-semibold transition"
+            title="Pasang Aplikasi DJPM 2027 ke Layar Utama">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-200" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span class="hidden md:inline">Pasang Aplikasi</span>
+          </button>
           <button id="btn-kelola-user"
             class="hidden bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Kelola Pengguna (Admin Utama)">
@@ -1447,74 +1485,93 @@
       })();
     </script>
 
-    <!-- Modal: ajakan instal aplikasi (Android/Chrome/Edge -- pakai prompt instal bawaan
-         browser). z-index lebih tinggi dari modal-login (z-[500]) supaya tampil di atasnya
-         kalau kebetulan muncul bersamaan. -->
-    <div id="modal-install-app"
-      class="hidden fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div class="px-6 py-6 text-center">
-          <img src="/icons/icon-192.png" alt="Ikon Aplikasi"
-            class="w-16 h-16 object-contain mx-auto mb-3 rounded-xl shadow">
-          <h3 class="text-base font-bold text-slate-800">Instal Aplikasi DJPM 2027</h3>
-          <p class="text-xs text-slate-500 mt-2 leading-relaxed">
-            Tambahkan ke layar utama perangkat Anda untuk akses lebih cepat, tanpa perlu membuka
-            browser dan mengetik alamat setiap kali.
-          </p>
+    <!-- ========================================================================= -->
+    <!-- NOTIFIKASI BANNER INSTALASI PWA (ATAS TENGAH - PROFESIONAL & PROPORSIONAL) -->
+    <!-- ========================================================================= -->
+    <aside id="banner-install-pwa" role="region" aria-label="Notifikasi Instalasi Aplikasi"
+      class="hidden fixed top-3 sm:top-4 left-1/2 -translate-x-1/2 z-[650] w-[94%] max-w-md sm:max-w-lg bg-white/95 backdrop-blur-md border border-sky-200/90 shadow-2xl shadow-slate-900/15 rounded-2xl p-3 sm:p-3.5 transition-all duration-300 pointer-events-auto">
+      <div class="flex items-center gap-3">
+        <!-- Logo / Icon Miniatur -->
+        <div class="relative shrink-0">
+          <img src="/icons/icon-192.png" alt="DJPM 2027"
+            class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain shadow-xs border border-sky-100 bg-white p-0.5">
+          <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+          </span>
         </div>
-        <div class="px-6 pb-6 space-y-2">
-          <button onclick="window.installAplikasi()"
-            class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg shadow transition">
-            📲 Instal Sekarang
-          </button>
-          <button onclick="window.tutupModalInstall()"
-            class="w-full py-2 text-slate-500 hover:text-slate-700 text-xs font-medium transition">
-            Nanti Saja
-          </button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Modal: instruksi manual instal utk iPhone/iPad (Safari tidak punya prompt instal
-         otomatis -- Apple mewajibkan Share > Add to Home Screen lewat interaksi user sendiri). -->
-    <div id="modal-install-ios"
-      class="hidden fixed inset-0 z-[600] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div class="px-6 py-6 text-center">
-          <img src="/icons/icon-192.png" alt="Ikon Aplikasi"
-            class="w-16 h-16 object-contain mx-auto mb-3 rounded-xl shadow">
-          <h3 class="text-base font-bold text-slate-800">Instal di iPhone/iPad</h3>
-          <p class="text-xs text-slate-500 mt-2 leading-relaxed">
-            Tambahkan ke layar utama supaya lebih cepat diakses:
+        <!-- Teks Informasi -->
+        <div class="flex-1 min-w-0 pr-1">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h4 id="banner-pwa-judul" class="text-xs sm:text-sm font-bold text-slate-800 tracking-tight leading-tight">
+              Instal Aplikasi DJPM 2027
+            </h4>
+            <span
+              class="px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md">
+              PWA
+            </span>
+          </div>
+          <p id="banner-pwa-deskripsi" class="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-snug line-clamp-2">
+            Akses lebih cepat & praktis langsung dari layar utama tanpa repot buka browser.
           </p>
         </div>
-        <div class="px-6 pb-2 space-y-3 text-left">
-          <div class="flex items-center gap-3">
-            <span
-              class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">1</span>
-            <p class="text-xs text-slate-600">Ketuk tombol <strong>Share</strong> ⬆️ di bar Safari (bawah atau atas
-              layar)</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span
-              class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">2</span>
-            <p class="text-xs text-slate-600">Gulir ke bawah, ketuk <strong>"Add to Home Screen"</strong> / "Tambah ke
-              Layar Utama" ➕</p>
-          </div>
-          <div class="flex items-center gap-3">
-            <span
-              class="flex-shrink-0 w-7 h-7 rounded-full bg-sky-100 text-sky-700 font-bold text-xs flex items-center justify-center">3</span>
-            <p class="text-xs text-slate-600">Ketuk <strong>"Add"</strong> / "Tambah" di pojok kanan atas</p>
-          </div>
-        </div>
-        <div class="px-6 pt-4 pb-6">
-          <button onclick="window.tutupModalInstall()"
-            class="w-full py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm rounded-lg shadow transition">
-            Mengerti
+
+        <!-- Tombol Aksi -->
+        <div class="flex items-center gap-1.5 shrink-0">
+          <button type="button" id="btn-banner-install" onclick="window.installAplikasi()"
+            class="px-3.5 py-2 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 active:scale-95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition flex items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>Instal</span>
+          </button>
+
+          <button type="button" id="btn-banner-petunjuk-ios" onclick="window.togglePetunjukIos()"
+            class="hidden px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-xs rounded-xl transition items-center gap-1">
+            <span>Petunjuk</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                clip-rule="evenodd" />
+            </svg>
+          </button>
+
+          <button type="button" onclick="window.tutupBannerInstall()" aria-label="Tutup notifikasi instalasi"
+            class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-95 rounded-lg transition"
+            title="Nanti Saja">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2.2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>
-    </div>
+
+      <!-- Panduan Khusus iOS Safari (Dapat Di-Expand) -->
+      <div id="banner-pwa-ios-steps" class="hidden mt-3 pt-3 border-t border-slate-200/70 text-left space-y-2">
+        <p class="text-[11px] font-semibold text-slate-700">Langkah instalasi di Safari iOS:</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div class="bg-sky-50/70 p-2 rounded-lg border border-sky-100 flex items-center gap-2">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
+            <span class="text-[11px] text-slate-600">Ketuk <strong>Share ⬆️</strong> di bar Safari</span>
+          </div>
+          <div class="bg-sky-50/70 p-2 rounded-lg border border-sky-100 flex items-center gap-2">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
+            <span class="text-[11px] text-slate-600">Pilih <strong>Add to Home Screen ➕</strong></span>
+          </div>
+          <div class="bg-sky-50/70 p-2 rounded-lg border border-sky-100 flex items-center gap-2">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">3</span>
+            <span class="text-[11px] text-slate-600">Ketuk <strong>Add</strong> di pojok kanan atas</span>
+          </div>
+        </div>
+      </div>
+    </aside>
 
     <!-- Modal Temuan Duplikasi Data -->
     <div id="modal-temuan-duplikat"

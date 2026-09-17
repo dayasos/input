@@ -1,11 +1,18 @@
 // DJPM 2027 - Modul Core
 
-// PWA Install Prompt
-let promptInstalTersimpan = null;
+// PWA Install Prompt & Top-Center Floating Banner
+let promptInstalTersimpan = window.__pwaInstallPrompt || null;
+
+window.onPwaPromptReady = function (e) {
+  promptInstalTersimpan = e;
+  cobaTampilkanBannerInstall();
+};
 
 function sudahTerinstalSebagaiPwa() {
   try {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+    return window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true ||
+      (document.referrer && document.referrer.includes('android-app://'));
   } catch (e) { return false; }
 }
 
@@ -15,63 +22,176 @@ function perangkatIOS() {
   return false;
 }
 
-function cobaTampilkanModalInstall() {
-  if (sudahTerinstalSebagaiPwa()) return;
+function cobaTampilkanBannerInstall() {
+  if (sudahTerinstalSebagaiPwa()) {
+    const banner = document.getElementById('banner-install-pwa');
+    if (banner) banner.classList.add('hidden');
+    const btnHeader = document.getElementById('btn-header-install-pwa');
+    if (btnHeader) {
+      btnHeader.classList.add('hidden');
+      btnHeader.classList.remove('flex');
+    }
+    return;
+  }
+
+  // Tampilkan tombol pasang di header jika browser kompatibel
+  const btnHeader = document.getElementById('btn-header-install-pwa');
+  if (btnHeader && (promptInstalTersimpan || perangkatIOS())) {
+    btnHeader.classList.remove('hidden');
+    btnHeader.classList.add('flex');
+  }
+
   let sudahDitutup = false;
   try { sudahDitutup = sessionStorage.getItem('djpm_install_prompt_ditutup') === '1'; } catch (e) { }
   if (sudahDitutup) return;
 
+  const banner = document.getElementById('banner-install-pwa');
+  if (!banner) return;
+
+  const judul = document.getElementById('banner-pwa-judul');
+  const deskripsi = document.getElementById('banner-pwa-deskripsi');
+  const btnInstall = document.getElementById('btn-banner-install');
+  const btnIos = document.getElementById('btn-banner-petunjuk-ios');
+  const stepsIos = document.getElementById('banner-pwa-ios-steps');
+
   if (promptInstalTersimpan) {
-    document.getElementById('modal-install-app').classList.remove('hidden');
+    if (judul) judul.textContent = 'Instal Aplikasi DJPM 2027';
+    if (deskripsi) deskripsi.textContent = 'Akses lebih cepat & praktis langsung dari layar utama tanpa repot buka browser.';
+    if (btnInstall) btnInstall.classList.remove('hidden');
+    if (btnIos) btnIos.classList.add('hidden');
+    if (stepsIos) stepsIos.classList.add('hidden');
+
+    banner.classList.remove('hidden');
+    banner.classList.add('banner-pwa-masuk');
   } else if (perangkatIOS()) {
-    document.getElementById('modal-install-ios').classList.remove('hidden');
+    if (judul) judul.textContent = 'Pasang di iPhone / iPad';
+    if (deskripsi) deskripsi.textContent = 'Akses instan dari Layar Utama via menu Bagikan (Share) Safari.';
+    if (btnInstall) btnInstall.classList.add('hidden');
+    if (btnIos) btnIos.classList.remove('hidden');
+
+    banner.classList.remove('hidden');
+    banner.classList.add('banner-pwa-masuk');
   }
 }
 
 window.addEventListener('beforeinstallprompt', function (e) {
   e.preventDefault();
   promptInstalTersimpan = e;
-  cobaTampilkanModalInstall();
+  window.__pwaInstallPrompt = e;
+  cobaTampilkanBannerInstall();
 });
 
 window.addEventListener('appinstalled', function () {
   try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
-  const modal = document.getElementById('modal-install-app');
-  if (modal) modal.classList.add('hidden');
+  window.tutupBannerInstall();
+  const btnHeader = document.getElementById('btn-header-install-pwa');
+  if (btnHeader) {
+    btnHeader.classList.add('hidden');
+    btnHeader.classList.remove('flex');
+  }
+  if (typeof tampilkanToast === 'function') {
+    tampilkanToast('🎉 Aplikasi DJPM 2027 berhasil dipasang di perangkat Anda!', 'sukses', { durasi: 6000 });
+  }
 });
 
-window.installAplikasi = function () {
-  const modal = document.getElementById('modal-install-app');
-  if (!promptInstalTersimpan) { if (modal) modal.classList.add('hidden'); return; }
-  promptInstalTersimpan.prompt();
-  promptInstalTersimpan.userChoice.finally(function () {
+window.installAplikasi = async function () {
+  const banner = document.getElementById('banner-install-pwa');
+  if (!promptInstalTersimpan) {
+    if (perangkatIOS()) {
+      window.togglePetunjukIos(true);
+      return;
+    }
+    if (typeof tampilkanToast === 'function') {
+      tampilkanToast('Gunakan menu browser (titik tiga) lalu pilih "Instal Aplikasi" atau "Tambahkan ke Layar Utama".', 'info', { durasi: 5000 });
+    }
+    window.tutupBannerInstall();
+    return;
+  }
+
+  try {
+    promptInstalTersimpan.prompt();
+    const pilihan = await promptInstalTersimpan.userChoice;
+    if (pilihan && pilihan.outcome === 'accepted') {
+      if (typeof tampilkanToast === 'function') {
+        tampilkanToast('Memasang aplikasi DJPM 2027...', 'sukses');
+      }
+    }
+  } catch (err) {
+    console.warn('[PWA] Error instal:', err);
+  } finally {
     promptInstalTersimpan = null;
-    if (modal) modal.classList.add('hidden');
+    window.__pwaInstallPrompt = null;
+    window.tutupBannerInstall();
     try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
-  });
+  }
 };
 
-window.tutupModalInstall = function () {
-  const modalApp = document.getElementById('modal-install-app');
-  const modalIos = document.getElementById('modal-install-ios');
-  if (modalApp) modalApp.classList.add('hidden');
-  if (modalIos) modalIos.classList.add('hidden');
+window.tutupBannerInstall = function () {
+  const banner = document.getElementById('banner-install-pwa');
+  if (banner && !banner.classList.contains('hidden')) {
+    banner.classList.remove('banner-pwa-masuk');
+    banner.style.opacity = '0';
+    banner.style.transform = 'translate(-50%, -20px)';
+    banner.style.transition = 'all 0.25s ease-in';
+    setTimeout(function () {
+      banner.classList.add('hidden');
+      banner.style.opacity = '';
+      banner.style.transform = '';
+      banner.style.transition = '';
+    }, 260);
+  }
   try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
 };
 
+window.tutupModalInstall = window.tutupBannerInstall;
+
+window.togglePetunjukIos = function (buka) {
+  const steps = document.getElementById('banner-pwa-ios-steps');
+  if (!steps) return;
+  if (typeof buka === 'boolean') {
+    if (buka) steps.classList.remove('hidden');
+    else steps.classList.add('hidden');
+  } else {
+    steps.classList.toggle('hidden');
+  }
+};
+
+// Inisialisasi pengecekan PWA saat halaman siap
 if (perangkatIOS() && !sudahTerinstalSebagaiPwa()) {
-  setTimeout(cobaTampilkanModalInstall, 1200);
+  setTimeout(cobaTampilkanBannerInstall, 1200);
+} else if (promptInstalTersimpan && !sudahTerinstalSebagaiPwa()) {
+  setTimeout(cobaTampilkanBannerInstall, 600);
 }
 
+// Registrasi Service Worker secara aman dan terjamin
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('/sw.js').catch(function () { /* diam saja, bukan fitur kritis */ });
-  });
+  const doRegisterSw = function () {
+    navigator.serviceWorker.register('/sw.js')
+      .then(function (reg) {
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+      })
+      .catch(function (err) {
+        console.warn('[PWA] Service Worker registration skipped:', err && err.message ? err.message : err);
+      });
+  };
+
+  if (document.readyState === 'complete') {
+    doRegisterSw();
+  } else {
+    window.addEventListener('load', doRegisterSw);
+  }
 }
 
-// Keyboard accessibility: Tekan ESC untuk menutup modal yang aktif
+// Keyboard accessibility: Tekan ESC untuk menutup banner/modal yang aktif
 window.addEventListener('keydown', function (e) {
   if (e.key === 'Escape') {
+    const banner = document.getElementById('banner-install-pwa');
+    if (banner && !banner.classList.contains('hidden')) {
+      window.tutupBannerInstall();
+      return;
+    }
     const modalLogout = document.getElementById('modal-konfirmasi-logout');
     if (modalLogout && !modalLogout.classList.contains('hidden')) {
       if (typeof window.tutupModalKonfirmasiLogout === 'function') {
