@@ -5,11 +5,19 @@ const SS_ID_MASTER_DROPDOWN = "1wB2xHthdlMzZWG80jkmIPDNkCwtu_9p1zplF8yePGk4";
 const FOLDER_ID_INDUK = "19rMR3gd6tQUh-l2JSdBim09EFzwePCg3";
 const DURASI_SESI_DETIK = 6 * 60 * 60;
 
+// Penanda versi manual -- naikkan tiap kali paste ulang kode ini ke editor Apps Script dan
+// deploy versi baru. Dicek lewat action "ping" (lihat ALLOWED di doPost) supaya bisa
+// diverifikasi dari luar (curl/Postman) bahwa deployment aktif benar-benar menjalankan kode
+// yang baru di-paste, tanpa perlu buka editor Apps Script atau menebak dari URL (URL /exec
+// SENGAJA tetap sama tiap "New version" -- itu bukan tanda gagal deploy).
+const VERSI_KODE = "2026-09-17-lock-folder-only";
+
 function doGet() {
     return ContentService
         .createTextOutput(JSON.stringify({
             status: "ok",
-            pesan: "Microservice Upload Google Drive & Auth untuk Sistem DJPM 2027. (Database menggunakan Supabase)"
+            pesan: "Microservice Upload Google Drive & Auth untuk Sistem DJPM 2027. (Database menggunakan Supabase)",
+            versiKode: VERSI_KODE
         }))
         .setMimeType(ContentService.MimeType.JSON);
 }
@@ -48,7 +56,7 @@ function doPost(e) {
             "uploadSemuaBerkasKeDrive": uploadSemuaBerkasKeDrive,
             "uploadSatuBerkasKeDrive": uploadSemuaBerkasKeDrive,
             "ping": function () {
-                return { status: "ok", pong: true, pesan: "Google Apps Script Microservice Online" };
+                return { status: "ok", pong: true, pesan: "Google Apps Script Microservice Online", versiKode: VERSI_KODE };
             }
         };
 
