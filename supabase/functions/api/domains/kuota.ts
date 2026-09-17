@@ -11,12 +11,16 @@ interface BarisKuota {
 
 // Port 1:1 dari getSemuaKuota() — array polos [{kecamatan, layanan, kuota}], dipakai langsung
 // sebagai `daftarKuotaCache` di index.html (baris 4941-4942) tanpa pembungkus {sukses,...}.
+//
+// PENTING: kegagalan sesi SENGAJA dibiarkan melempar (bukan ditangkap jadi array kosong).
+// Versi sebelumnya menangkap error sesi lalu mengembalikan [] -- akibatnya modal "Kelola Kuota"
+// selalu tampil "Belum ada data kuota tersimpan" saat token kedaluwarsa/tidak sah, walau data di
+// tabel `kuota` ada (mis. 336 baris di produksi), menyesatkan admin mengira migrasi belum
+// selesai. Dengan melempar, index.ts akan membalikkan {error:...} dan google.script.run shim di
+// api-bridge.js otomatis mendeteksi pesan "SESI TIDAK SAH" lalu menampilkan modal login ulang --
+// bukan diam-diam menampilkan tabel kosong.
 export async function getSemuaKuota(token: string) {
-  try {
-    await wajibSesi(token);
-  } catch (_e) {
-    return [];
-  }
+  await wajibSesi(token);
   const rows = await sql<BarisKuota[]>`select kecamatan, layanan, kuota_maks as kuota from kuota`;
   return rows.map((r: BarisKuota) => ({ kecamatan: r.kecamatan, layanan: r.layanan, kuota: Number(r.kuota) || 0 }));
 }

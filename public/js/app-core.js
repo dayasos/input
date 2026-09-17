@@ -444,6 +444,10 @@ function konfirmasiAksi(opsi) {
   }
 
   modal.classList.remove('hidden');
+  // Paksa reflow sinkron -- mitigasi bug rendering dikenal di sejumlah browser (kombinasi
+  // backdrop-blur + toggle display:none->flex kadang tidak ter-repaint sampai ada interaksi
+  // lain memaksa browser menggambar ulang). Membaca offsetHeight cukup untuk memicu reflow.
+  void modal.offsetHeight;
 
   return new Promise(function (resolve) {
     _resolveKonfirmasi = resolve;

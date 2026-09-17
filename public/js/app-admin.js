@@ -142,6 +142,23 @@ function isiFormEditKuota(idx) {
   document.getElementById('kk-layanan').value = item.layanan;
   document.getElementById('kk-kuota').value = item.kuota;
   document.getElementById('kk-kuota').focus();
+
+  const banner = document.getElementById('kk-mode-edit-banner');
+  const label = document.getElementById('kk-mode-edit-label');
+  const btnSimpan = document.getElementById('kk-btn-simpan');
+  if (label) label.textContent = item.kecamatan + ' — ' + item.layanan;
+  if (banner) banner.classList.remove('hidden');
+  if (btnSimpan) btnSimpan.textContent = '🔄 Perbarui Kuota';
+}
+
+function batalEditKuota() {
+  document.getElementById('kk-kecamatan').value = '';
+  document.getElementById('kk-layanan').value = '';
+  document.getElementById('kk-kuota').value = '';
+  const banner = document.getElementById('kk-mode-edit-banner');
+  const btnSimpan = document.getElementById('kk-btn-simpan');
+  if (banner) banner.classList.add('hidden');
+  if (btnSimpan) btnSimpan.textContent = '💾 Simpan Kuota';
 }
 
 function muatDaftarKuota() {
@@ -161,9 +178,7 @@ function muatDaftarKuota() {
 document.getElementById('btn-kelola-kuota').addEventListener('click', function () {
   if (!pastikanLogin()) return;
   isiDropdownFormKuota();
-  document.getElementById('kk-kecamatan').value = '';
-  document.getElementById('kk-layanan').value = '';
-  document.getElementById('kk-kuota').value = '';
+  batalEditKuota();
   document.getElementById('kk-cari').value = '';
   document.getElementById('modal-kelola-kuota').classList.remove('hidden');
   muatDaftarKuota();
@@ -172,6 +187,8 @@ document.getElementById('btn-kelola-kuota').addEventListener('click', function (
 document.getElementById('kk-cari').addEventListener('input', function (e) {
   renderTabelKuota(e.target.value);
 });
+
+document.getElementById('kk-btn-batal-edit').addEventListener('click', batalEditKuota);
 
 document.getElementById('kk-btn-simpan').addEventListener('click', function () {
   const btn = this;
@@ -194,7 +211,7 @@ document.getElementById('kk-btn-simpan').addEventListener('click', function () {
       pulihkanTombol(btn);
       if (!res || !res.sukses) { tampilkanToast('Gagal: ' + (res ? res.pesan : 'tidak diketahui'), 'gagal', { durasi: 6000 }); return; }
       tampilkanToast(res.pesan, 'sukses');
-      document.getElementById('kk-kuota').value = '';
+      batalEditKuota();
       muatDaftarKuota();
     })
     .withFailureHandler(function (err) {
