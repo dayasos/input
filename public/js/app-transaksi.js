@@ -511,23 +511,14 @@ function kompresGambar(file, maxDim, kualitas) {
 }
 
 // Helper Upload Berkas
-async function bacaFileTerkompresi(inputEl) {
-  if (!inputEl || !inputEl.files || inputEl.files.length === 0) return null;
-
-  let file = inputEl.files[0];
+async function prosesFileTerkompresi(file) {
+  if (!file) return null;
   try {
-    file = await kompresGambar(file); // PDF/non-gambar otomatis dilewati di dalam fungsi ini
-  } catch (eKompres) {
-  }
+    file = await kompresGambar(file);
+  } catch (eKompres) { }
 
   const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas
   if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
-
-  // Vercel serverless request body memiliki batas keras 4.5 MB.
-  // Base64 encoding menambah overhead ~33%. File > 3.2 MB akan menghasilkan > 4.3 MB payload yang ditolak proxy.
-  if (file.size > 3.2 * 1024 * 1024) {
-    throw new Error('Ukuran berkas "' + file.name + '" (' + (file.size / (1024 * 1024)).toFixed(1) + ' MB) terlalu besar untuk gateway upload. Maksimal 3.2 MB per berkas (khusus dokumen PDF, mohon dikompres terlebih dahulu).');
-  }
 
   const base64Data = await new Promise(function (resolve, reject) {
     const reader = new FileReader();
@@ -542,12 +533,45 @@ async function bacaFileTerkompresi(inputEl) {
   return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', dataBase64: base64Data };
 }
 
+async function bacaFileTerkompresi(inputEl) {
+  if (!inputEl || !inputEl.files || inputEl.files.length === 0) return null;
+  return prosesFileTerkompresi(inputEl.files[0]);
+
+}
+
 function panggilAksiPromise(namaAksi) {
   const args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function (resolve, reject) {
     const run = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
     run[namaAksi].apply(run, args);
   });
+}
+
+// Upload bypass Vercel, hit GAS directly
+async function fetchDirectToGAS(token, konteks, mapKecil) {
+  const metaGas = document.querySelector('meta[name="gas-drive-url"]');
+  const GAS_URL = (metaGas && metaGas.getAttribute('content'))
+    ? metaGas.getAttribute('content').trim()
+    : "https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec";
+  const payload = {
+    action: "uploadSemuaBerkasKeDrive",
+    args: [token, konteks, mapKecil]
+  };
+
+  const res = await fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify(payload),
+    redirect: "follow",
+    headers: { "Content-Type": "text/plain;charset=utf-8" }
+  });
+
+  if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+  const text = await res.text();
+  let json;
+  try { json = JSON.parse(text); } catch (e) { throw new Error("Invalid response from GAS"); }
+
+  if (json.error) return { sukses: false, pesan: json.error };
+  return json.result;
 }
 
 async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
@@ -574,7 +598,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
 
   // Pemanasan (Warmup) GAS untuk mencegah timeout saat cold start
   try {
-    await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, {});
+    await fetchDirectToGAS(dataPengguna.token, konteks, {});
   } catch (_e) { /* abaikan error warmup */ }
 
   function updateProgressUI(namaBerkas, sedangUnggah) {
@@ -605,7 +629,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       }
 
       try {
-        const res = await panggilAksiPromise('uploadSemuaBerkasKeDrive', dataPengguna.token, konteks, mapKecil);
+        const res = await fetchDirectToGAS(dataPengguna.token, konteks, mapKecil);
         if (res && res.sukses && res.link && res.link[k]) {
           berkasSelesai++;
           updateProgressUI(labelBerkas, false);
@@ -2124,7 +2148,7 @@ function halamanBerikutnya() {
     renderBaca(dataAktif);
   }
 
-  function simpanEdit() {
+  async function simpanEdit() {
     if (!pastikanLogin() || !nomorBarisAktif || !dataAktif) return;
     const teks = {};
     Object.keys(KOLOM_TEKS).forEach(function (i) {
@@ -2189,12 +2213,29 @@ function halamanBerikutnya() {
     const labelPerIdx = {};
     getBerkasSesuaiLayanan(dataAktif[7]).forEach(function (b) { labelPerIdx[b.idx] = b.label; });
     const berkasUntukUpload = {};
-    Object.keys(berkasBaruMap).forEach(function (k) {
-      const item = berkasBaruMap[k];
-      if (item && item.file) {
-        berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, label: labelPerIdx[k] || ("Kolom " + k) };
+
+    try {
+      const kunciBerkas = Object.keys(berkasBaruMap);
+      for (const k of kunciBerkas) {
+        const item = berkasBaruMap[k];
+        if (item && item.file) {
+          const processed = await prosesFileTerkompresi(item.file);
+          if (processed) {
+            berkasUntukUpload[k] = {
+              dataBase64: processed.dataBase64,
+              namaFile: processed.namaFile,
+              mimeType: processed.mimeType,
+              label: labelPerIdx[k] || ("Kolom " + k)
+            };
+          }
+        }
       }
-    });
+    } catch (e) {
+      btnSimpan.disabled = false;
+      btnSimpan.textContent = "💾 Simpan Perubahan";
+      tampilkanToast("Gagal mempersiapkan berkas: " + e.message, "gagal");
+      return;
+    }
 
     unggahBerkasLangsungKeStorage(
       { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },

@@ -125,10 +125,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  // 3. Gunakan URL yang telah disanitasi (default)
+  // Gunakan URL yang sudah disanitasi (Supabase Edge Function)
   let targetUrl = sanitizedTargetUrl;
 
-  // 4. Siapkan payload dan injeksi Secret Token
   let payloadObj = {};
   try {
     if (req.body) {
@@ -145,12 +144,9 @@ export default async function handler(req, res) {
   // Routing khusus untuk upload ke Google Drive.
   // Fallback ke URL GAS terbaru jika env var GAS_DRIVE_UPLOAD_URL belum diset di Vercel.
   if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
-    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbx92MRn6l-A3GDn3QcXL5W_lhf1WXuk972kDdxQXrfNrmIqOq07F_aiLoYFQ6oQsBNzGA/exec';
+    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec';
   }
 
-  // WAJIB diset lewat env var Vercel -- TIDAK ADA LAGI fallback ke nilai default (2026-09-15,
-  // lihat catatan di health-check GET di atas). Gagal keras & tolak permintaan daripada diam-diam
-  // memakai secret yang tertulis di source code dan bisa ditebak siapa saja.
   const secretToken = process.env.GAS_SECRET_TOKEN;
   if (!secretToken) {
     return res.status(500).json({
@@ -159,11 +155,6 @@ export default async function handler(req, res) {
   }
   payloadObj._secret = secretToken;
 
-  // Timeout bertingkat per kategori aksi (2026-09-17):
-  //   REALTIME_CHECK (15s): cek cepat saat user mengetik — gagal cepat lebih baik dari tunggu lama
-  //   VALIDASI (25s): validasiDataBaru — beberapa query paralel, butuh ruang lebih
-  //   UPLOAD/SIMPAN (50s): payload besar + multi-step, mendekati maxDuration Vercel 60s
-  //   DEFAULT (30s): aksi umum — lebih pendek dari 45s lama agar Vercel tidak selalu yang timeout lebih dulu
   const REALTIME_CHECK_ACTIONS = new Set([
     'cekNikRealtime',
     'cekRekeningRealtime',

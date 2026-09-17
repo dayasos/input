@@ -1,34 +1,6 @@
-// Dispatcher utama — meniru persis pola doPost(e) di Kode.gs (ALLOWED{} + {action,args} -> {result}/{error})
-// supaya api/gas.js (proxy Vercel) & js/api-bridge.js di frontend nyaris tidak perlu berubah,
-// cukup ganti target URL dari script.google.com ke URL Edge Function ini.
-//
-// FASE 4 SELESAI (2026-09-14) — SEMUA domain telah diporting ke Edge Function:
-// - auth, master (read-only), validasi (realtime cek NIK/rekening/tempat tugas/kuota)
-// - penerima: READ (ambilDataLihatDataHakAkses, ambilDetailPenerimaPerBaris) +
-//             WRITE (simpanDataKeSheet, editDataPenerima — Fase 4)
-// - riwayat (ambilTahunTersedia, ambilDataTahunHakAkses, ambilRiwayatEdit)
-// - dashboard (getDashboardProgresVerifikasi)
-// - kuota (getSemuaKuota, simpanKuota, getProgresKuota)
-// - verifikasi (verifikasiSatuData, laporkanPerbaikanBerkas, tandaiSudahDiperbaiki,
-//               verifikasiMassalMemenuhiSyarat, getDaftarBerkasTidakLengkapUntukWA,
-//               cekBatasWaktuVerifikasi — Fase 4)
-// - setelan (statusInputKecKem, setInputKecKem, ambilStatusDetailSetelan, setSakelarUserByAdmin,
-//            resetSakelarUserByAdmin, ambilDaftarUserDenganStatus, bulkSakelarPerKecamatan)
-// - akun (ubahAkunSendiri, ambilDaftarAkun, resetPasswordUser, simpanProfilUser, ubahProfilUser)
-// - ekspor (eksporDataKeSpreadsheet — Fase 4, via exceljs sejak 2026-09-16, lihat _shared/excelGaya.ts)
-// - sso (buatTokenSSORetur — Fase 4, via Web Crypto HMAC-SHA256)
-// - dataDetail (ambilDataDetail — 2026-09-15, fitur baru murni Supabase, bukan porting dari
-//   Kode.gs; pengganti sheet eksternal "Data Detail" + formula QUERY() yang sudah dihapus total)
-// - upload (mintaUrlUploadBerkas + konfirmasiUploadBerkas — 2026-09-15, direvisi 2026-09-16:
-//   upload LANGSUNG browser->Supabase Storage via signed upload URL, bukan lagi lewat body
-//   request Vercel. Pengganti uploadSemuaBerkasKeDrive Kode.gs, yang dibiarkan tidak
-//   diubah/dihapus di sana, cuma tidak dipanggil lagi dari index.html.)
-//
-// Yang TIDAK diporting (sengaja):
-// - setHeaderUserId: utilitas sekali-jalan yang tidak dipanggil frontend (lihat setelan.ts)
-// - chat: fitur dihapus total 2026-09-12
 
 import { loginPengguna, logoutPengguna, pulihkanSesi } from "./domains/auth.ts";
+import { ambilSesi } from "./_shared/sesi.ts";
 import {
   getDataRumahIbadah,
   getKelurahanByKecamatan,
@@ -173,7 +145,7 @@ const CORS_HEADERS: Record<string, string> = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "POST, OPTIONS, GET",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-session-token",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -182,6 +154,25 @@ function json(body: unknown, status = 200): Response {
     headers: CORS_HEADERS,
   });
 }
+
+// ---------------------------------------------------------------------------
+// ARSITEKTUR AUTH GANDA (2026-09-17):
+//
+// MODE 1 — _secret (Vercel Proxy / internal cron):
+//   Body JSON wajib punya field _secret yang cocok dengan env var GAS_SECRET_TOKEN.
+//   _secret TIDAK PERNAH dikirim ke browser — hanya Vercel yang menyuntikkannya.
+//
+// MODE 2 — X-Session-Token header (browser langsung):
+//   Browser mengirim session token via header "x-session-token" (bukan body).
+//   Edge Function memvalidasi token ke tabel sesi_login (sudah punya cache in-memory
+//   di _shared/sesi.ts). _secret tidak diperlukan — browser tidak pernah tahu nilainya.
+//   Keamanan setara: hanya pengguna yang sudah login (punya token sesi valid) yang bisa akses.
+//
+// Dua mode ini saling eksklusif tapi TIDAK konflik: request yang punya _secret valid
+// diproses sebagai mode 1; yang tidak punya _secret tapi punya X-Session-Token valid
+// diproses sebagai mode 2. Kalau keduanya tidak ada → Ditolak.
+// ---------------------------------------------------------------------------
+
 
 Deno.serve(async (req: Request) => {
   // Tangani CORS preflight
@@ -194,7 +185,7 @@ Deno.serve(async (req: Request) => {
       status: "ok",
       pesan:
         "API Edge Function Supabase untuk Sistem Layanan Data Penerima Dana Jasa Pelayanan Kota Medan 2027. " +
-        "Endpoint ini hanya melayani permintaan POST dari proxy Vercel.",
+        "Endpoint ini melayani permintaan POST dari proxy Vercel maupun langsung dari browser (via X-Session-Token).",
     });
   }
 
@@ -217,24 +208,36 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  // Verifikasi Keamanan (Shared Secret Token dari Vercel / Worker Secret Internal).
-  // WAJIB diset lewat `supabase secrets set` (GAS_SECRET_TOKEN atau SYNC_WORKER_SECRET).
+  const action = typeof body.action === "string" ? body.action.trim() : "";
+  const args = Array.isArray(body.args) ? body.args : [];
+
+  // ── Mode 1: Autentikasi via _secret (Vercel / cron internal) ──────────────
   const expectedSecret = Deno.env.get("GAS_SECRET_TOKEN");
   const syncSecret = Deno.env.get("SYNC_WORKER_SECRET");
   const isValidSecret =
     (Boolean(expectedSecret) && body._secret === expectedSecret) ||
     (Boolean(syncSecret) && body._secret === syncSecret);
 
-  if (!isValidSecret) {
+  // ── Mode 2: Autentikasi via X-Session-Token header (browser langsung) ─────
+  // Header ini dikirim browser ketika memanggil Edge Function langsung (bypass Vercel).
+  // _secret tidak ada di payload, tapi token sesi user yang valid cukup untuk autentikasi.
+  // Catatan: args[0] untuk fungsi-fungsi yang membutuhkan token (mis. simpanDataKeSheet,
+  // cekNikRealtime, dll.) TETAP dikirim sebagai args[0] — tidak perlu ubah kontrak frontend.
+  // Header hanya dipakai untuk memverifikasi boleh-tidaknya request ini masuk.
+  let isValidSessionHeader = false;
+  const sessionTokenFromHeader = req.headers.get("x-session-token");
+  if (!isValidSecret && sessionTokenFromHeader) {
+    const sesiDariHeader = await ambilSesi(sessionTokenFromHeader);
+    isValidSessionHeader = Boolean(sesiDariHeader && sesiDariHeader.role);
+  }
+
+  if (!isValidSecret && !isValidSessionHeader) {
     return json({
       error: "Akses Ditolak: Kredensial API tidak sah",
       sukses: false,
       pesan: "Akses Ditolak",
     });
   }
-
-  const action = typeof body.action === "string" ? body.action.trim() : "";
-  const args = Array.isArray(body.args) ? body.args : [];
 
   const fn = ALLOWED[action];
   if (!fn) {

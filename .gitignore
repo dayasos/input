@@ -29,3 +29,6 @@ supabase/.temp/
 
 # Arsip Lokal / Scratch
 archive/
+
+.vercel
+.env*

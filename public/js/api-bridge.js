@@ -1,6 +1,71 @@
-// API Bridge - Pengganti google.script.run untuk Vercel & Supabase
-// Smart SWR Cache (0ms response) & Realtime Cross-Tab Sync
+const _SUPABASE_EDGE_URL = (function () {
+  // Coba baca dari meta tag (diinjeksi Vite/build, atau bisa diset manual di index.html):
+  //   <meta name="supabase-edge-url" content="https://xxxx.supabase.co/functions/v1/api">
+  const metaTag = document.querySelector('meta[name="supabase-edge-url"]');
+  if (metaTag && metaTag.getAttribute('content')) {
+    return metaTag.getAttribute('content').trim();
+  }
+  // Fallback hardcoded (sama dengan DEFAULT_TARGET_URL di api/gas.js)
+  return 'https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api';
+})();
 
+const _SUPABASE_ANON_KEY = (function () {
+  const metaTag = document.querySelector('meta[name="supabase-anon-key"]');
+  if (metaTag && metaTag.getAttribute('content')) return metaTag.getAttribute('content').trim();
+  return 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ';
+})();
+
+/**
+ * Ambil session token dari sessionStorage (kunci sama dengan yang disimpan saat login).
+ * Return null jika belum login atau token tidak ada.
+ */
+function _getSessionToken() {
+  try {
+    const sesiRaw = sessionStorage.getItem('dana_jasa_sesi');
+    if (!sesiRaw) return null;
+    const sesi = JSON.parse(sesiRaw);
+    return (sesi && sesi.token) ? sesi.token : null;
+  } catch (_e) { return null; }
+}
+
+/**
+ * Fetch langsung ke Supabase Edge Function dengan X-Session-Token header.
+ * Mengeliminasi hop Vercel proxy → latensi turun ~100-500ms per request.
+ * _secret tidak pernah ada di browser.
+ */
+async function _fetchEdgeDirect(payload, sessionToken) {
+  return fetch(_SUPABASE_EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': _SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + _SUPABASE_ANON_KEY,
+      'x-session-token': sessionToken,
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Fetch via Vercel proxy (/api/gas) — dipakai sebagai fallback jika session token
+ * belum tersedia (mis. saat login), atau untuk aksi yang memerlukan _secret di body
+ * (mis. loginPengguna, pulihkanSesi yang tidak bisa diautentikasi via session token).
+ */
+async function _fetchViaProxy(payload) {
+  return fetch('/api/gas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// Aksi-aksi yang SELALU lewat Vercel proxy (butuh _secret, tidak bisa via session token)
+const _PROXY_ONLY_ACTIONS = new Set([
+  'loginPengguna',
+  'pulihkanSesi',
+  'logoutPengguna',
+  'ping',
+]);
 
 // Konfigurasi Smart SWR
 
@@ -342,11 +407,17 @@ class GoogleScriptRunProxy {
           if (!fetchPromise) {
             const payload = { action, args };
 
-            fetchPromise = fetch('/api/gas', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload),
-            })
+            // Pilih strategi fetch: langsung ke Edge Function atau via Vercel proxy.
+            // Aksi yang butuh _secret (login, pulihkan sesi) tetap via proxy.
+            // Semua aksi lain pakai Edge Function langsung jika session token tersedia.
+            const sessionToken = _getSessionToken();
+            const pakaiDirect = sessionToken && !_PROXY_ONLY_ACTIONS.has(action);
+
+            const fetchFn = pakaiDirect
+              ? () => _fetchEdgeDirect(payload, sessionToken)
+              : () => _fetchViaProxy(payload);
+
+            fetchPromise = fetchFn()
               .then(async (res) => {
                 const contentType = res.headers.get('content-type') || '';
                 if (!res.ok) {

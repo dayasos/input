@@ -23,14 +23,23 @@ function doPost(e) {
         var scriptProperties = PropertiesService.getScriptProperties();
         var secret = scriptProperties.getProperty('GAS_SECRET_TOKEN') || EXPECTED_SECRET;
 
-        if (request._secret !== secret) {
-            return ContentService
-                .createTextOutput(JSON.stringify({ error: "Akses Ditolak: Kredensial API tidak sah", sukses: false, pesan: "Akses Ditolak" }))
-                .setMimeType(ContentService.MimeType.JSON);
-        }
-
         var action = request.action;
         var args = request.args || [];
+
+        var isUploadAction = (action === "uploadSemuaBerkasKeDrive" || action === "uploadSatuBerkasKeDrive");
+
+        if (request._secret !== secret) {
+            // Izinkan upload langsung dari browser (bypassing Vercel proxy)
+            // tanpa secret asalkan action adalah upload dan token sesi (args[0]) diberikan.
+            // Pengecekan token divalidasi oleh Supabase lewat wajibSesi_() di dalam fungsi.
+            if (isUploadAction && args && args[0]) {
+                // Lanjut ke eksekusi, token akan dicek di dalam fungsi tujuan
+            } else {
+                return ContentService
+                    .createTextOutput(JSON.stringify({ error: "Akses Ditolak: Kredensial API tidak sah", sukses: false, pesan: "Akses Ditolak" }))
+                    .setMimeType(ContentService.MimeType.JSON);
+            }
+        }
 
         var ALLOWED = {
             "loginPengguna": loginPengguna,

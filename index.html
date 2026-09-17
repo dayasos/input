@@ -13,6 +13,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="DJPM 2027">
+  <!-- Konfigurasi Supabase untuk api-bridge.js (Direct Edge Function Call) -->
+  <!-- URL dan Anon Key dibaca api-bridge.js via document.querySelector('meta[name="..."]') -->
+  <!-- Anon key aman di sini: hanya memberikan akses "publik" ke Supabase, bukan admin -->
+  <meta name="supabase-edge-url" content="https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api">
+  <meta name="supabase-anon-key"
+    content="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ">
+  <meta name="gas-drive-url"
+    content="https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec">
   <script>
     // Early capture untuk event beforeinstallprompt agar tidak pernah terlewat
     window.__pwaInstallPrompt = null;

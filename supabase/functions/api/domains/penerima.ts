@@ -12,31 +12,6 @@ import {
 import { cekAksesInputUser } from "./setelan.ts";
 import { cekKuotaTersedia } from "./validasi.ts";
 
-// ---------------------------------------------------------------------------
-// CATATAN ARSITEKTUR PENTING: identitas baris ("nomorBaris")
-//
-// Di Kode.gs, index.html memakai NOMOR BARIS FISIK di sheet (i+2, dari getSnapshotSheetInput_)
-// sebagai "id" yang dikirim balik ke server untuk aksi lanjutan (ambilDetailPenerimaPerBaris,
-// editDataPenerima, verifikasiSatuData, dst) — lihat `masterDataLihat[i][0]` di index.html.
-//
-// Di Postgres, nomor baris fisik sheet TIDAK stabil/tidak selalu tersedia (baris baru belum
-// tentu sudah tersinkron ke Sheets saat pertama kali dibuat — lihat pola outbox di rencana
-// migrasi). Sebagai gantinya, kolom PERTAMA yang dikembalikan di sini diisi `penerima.id`
-// (primary key Postgres, tersedia seketika, permanen) — bukan `sheet_row_number`.
-//
-// index.html memperlakukan nilai ini sebagai token buram (diteruskan apa adanya ke pemanggilan
-// berikutnya, tidak pernah dihitung/dibandingkan sebagai angka baris) sehingga substitusi ini
-// AMAN bagi UI — dan seluruh fungsi lanjutan yang menerima parameter ini (ambilDetailPenerimaPerBaris,
-// editDataPenerima, verifikasiSatuData, ambilRiwayatEdit, laporkanPerbaikanBerkas) SUDAH konsisten
-// menafsirkannya sebagai `penerima.id` (Postgres primary key), bukan nomor baris sheet fisik.
-// ---------------------------------------------------------------------------
-
-// Port dari ambilDataLihatDataHakAkses() — kontrak dipertahankan: fungsi ini mengembalikan STRING
-// hasil JSON.stringify() (bukan objek biasa), karena index.html memanggil JSON.parse(jsonResponse)
-// sendiri di withSuccessHandler (lihat index.html baris 3581). Bentuk tiap baris array TETAP
-// array-of-array posisional (bukan objek) — lihat pemakaian masterDataLihat[i][0..19] di index.html.
-
-
 export async function ambilDataLihatDataHakAkses(token: string): Promise<string> {
   let sesi;
   try {
@@ -55,15 +30,95 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
       return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
     }
 
-    const rows = await sql`
-      select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
-             tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-             kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
-      from penerima
-      where tahun = ${TAHUN_AKTIF}
-      order by nomor_urut
-    `;
+    // ---------------------------------------------------------------------------
+    // OPTIMASI SQL (2026-09-17): Filter RBAC dikerjakan Postgres, bukan JS loop.
+    //
+    // Sebelumnya: query ambil SEMUA baris, lalu loop JS filter satu per satu.
+    // Sekarang:   WHERE clause spesifik per role → Postgres pakai index → data minimal
+    //             yang masuk ke memory Edge Function.
+    //
+    // lolosAksesBarisLihatData() tetap dipakai HANYA untuk sub-filter GSM Katolik/Kristen
+    // (tempat_tugas LIKE '%KATOLIK%') yang lebih mudah di JS daripada SQL dinamis.
+    // ---------------------------------------------------------------------------
 
+    // deno-lint-ignore no-explicit-any
+    let rows: any[];
+
+    if (instansiPengguna === "SUPERADMIN") {
+      // Admin utama: lihat semua data tahun aktif
+      rows = await sql`
+        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+        from penerima
+        where tahun = ${TAHUN_AKTIF}
+        order by nomor_urut
+      `;
+    } else if (instansiPengguna === "KECAMATAN") {
+      // Operator kecamatan: hanya kecamatannya sendiri, bukan layanan kemenag
+      const kecamatanFilter = namaKecamatanPengguna.toUpperCase();
+      // Gunakan NOT IN untuk exclude semua layanan kemenag sekaligus di SQL
+      rows = await sql`
+        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+        from penerima
+        where tahun = ${TAHUN_AKTIF}
+          and upper(kecamatan) = ${kecamatanFilter}
+          and upper(layanan) not in (
+            select upper(nama_layanan) from layanan_master where kategori = 'KEMENAG'
+          )
+          ${kelurahanTerkunci ? sql`and upper(kelurahan) = ${kelurahanTerkunci}` : sql``}
+        order by nomor_urut
+      `;
+    } else if (instansiPengguna === "KEMENAG") {
+      // Operator kemenag: hanya layanan kemenag yang sesuai (dan opsional per-kecamatan)
+      if (layananPengguna) {
+        // Kemenag spesifik layanan (mis. IMAM MASJID) — opsional filter kecamatan
+        const layananFilter = layananPengguna.toUpperCase();
+        if (namaKecamatanPengguna) {
+          const kecamatanFilter = namaKecamatanPengguna.toUpperCase();
+          rows = await sql`
+            select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+                   tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+            from penerima
+            where tahun = ${TAHUN_AKTIF}
+              and upper(layanan) = ${layananFilter}
+              and upper(kecamatan) = ${kecamatanFilter}
+            order by nomor_urut
+          `;
+        } else {
+          rows = await sql`
+            select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+                   tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+            from penerima
+            where tahun = ${TAHUN_AKTIF}
+              and upper(layanan) = ${layananFilter}
+            order by nomor_urut
+          `;
+        }
+      } else {
+        // Kemenag tanpa layanan spesifik: semua layanan kemenag
+        rows = await sql`
+          select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+                 tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+                 kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+          from penerima
+          where tahun = ${TAHUN_AKTIF}
+            and upper(layanan) in (
+              select upper(nama_layanan) from layanan_master where kategori = 'KEMENAG'
+            )
+          order by nomor_urut
+        `;
+      }
+    } else {
+      return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
+    }
+
+    // Hanya sub-filter GSM (tempat_tugas berisi/tidak berisi 'KATOLIK') yang masih dikerjakan JS
+    // karena ini logika string dinamis yang kompleks — semua filter lain sudah di SQL di atas.
     const resultRows: unknown[][] = [];
     for (const row of rows) {
       const layananSheet = (row.layanan || "").toUpperCase();
