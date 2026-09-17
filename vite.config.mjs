@@ -4,7 +4,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const secretToken = env.GAS_SECRET_TOKEN || process.env.GAS_SECRET_TOKEN || '';
   const supabaseUrl = env.SUPABASE_EDGE_FUNCTION_URL || env.GAS_API_URL || 'https://wwqxbscumaakvziwzwjx.supabase.co/functions/v1/api';
-  const driveUrl = env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec';
+  const driveUrl = env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxaZew7XLOaE4IVT5fLxARcPeuNqck4NVuV7cpgVO0rTuqEm3n_I8TpW9FsG5WUoiwSaA/exec';
   const anonKey = env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind3cXhic2N1bWFha3Z6aXd6d2p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg1MjQ2MTMsImV4cCI6MjEwNDEwMDYxM30.W0hJsUzcnYaOWfF-NHKR1F3RnJR8j-vJsDDqBF636hQ';
 
   return {

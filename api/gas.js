@@ -144,7 +144,7 @@ export default async function handler(req, res) {
   // Routing khusus untuk upload ke Google Drive.
   // Fallback ke URL GAS terbaru jika env var GAS_DRIVE_UPLOAD_URL belum diset di Vercel.
   if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
-    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec';
+    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxaZew7XLOaE4IVT5fLxARcPeuNqck4NVuV7cpgVO0rTuqEm3n_I8TpW9FsG5WUoiwSaA/exec';
   }
 
   const secretToken = process.env.GAS_SECRET_TOKEN;

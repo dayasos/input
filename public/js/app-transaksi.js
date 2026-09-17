@@ -545,7 +545,7 @@ async function fetchDirectToGAS(token, konteks, mapKecil) {
   const metaGas = document.querySelector('meta[name="gas-drive-url"]');
   const GAS_URL = (metaGas && metaGas.getAttribute('content'))
     ? metaGas.getAttribute('content').trim()
-    : "https://script.google.com/macros/s/AKfycbxGkGyb-Otakqpwn2-RpQQnfRZu9DdnH2Z8by-iZEzZ5CU3UIqNe2bIJwGnPLJQgmqIlQ/exec";
+    : "https://script.google.com/macros/s/AKfycbxaZew7XLOaE4IVT5fLxARcPeuNqck4NVuV7cpgVO0rTuqEm3n_I8TpW9FsG5WUoiwSaA/exec";
   const payload = {
     action: "uploadSemuaBerkasKeDrive",
     args: [token, konteks, mapKecil]
