@@ -44,8 +44,8 @@ function bangunProgresKuotaHtml(grup) {
 }
 
 function renderTabProgresKuota() {
-  const aktifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white';
-  const pasifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100';
+  const aktifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5';
+  const pasifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5';
   document.getElementById('tab-progres-kec').className = tabProgresKuotaAktif === "KECAMATAN" ? aktifCls : pasifCls;
   document.getElementById('tab-progres-kem').className = tabProgresKuotaAktif === "KEMENAG" ? aktifCls : pasifCls;
 
@@ -66,12 +66,8 @@ document.getElementById('tab-progres-kem').addEventListener('click', function ()
   renderTabProgresKuota();
 });
 
-document.getElementById('btn-progres-kuota').addEventListener('click', function () {
-  if (!pastikanLogin()) return;
-  const modal = document.getElementById('modal-progres-kuota');
+function muatProgresKuota() {
   const isi = document.getElementById('isi-progres-kuota');
-  modal.classList.remove('hidden');
-  tabProgresKuotaAktif = "KECAMATAN";
   isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Menghitung progres kuota...</p></div>`;
   google.script.run
     .withSuccessHandler(function (res) {
@@ -81,6 +77,13 @@ document.getElementById('btn-progres-kuota').addEventListener('click', function 
     })
     .withFailureHandler(function (err) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Error server: ${esc(err.message)}</p>`; })
     .getProgresKuota(dataPengguna.token);
+}
+
+document.getElementById('btn-progres-kuota').addEventListener('click', function () {
+  if (!pastikanLogin()) return;
+  document.getElementById('modal-progres-kuota').classList.remove('hidden');
+  tabProgresKuotaAktif = "KECAMATAN";
+  muatProgresKuota();
 });
 
 // Kelola Kuota
@@ -112,23 +115,28 @@ function renderTabelKuota(filterTeks) {
   const tbody = document.getElementById('kk-tabel-body');
   if (!tbody) return;
   const cari = (filterTeks || '').toUpperCase().trim();
-  const dataSaring = !cari ? daftarKuotaCache : daftarKuotaCache.filter(function (item) {
-    return item.kecamatan.indexOf(cari) !== -1 || item.layanan.indexOf(cari) !== -1;
-  });
+  // Simpan indeks asli sebelum filter (bukan daftarKuotaCache.indexOf(item) di dalam .map(),
+  // yang jadi O(n^2) -- tiap baris hasil filter melakukan scan ulang seluruh cache).
+  const dataSaring = daftarKuotaCache
+    .map(function (item, idx) { return { item: item, idx: idx }; })
+    .filter(function (entry) {
+      if (!cari) return true;
+      return entry.item.kecamatan.indexOf(cari) !== -1 || entry.item.layanan.indexOf(cari) !== -1;
+    });
 
   if (dataSaring.length === 0) {
     tbody.innerHTML = '<tr><td colspan="4" class="text-center p-4 text-slate-400 italic">Belum ada data kuota tersimpan.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = dataSaring.map(function (item, i) {
-    const idxAsli = daftarKuotaCache.indexOf(item);
+  tbody.innerHTML = dataSaring.map(function (entry) {
+    const item = entry.item;
     return `<tr class="border-b border-slate-100 hover:bg-slate-50">
         <td class="p-2">${esc(item.kecamatan)}</td>
         <td class="p-2">${esc(item.layanan)}</td>
         <td class="p-2 text-center font-bold">${item.kuota}</td>
         <td class="p-2 text-center">
-          <button type="button" onclick="isiFormEditKuota(${idxAsli})"
+          <button type="button" onclick="isiFormEditKuota(${entry.idx})"
             class="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1 rounded text-[11px] font-semibold">Edit</button>
         </td>
       </tr>`;
@@ -148,7 +156,7 @@ function isiFormEditKuota(idx) {
   const btnSimpan = document.getElementById('kk-btn-simpan');
   if (label) label.textContent = item.kecamatan + ' — ' + item.layanan;
   if (banner) banner.classList.remove('hidden');
-  if (btnSimpan) btnSimpan.textContent = '🔄 Perbarui Kuota';
+  if (btnSimpan) btnSimpan.textContent = 'Perbarui Kuota';
 }
 
 function batalEditKuota() {
@@ -158,7 +166,7 @@ function batalEditKuota() {
   const banner = document.getElementById('kk-mode-edit-banner');
   const btnSimpan = document.getElementById('kk-btn-simpan');
   if (banner) banner.classList.add('hidden');
-  if (btnSimpan) btnSimpan.textContent = '💾 Simpan Kuota';
+  if (btnSimpan) btnSimpan.textContent = 'Simpan Kuota';
 }
 
 function muatDaftarKuota() {
@@ -187,6 +195,29 @@ document.getElementById('btn-kelola-kuota').addEventListener('click', function (
 document.getElementById('kk-cari').addEventListener('input', function (e) {
   renderTabelKuota(e.target.value);
 });
+
+// Cegah admin tanpa sadar menimpa kuota yang sudah ada: kalau kombinasi Kecamatan+Layanan
+// yang baru saja dipilih manual (bukan lewat tombol Edit di tabel) ternyata SUDAH punya
+// baris kuota, otomatis masuk "Mode Ubah" dan isi field Jumlah Kuota dengan nilai lama --
+// supaya kelihatan jelas ini akan MENGUBAH, bukan menambah baris baru.
+function sinkronFormKuotaDenganPilihan() {
+  const kec = document.getElementById('kk-kecamatan').value;
+  const lay = document.getElementById('kk-layanan').value;
+  if (!kec || !lay) return;
+
+  const idx = daftarKuotaCache.findIndex(function (item) { return item.kecamatan === kec && item.layanan === lay; });
+  if (idx !== -1) {
+    isiFormEditKuota(idx);
+  } else {
+    document.getElementById('kk-kuota').value = '';
+    const banner = document.getElementById('kk-mode-edit-banner');
+    const btnSimpan = document.getElementById('kk-btn-simpan');
+    if (banner) banner.classList.add('hidden');
+    if (btnSimpan) btnSimpan.textContent = 'Simpan Kuota';
+  }
+}
+document.getElementById('kk-kecamatan').addEventListener('change', sinkronFormKuotaDenganPilihan);
+document.getElementById('kk-layanan').addEventListener('change', sinkronFormKuotaDenganPilihan);
 
 document.getElementById('kk-btn-batal-edit').addEventListener('click', batalEditKuota);
 
@@ -2181,6 +2212,22 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       if (modalKuota && !modalKuota.classList.contains('hidden') && typeof muatDaftarKuota === 'function') {
         muatDaftarKuota();
       }
+      // Modal "Progres Kuota" -- domain sama dengan Kelola Kuota, tapi selama ini belum
+      // ikut auto-refresh kalau sedang terbuka. Tab yang sedang aktif (Kecamatan/Kemenag)
+      // sengaja TIDAK direset supaya posisi pengguna tidak berpindah tiba-tiba.
+      const modalProgresKuota = document.getElementById('modal-progres-kuota');
+      if (modalProgresKuota && !modalProgresKuota.classList.contains('hidden') && typeof muatProgresKuota === 'function') {
+        muatProgresKuota();
+      }
+    }
+
+    // Modal "Data Detail" (rekap Memenuhi Syarat) -- domain sama yang dipakai
+    // verifikasiSatuData/tandaiSudahDiperbaiki/verifikasiMassalMemenuhiSyarat untuk invalidasi.
+    if (isAll || domains.includes('data_detail')) {
+      const modalDataDetail = document.getElementById('modal-data-detail');
+      if (modalDataDetail && !modalDataDetail.classList.contains('hidden') && typeof muatDataDetail === 'function') {
+        muatDataDetail(true);
+      }
     }
 
     if (isAll || domains.includes('setelan')) {
@@ -2202,6 +2249,27 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
         }
       }
     }
+
+    // Pembaruan Realtime Halaman Tools -- hanya bagian yang domainnya benar-benar
+    // berubah yang dimuat ulang, supaya admin lain yang sedang membuka tab Tools
+    // langsung melihat data terbaru tanpa perlu pindah tab atau refresh manual.
+    if (typeof panelAktif !== 'undefined' && panelAktif === 'tools') {
+      const secTools = document.getElementById('panel-tools');
+      if (secTools && !secTools.classList.contains('hidden')) {
+        if ((isAll || domains.includes('tools_batch')) && typeof toolsMuatDaftarBatch === 'function') {
+          toolsMuatDaftarBatch();
+        }
+        if ((isAll || domains.includes('tools_pejabat')) && typeof toolsMuatPejabat === 'function') {
+          toolsMuatPejabat();
+        }
+        if ((isAll || domains.includes('tools_referensi_sk')) && typeof toolsMuatReferensiSk === 'function') {
+          toolsMuatReferensiSk();
+        }
+        if ((isAll || domains.includes('tools_sk_layanan')) && typeof toolsMuatSkLayanan === 'function') {
+          toolsMuatSkLayanan();
+        }
+      }
+    }
   });
 
   if (typeof window.supabase !== 'undefined' && typeof window.supabase.createClient === 'function') {
@@ -2212,6 +2280,32 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       });
 
       const channel = client.channel('djpm-sync');
+
+      // Reconnect terjadwal dengan backoff -- sebelumnya SATU-SATUNYA jalur reconnect adalah
+      // event 'online' (perangkat balik konek internet). Itu TIDAK menutupi kasus paling umum:
+      // channel drop diam-diam karena blip sisi server Supabase, token realtime kedaluwarsa,
+      // atau browser menangguhkan WebSocket saat tab di-background lama (banyak terjadi di
+      // mobile) -- semuanya terjadi TANPA internet benar-benar putus, jadi event 'online' tidak
+      // pernah menyala dan badge tersangkut "SWR Mode" selamanya sampai halaman di-refresh manual.
+      let percobaanReconnect = 0;
+      let timerReconnect = null;
+
+      function reconnectSekarang() {
+        if (timerReconnect) { clearTimeout(timerReconnect); timerReconnect = null; }
+        if (!channel || channel.state === 'joined' || channel.state === 'joining') return;
+        updateStatusBadge('connecting');
+        channel.subscribe();
+      }
+
+      function jadwalkanReconnect() {
+        if (timerReconnect) return; // sudah ada percobaan terjadwal, jangan ditumpuk
+        const jeda = Math.min(30000, 3000 * Math.pow(2, percobaanReconnect)); // backoff, maks 30 detik
+        percobaanReconnect++;
+        timerReconnect = setTimeout(function () {
+          timerReconnect = null;
+          reconnectSekarang();
+        }, jeda);
+      }
 
       // 1. Tangkap perubahan dari Database via Event Bus Bebas-PII (CDC Realtime)
       channel
@@ -2237,21 +2331,22 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
         })
         .subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
+            percobaanReconnect = 0;
+            if (timerReconnect) { clearTimeout(timerReconnect); timerReconnect = null; }
             updateStatusBadge('connected');
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             updateStatusBadge('offline');
+            jadwalkanReconnect();
           } else {
             updateStatusBadge('connecting');
           }
         });
 
-      // Auto-reconnect jika tab kembali fokus atau perangkat kembali online
-      window.addEventListener('online', function () {
-        if (channel && channel.state !== 'joined') {
-          updateStatusBadge('connecting');
-          channel.subscribe();
-        }
-      });
+      // Reconnect langsung (tanpa nunggu jadwal backoff) begitu tab kembali terlihat/fokus ATAU
+      // perangkat balik online -- 'djpm:swr-window-focus' dari api-bridge.js sudah menyatukan
+      // kedua sinyal itu (sebelumnya event ini di-dispatch tapi TIDAK ADA yang mendengarkan sama
+      // sekali, jadi reconnect otomatis saat tab dibuka lagi tidak pernah benar-benar terjadi).
+      window.addEventListener('djpm:swr-window-focus', reconnectSekarang);
 
       window.djpmRealtimeChannel = channel;
       window.djpmSupabaseClient = client;

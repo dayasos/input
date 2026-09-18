@@ -876,9 +876,9 @@ tabInput.addEventListener('click', () => {
     return;
   }
 
-  tabInput.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition";
+  tabInput.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5";
   panelAktif = "input";
-  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
   setTabTidakAktif(tabTools);
   panelInput.classList.remove('hidden');
   panelRekap.classList.add('hidden');
@@ -944,9 +944,9 @@ tabInput.addEventListener('click', () => {
 });
 
 tabRekap.addEventListener('click', () => {
-  tabRekap.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition";
+  tabRekap.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5";
   panelAktif = "rekap";
-  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
   setTabTidakAktif(tabTools);
   panelRekap.classList.remove('hidden');
   panelInput.classList.add('hidden');
@@ -960,8 +960,8 @@ tabTools.addEventListener('click', () => {
   if (dataPengguna.role !== "UTAMA") return; // safeguard tambahan, tombolnya juga sudah disembunyikan
   setTabAktif(tabTools);
   panelAktif = "tools";
-  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
-  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition";
+  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
+  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
   panelTools.classList.remove('hidden');
   panelInput.classList.add('hidden');
   panelRekap.classList.add('hidden');

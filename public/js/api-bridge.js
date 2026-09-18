@@ -98,6 +98,19 @@ const SWR_CONFIG = {
   // Akun & Audit: TTL 5 menit
   ambilDaftarAkun: { ttl: 5 * 60 * 1000, domain: 'akun' },
   ambilRiwayatEdit: { ttl: 3 * 60 * 1000, domain: 'riwayat' },
+
+  // Data tahun arsip (dropdown "Tahun" di Lihat Data, tahun selain TAHUN_AKTIF): baris-baris
+  // tahun lampau tidak pernah bisa diedit lagi (lihat _shared/config.ts TAHUN_AKTIF -- semua
+  // query tulis dikunci ke tahun aktif), jadi aman di-cache lama tanpa risiko data usang.
+  ambilDataTahunHakAkses: { ttl: 60 * 60 * 1000, domain: 'arsip_tahun' },
+
+  // Halaman Tools (khusus UTAMA): data berubah jarang (diisi manual), TTL 10 menit.
+  // Domain dipisah per-bagian supaya menyimpan 1 pejabat tidak ikut membuang cache
+  // daftar batch/SK yang tidak berhubungan.
+  ambilDaftarBatchPembayaran: { ttl: 10 * 60 * 1000, domain: 'tools_batch' },
+  ambilPejabatTtd: { ttl: 10 * 60 * 1000, domain: 'tools_pejabat' },
+  ambilReferensiSkWalikota: { ttl: 10 * 60 * 1000, domain: 'tools_referensi_sk' },
+  ambilSkLayanan: { ttl: 10 * 60 * 1000, domain: 'tools_sk_layanan' },
 };
 
 // Ambang batas kesegaran cache (freshness threshold) cerdas per domain
@@ -113,6 +126,11 @@ const DOMAIN_FRESHNESS = {
   penerima_detail: 20 * 1000,   // 20 detik
   dashboard: 20 * 1000,         // 20 detik
   data_detail: 20 * 1000,       // 20 detik
+  tools_batch: 60 * 1000,          // 1 menit
+  tools_pejabat: 60 * 1000,        // 1 menit
+  tools_referensi_sk: 60 * 1000,   // 1 menit
+  tools_sk_layanan: 60 * 1000,     // 1 menit
+  arsip_tahun: 30 * 60 * 1000,     // 30 menit -- data tahun lampau tidak pernah berubah
 };
 
 const MUTATION_INVALIDATIONS = {
@@ -132,6 +150,11 @@ const MUTATION_INVALIDATIONS = {
   simpanProfilUser: ['akun'],
   ubahProfilUser: ['akun'],
   logoutPengguna: ['*'],
+
+  buatBatchPembayaran: ['tools_batch'],
+  simpanPejabatTtd: ['tools_pejabat'],
+  simpanReferensiSkWalikota: ['tools_referensi_sk'],
+  simpanSkLayanan: ['tools_sk_layanan'],
 };
 
 // SWR Cache Manager

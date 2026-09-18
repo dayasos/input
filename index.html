@@ -176,14 +176,30 @@
       </div>
       <div class="flex items-center gap-3 flex-wrap justify-center lg:justify-end">
         <nav class="flex gap-2 bg-slate-800 p-1 rounded-lg text-sm font-medium shrink-0">
-          <button id="tab-input" class="px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition">
-            INPUT DATA
+          <button id="tab-input"
+            class="px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+            </svg>
+            <span>INPUT DATA</span>
           </button>
-          <button id="tab-rekap" class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
-            LIHAT DATA
+          <button id="tab-rekap"
+            class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>LIHAT DATA</span>
           </button>
-          <button id="tab-tools" class="hidden px-4 py-2 rounded-md text-white hover:bg-slate-700 transition">
-            🛠️ TOOLS
+          <button id="tab-tools"
+            class="hidden px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+            </svg>
+            <span>TOOLS</span>
           </button>
           <button id="btn-retur-kematian"
             class="hidden px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
@@ -812,7 +828,7 @@
             Total Data: Dimuat
           </div>
         </div>
-        <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-x-auto pb-1">
+        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
           <!-- Dropdown Tahun -->
           <div
             class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-sm text-xs shrink-0">
@@ -964,11 +980,11 @@
             <select id="filter-verifikasi" onchange="saringDanTampilkanTabel()"
               class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
               <option value="">-- Semua Status --</option>
-              <option value="Proses Verifikasi">⏳ Proses Verifikasi</option>
-              <option value="Memenuhi Syarat">✅ Memenuhi Syarat</option>
-              <option value="Tidak Memenuhi Syarat">❌ Tidak Memenuhi Syarat</option>
-              <option value="Berkas Tidak Lengkap">📋 Berkas Tidak Lengkap</option>
-              <option value="Sudah Dilaporkan">🔔 Sudah Dilaporkan</option>
+              <option value="Proses Verifikasi">Proses Verifikasi</option>
+              <option value="Memenuhi Syarat">Memenuhi Syarat</option>
+              <option value="Tidak Memenuhi Syarat">Tidak Memenuhi Syarat</option>
+              <option value="Berkas Tidak Lengkap">Berkas Tidak Lengkap</option>
+              <option value="Sudah Dilaporkan">Sudah Dilaporkan</option>
             </select>
           </div>
         </div>
@@ -977,7 +993,9 @@
       <div
         class="sm:hidden flex items-center justify-between text-xs text-slate-500 bg-slate-50/90 px-3 py-2 rounded-xl mb-2 border border-slate-200/60 shadow-2xs">
         <span class="flex items-center gap-1.5 font-medium">
-          <span class="text-sm">👉</span>
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
           <span>Geser tabel ke samping untuk melihat detail status & tombol aksi</span>
         </span>
       </div>
@@ -1024,7 +1042,14 @@
          panel-input/panel-rekap), BUKAN modal, sesuai permintaan eksplisit. -->
     <section id="panel-tools" class="hidden">
       <div class="flex flex-col gap-1 mb-6 border-b border-slate-100 pb-4">
-        <h2 class="text-xl font-bold text-slate-800">🛠️ Tools — Pembayaran</h2>
+        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+          <svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+          </svg>
+          <span>Pembayaran</span>
+        </h2>
         <p class="text-xs text-slate-500 mt-1">Khusus Admin Utama. Buat &amp; unduh data pembayaran per bulan, kelola
           pejabat penandatangan.</p>
       </div>
@@ -1062,7 +1087,7 @@
           </div>
           <button id="btn-tools-buat-batch" onclick="toolsBuatBatch()"
             class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">
-            ⚙️ Tarik Data Terkini (AKTIF)
+            Tarik Data Terkini (AKTIF)
           </button>
         </div>
         <p class="text-[11px] text-slate-400 mt-2">Data yang dibuat adalah salinan beku saat tombol diklik — perubahan
@@ -1111,7 +1136,7 @@
               class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
           </div>
           <button onclick="toolsSimpanReferensiSk()"
-            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">💾
+            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">
             Simpan</button>
         </div>
       </div>
@@ -1142,7 +1167,11 @@
         <div
           class="shrink-0 flex justify-between items-center px-5 sm:px-7 py-4 border-b border-slate-100 bg-white rounded-t-2xl sm:rounded-t-3xl">
           <div class="flex items-center gap-2.5">
-            <span class="text-xl">📄</span>
+            <svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" />
+            </svg>
             <div>
               <h3 class="text-sm sm:text-base font-bold text-slate-800 tracking-wide uppercase">Detail Lengkap Data
                 Penerima</h3>
@@ -1160,11 +1189,11 @@
           <div class="flex flex-wrap gap-2">
             <button id="btn-edit-detail"
               class="hidden px-4 py-2.5 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
-              ✏️ Edit Data
+              Edit Data
             </button>
             <button id="btn-simpan-edit"
               class="hidden px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs">
-              💾 Simpan Perubahan
+              Simpan Perubahan
             </button>
             <button id="btn-batal-edit"
               class="hidden px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
@@ -1181,7 +1210,8 @@
 
     <!-- Modal: rekap "Data Detail" (Memenuhi Syarat, sumber proses Pembayaran) -->
     <div id="modal-data-detail"
-      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden"
+      onclick="if(event.target===this)this.classList.add('hidden')">
       <div
         class="bg-white rounded-2xl sm:rounded-3xl max-w-7xl w-full shadow-2xl border border-slate-200/80 flex flex-col max-h-[94vh] max-h-[94dvh] sm:max-h-[90vh] sm:max-h-[90dvh] transition-all transform">
         <div
@@ -1632,41 +1662,67 @@
     </div>
 
     <div id="modal-dashboard-progres"
-      class="hidden fixed inset-0 z-[163] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto"
+      class="hidden fixed inset-0 z-[163] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
       onclick="if(event.target===this)this.classList.add('hidden')">
-      <div class="bg-white rounded-2xl w-full max-w-5xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
+      <div
+        class="bg-white rounded-2xl w-full max-w-5xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
         <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
-          <h3 id="judul-modal-dashboard" class="text-base font-bold text-slate-800 uppercase">📊 Dashboard Progres
-            Verifikasi</h3>
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+              stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <h3 id="judul-modal-dashboard" class="text-base font-bold text-slate-800 uppercase">Dashboard Progres
+              Verifikasi</h3>
+          </div>
           <button onclick="document.getElementById('modal-dashboard-progres').classList.add('hidden')"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+            class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
         </div>
         <div id="filter-dashboard-wrap" class="hidden px-6 pt-4">
+          <label for="filter-dashboard-kecamatan"
+            class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Filter
+            Kecamatan</label>
           <select id="filter-dashboard-kecamatan" onchange="muatDashboardProgres()"
-            class="w-full max-w-xs p-2 border border-slate-300 rounded-lg text-sm">
+            class="w-full max-w-xs p-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
             <option value="">-- Semua Kecamatan --</option>
           </select>
         </div>
         <div id="isi-dashboard-progres" class="p-6 overflow-y-auto"></div>
+        <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end rounded-b-2xl">
+          <button onclick="document.getElementById('modal-dashboard-progres').classList.add('hidden')"
+            class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-medium transition">Tutup</button>
+        </div>
       </div>
     </div>
 
     <div id="modal-progres-kuota"
-      class="hidden fixed inset-0 z-[162] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto"
+      class="hidden fixed inset-0 z-[162] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
       onclick="if(event.target===this)this.classList.add('hidden')">
-      <div class="bg-white rounded-2xl w-full max-w-4xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
+      <div
+        class="bg-white rounded-2xl w-full max-w-4xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
         <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100">
           <h3 class="text-base font-bold text-slate-800 tracking-wide uppercase">Progres Capaian Kuota per Layanan</h3>
           <button onclick="document.getElementById('modal-progres-kuota').classList.add('hidden')"
-            class="text-slate-400 hover:text-slate-600 text-2xl font-semibold leading-none">&times;</button>
+            class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
         </div>
         <div class="px-6 pt-4 flex gap-2 border-b border-slate-100">
           <button id="tab-progres-kec"
-            class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition">🏘️ Layanan
-            Kecamatan</button>
+            class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+            </svg>
+            <span>Layanan Kecamatan</span>
+          </button>
           <button id="tab-progres-kem"
-            class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition">🕌 Layanan
-            Kemenag</button>
+            class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-18 0h18M3 9v.75c0 .414.336.75.75.75h16.5a.75.75 0 00.75-.75V9M3 21h18" />
+            </svg>
+            <span>Layanan Kemenag</span>
+          </button>
         </div>
         <div id="isi-progres-kuota" class="p-6 overflow-y-auto"></div>
         <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end rounded-b-2xl">
@@ -1678,24 +1734,33 @@
 
     <!-- Modal Kelola Kuota (khusus Admin Utama) -->
     <div id="modal-kelola-kuota"
-      class="hidden fixed inset-0 z-[163] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto"
+      class="hidden fixed inset-0 z-[163] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto"
       onclick="if(event.target===this)this.classList.add('hidden')">
-      <div class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
+      <div
+        class="bg-white rounded-2xl w-full max-w-2xl shadow-xl border border-slate-100 flex flex-col max-h-[90vh] max-h-[90dvh]">
         <div class="flex justify-between items-center px-6 py-4 border-b border-slate-100 bg-amber-800 rounded-t-2xl">
           <div>
-            <h3 class="text-base font-bold text-white tracking-wide uppercase">⚙️ Kelola Kuota Layanan</h3>
-            <p class="text-amber-100 text-xs mt-0.5">Atur jumlah kuota per Kecamatan &amp; Layanan</p>
+            <h3 class="text-base font-bold text-white tracking-wide uppercase flex items-center gap-2">
+              <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Kelola Kuota Layanan</span>
+            </h3>
+            <p class="text-amber-100 text-xs mt-0.5">Atur jumlah kuota per Kecamatan & Layanan</p>
           </div>
           <button onclick="document.getElementById('modal-kelola-kuota').classList.add('hidden')"
-            class="text-white/80 hover:text-white text-2xl font-semibold leading-none">&times;</button>
+            class="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
         </div>
 
         <!-- Form tambah/ubah kuota -->
         <div class="px-6 pt-4 pb-3 border-b border-slate-100 bg-slate-50">
           <div id="kk-mode-edit-banner"
             class="hidden mb-2 flex items-center justify-between gap-2 bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-semibold px-3 py-2 rounded-lg">
-            <span>✏️ Mode Ubah: <span id="kk-mode-edit-label"></span></span>
-            <button type="button" id="kk-btn-batal-edit" class="text-sky-600 hover:text-sky-900 underline shrink-0">Batal, tambah baru</button>
+            <span>Mode Ubah: <span id="kk-mode-edit-label"></span></span>
+            <button type="button" id="kk-btn-batal-edit"
+              class="text-sky-600 hover:text-sky-900 underline shrink-0">Batal, tambah baru</button>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div>
@@ -1718,7 +1783,7 @@
           </div>
           <button id="kk-btn-simpan"
             class="mt-2 w-full py-2 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold rounded-lg transition">
-            💾 Simpan Kuota
+            Simpan Kuota
           </button>
         </div>
 
@@ -1726,7 +1791,7 @@
         <div class="px-6 py-3 overflow-y-auto flex-1">
           <div class="flex items-center justify-between mb-2 gap-2">
             <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider shrink-0">Daftar Kuota Tersimpan</h4>
-            <input type="text" id="kk-cari" placeholder="🔎 Cari kecamatan/layanan..."
+            <input type="text" id="kk-cari" placeholder="Cari kecamatan/layanan..."
               class="px-2 py-1 border border-slate-300 rounded-lg text-[11px] w-48" style="text-transform:none">
           </div>
           <div class="overflow-x-auto border border-slate-200 rounded-lg">
