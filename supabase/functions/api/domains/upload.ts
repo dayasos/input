@@ -1,5 +1,13 @@
 import { wajibSesi } from "../_shared/sesi.ts";
 import { buatSignedUrlBaca, buatUrlUploadSigned } from "../_shared/storage.ts";
+import {
+  mulaiSesiResumable,
+  namaFileDrive,
+  resolveFolderPendaftar,
+  setPermissionAnyoneReader,
+  tautanLihatDrive,
+} from "../_shared/driveApi.ts";
+import { ambilAccessTokenGoogleDrive } from "../../_shared/googleAuth.ts";
 
 const MIME_BERKAS_DIIZINKAN = [
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif",
@@ -11,6 +19,7 @@ interface FileInfoRingan {
   namaFile?: string;
   mimeType?: string;
   label?: string;
+  ukuranByte?: number;
 }
 
 interface KonteksBerkas {
@@ -143,5 +152,123 @@ export async function konfirmasiUploadBerkas(
     return { sukses: true, link: hasil };
   } catch (e) {
     return { sukses: false, pesan: "Gagal konfirmasi upload: " + String(e) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Upload berkas ke Google Drive langsung via Drive API v3 + Service Account (2026-09-18) --
+// pengganti jalur lama uploadSemuaBerkasKeDrive di kode_gas.js (base64 lewat GAS, lambat karena
+// cold start Apps Script + overhead base64). Storage tujuan TETAP Google Drive (bukan Supabase
+// Storage) -- kuota Drive institusi sudah tersedia besar tanpa biaya tambahan, beda dari Supabase
+// Storage yang cepat penuh & kena biaya per-GB.
+//
+// Alur 2 langkah, pola sama seperti mintaUrlUploadBerkas/konfirmasiUploadBerkas di atas, hanya
+// target akhirnya Drive API, bukan Supabase Storage:
+//   1. mintaUrlUploadBerkasDrive() -- resolusi/buat folder SEKALI untuk seluruh submission (lihat
+//      _shared/driveApi.ts resolveFolderPendaftar, replikasi persis dapatkanFolderPendaftar_ di
+//      kode_gas.js baris 352-365), lalu minta sesi resumable per berkas (paralel). Browser lalu
+//      PUT byte MENTAH (bukan base64) langsung ke session URI masing-masing -- tidak lewat
+//      Vercel/Edge Function sama sekali.
+//   2. konfirmasiUploadBerkasDrive() -- dipanggil browser setelah semua PUT sukses (browser sudah
+//      punya fileId dari respons PUT), set izin "anyone with link" per file (pengganti
+//      file.setSharing di kode_gas.js baris 377) dan bentuk link tampilan.
+//
+// Kontrak balikan (link, idFolderBerkas) DIPERTAHANKAN identik dengan konfirmasiUploadBerkas
+// Supabase Storage di atas, supaya frontend cukup ganti CARA memanggilnya tanpa mengubah cara
+// data disimpan/ditampilkan.
+// ---------------------------------------------------------------------------
+
+export async function mintaUrlUploadBerkasDrive(
+  token: string,
+  konteks: KonteksBerkas,
+  daftarFile: Record<string, FileInfoRingan>,
+) {
+  try {
+    await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const K = konteks || {};
+    const D = daftarFile || {};
+
+    for (const kunci of Object.keys(D)) {
+      const item = D[kunci];
+      if (!item) continue;
+      const mime = (item.mimeType || "").toString().trim().toLowerCase();
+      if (MIME_BERKAS_DIIZINKAN.indexOf(mime) === -1) {
+        return {
+          sukses: false,
+          pesan: `GAGAL: Berkas "${item.label || kunci}" (${item.namaFile || "tanpa nama"}) memakai format file yang tidak didukung${mime ? " (" + mime + ")" : ""}. Gunakan JPG, PNG, WEBP, HEIC, atau PDF.`,
+        };
+      }
+    }
+
+    const accessToken = await ambilAccessTokenGoogleDrive();
+
+    // Resolusi folder SEKALI untuk seluruh submission (bukan per berkas) -- ini yang membuat
+    // desain baru ini aman dari race condition folder duplikat tanpa perlu lock granular per
+    // berkas seperti di GAS lama (lihat komentar resolveFolderPendaftar di driveApi.ts).
+    const folderId = await resolveFolderPendaftar(accessToken, {
+      kecamatan: K.kecamatan,
+      layanan: K.layanan,
+      nama: K.nama,
+      nik: K.nik,
+      folderId: K.folderId,
+    });
+
+    const kunciList = Object.keys(D).filter((k) => D[k]);
+    const hasilTiapBerkas = await Promise.all(kunciList.map(async (kunci) => {
+      const item = D[kunci];
+      const namaAsli = item.namaFile || kunci;
+      const namaFinal = namaFileDrive(namaAsli, item.label || kunci);
+      const sesi = await mulaiSesiResumable(accessToken, folderId, namaFinal, item.mimeType || "", item.ukuranByte);
+      return { kunci, sesi };
+    }));
+
+    const daftarSesi: Record<string, { uploadSessionUri: string }> = {};
+    for (const { kunci, sesi } of hasilTiapBerkas) {
+      daftarSesi[kunci] = { uploadSessionUri: sesi.uploadSessionUri };
+    }
+
+    return { sukses: true, folderId, daftarSesi };
+  } catch (e) {
+    return { sukses: false, pesan: "Gagal menyiapkan upload Drive: " + String(e) };
+  }
+}
+
+export async function konfirmasiUploadBerkasDrive(
+  token: string,
+  folderId: string,
+  daftarFileId: Record<string, string>,
+) {
+  try {
+    await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  try {
+    const P = daftarFileId || {};
+    const kunciList = Object.keys(P).filter((k) => (P[k] || "").toString().trim());
+
+    const accessToken = await ambilAccessTokenGoogleDrive();
+
+    const hasilTiapBerkas = await Promise.all(kunciList.map(async (kunci) => {
+      const fileId = P[kunci].toString().trim();
+      await setPermissionAnyoneReader(accessToken, fileId);
+      return { kunci, url: tautanLihatDrive(fileId) };
+    }));
+
+    const hasil: Record<string, string> = {};
+    for (const { kunci, url } of hasilTiapBerkas) {
+      hasil[kunci] = url;
+    }
+    hasil.idFolderBerkas = (folderId || "").toString().trim();
+
+    return { sukses: true, link: hasil };
+  } catch (e) {
+    return { sukses: false, pesan: "Gagal konfirmasi upload Drive: " + String(e) };
   }
 }

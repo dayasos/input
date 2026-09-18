@@ -540,31 +540,55 @@ function panggilAksiPromise(namaAksi) {
   });
 }
 
-// Upload bypass Vercel, hit GAS directly
-async function fetchDirectToGAS(token, konteks, mapKecil) {
-  const metaGas = document.querySelector('meta[name="gas-drive-url"]');
-  const GAS_URL = (metaGas && metaGas.getAttribute('content'))
-    ? metaGas.getAttribute('content').trim()
-    : "https://script.google.com/macros/s/AKfycbxaZew7XLOaE4IVT5fLxARcPeuNqck4NVuV7cpgVO0rTuqEm3n_I8TpW9FsG5WUoiwSaA/exec";
-  const payload = {
-    action: "uploadSemuaBerkasKeDrive",
-    args: [token, konteks, mapKecil]
+// Upload langsung ke Google Drive lewat Drive API v3 + resumable upload session (2026-09-18) --
+// pengganti fetchDirectToGAS/uploadSemuaBerkasKeDrive (GAS). Byte file di-PUT LANGSUNG dari
+// browser ke Google (lihat putBlobKeDrive di bawah), tidak lewat Vercel/Edge Function/GAS sama
+// sekali -- yang lewat backend cuma metadata (nama/tipe/ukuran file) buat minta sesi upload, dan
+// konfirmasi izin-akses setelah selesai. Storage tujuan TETAP Google Drive.
+
+// Base64 -> Blob biner asli. dataBase64 sudah terlanjur dihasilkan lebih dulu di
+// kumpulkanDataForm()/prosesFileTerkompresi() (dipakai juga utk validasi ukuran & preview),
+// jadi konversi baliknya di sini murni operasi lokal (tidak ada network) sebelum PUT ke Drive --
+// hasil akhirnya sama seperti mengirim File asli, hanya lompat 1 langkah in-memory ekstra.
+function base64KeBlob(dataBase64, mimeType) {
+  const byteChars = atob(dataBase64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Blob([new Uint8Array(byteNumbers)], { type: mimeType || 'application/octet-stream' });
+}
+
+function metaSatuBerkas(item) {
+  return {
+    namaFile: item.namaFile,
+    mimeType: item.mimeType,
+    label: item.label,
+    ukuranByte: item.dataBase64 ? Math.round(item.dataBase64.length * 0.75) : undefined
   };
+}
 
-  const res = await fetch(GAS_URL, {
-    method: "POST",
-    body: JSON.stringify(payload),
-    redirect: "follow",
-    headers: { "Content-Type": "text/plain;charset=utf-8" }
-  });
-
-  if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
-  const text = await res.text();
-  let json;
-  try { json = JSON.parse(text); } catch (e) { throw new Error("Invalid response from GAS"); }
-
-  if (json.error) return { sukses: false, pesan: json.error };
-  return json.result;
+// Retry+backoff generik utk panggilan aksi backend (bukan PUT byte -- itu sudah punya retry
+// sendiri per berkas). Dipakai membungkus langkah 1 (minta sesi) & langkah 3 (konfirmasi) supaya
+// 1x error transient (mis. Drive API 5xx sesaat) tidak langsung menggagalkan seluruh proses --
+// khususnya penting utk langkah konfirmasi: kalau gagal di situ, byte SEMUA berkas sudah
+// terlanjur sukses ke Drive, sayang sekali kalau user dipaksa upload ulang dari nol gara-gara 1x
+// hiccup jaringan di langkah terakhir yang cuma set izin akses.
+async function panggilAksiDenganRetry(namaAksi, maxRetries) {
+  const args = Array.prototype.slice.call(arguments, 2);
+  const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
+  let terakhirError = null;
+  for (let attempt = 0; attempt <= limitRetry; attempt++) {
+    if (attempt > 0) {
+      await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
+    }
+    try {
+      const hasil = await panggilAksiPromise.apply(null, [namaAksi].concat(args));
+      if (hasil && hasil.sukses) return hasil;
+      terakhirError = hasil; // respons balik tapi sukses:false -- bukan exception, tetap dicoba ulang
+    } catch (e) {
+      terakhirError = { sukses: false, pesan: pesanErrorRamah(e) };
+    }
+  }
+  return terakhirError || { sukses: false, pesan: 'Tidak ada respons dari server.' };
 }
 
 async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
@@ -589,14 +613,39 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     if (progressSub) progressSub.innerText = 'Menyiapkan pengunggahan berkas ke Google Drive...';
   }
 
-  // Pemanasan (Warmup) GAS untuk mencegah timeout saat cold start
-  try {
-    await fetchDirectToGAS(dataPengguna.token, konteks, {});
-  } catch (_e) { /* abaikan error warmup */ }
+  // Langkah 1: minta sesi resumable Drive utk SELURUH berkas sekaligus (1 request) -- backend
+  // resolve/buat rantai folder (Kecamatan/Layanan/Nama(NIK)) SEKALI di sini, baru inisiasi sesi
+  // upload per berkas secara paralel. Lihat domains/upload.ts::mintaUrlUploadBerkasDrive.
+  const metaMap = {};
+  kunciList.forEach(function (k) { metaMap[k] = metaSatuBerkas(berkasMap[k]); });
+
+  const hasilSesiAwal = await panggilAksiDenganRetry('mintaUrlUploadBerkasDrive', 2, dataPengguna.token, konteks, metaMap);
+  if (!hasilSesiAwal || !hasilSesiAwal.sukses) {
+    if (progressContainer) progressContainer.classList.add('hidden');
+    return { sukses: false, pesan: hasilSesiAwal ? hasilSesiAwal.pesan : 'Tidak ada respons dari server saat menyiapkan upload.' };
+  }
+  const folderId = hasilSesiAwal.folderId;
+  const konteksDenganFolder = Object.assign({}, konteks, { folderId: folderId });
+  let daftarSesi = hasilSesiAwal.daftarSesi || {};
+
+  // Progress agregat BYTE-LEVEL (bukan cuma lompat per-file selesai) -- total dihitung dari
+  // ukuranByte tiap berkas (sudah dikirim ke backend di langkah 1), lalu tiap berkas melaporkan
+  // bytes terkirimnya secara real-time lewat XMLHttpRequest.upload.onprogress (fetch() TIDAK
+  // punya event progress upload native, makanya PUT byte di bawah pakai XHR, bukan fetch).
+  const totalByteSemua = kunciList.reduce(function (acc, k) {
+    return acc + (metaMap[k].ukuranByte || 0);
+  }, 0) || 1;
+  const bytesTerunggahPerBerkas = {};
+  kunciList.forEach(function (k) { bytesTerunggahPerBerkas[k] = 0; });
 
   function updateProgressUI(namaBerkas, sedangUnggah) {
     if (!progressContainer) return;
-    const persen = Math.round((berkasSelesai / totalBerkas) * 100);
+    const totalTerunggah = Object.keys(bytesTerunggahPerBerkas).reduce(function (acc, k) {
+      return acc + bytesTerunggahPerBerkas[k];
+    }, 0);
+    // Dibatasi maks 99% di sini -- 100% baru dicapai setelah langkah 3 (konfirmasi) beres,
+    // supaya progress bar tidak "selesai" sebelum proses benar-benar tuntas.
+    const persen = Math.min(99, Math.round((totalTerunggah / totalByteSemua) * 100));
     if (progressPersen) progressPersen.innerText = persen + '%';
     if (progressBar) progressBar.style.width = persen + '%';
     if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${totalBerkas})`;
@@ -605,15 +654,44 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     }
   }
 
-  // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan)
+  // PUT byte ke Drive lewat XHR (bukan fetch) supaya bisa dapat event progress real-time.
+  function putBlobKeDrive(url, blob, mimeType, onProgress) {
+    return new Promise(function (resolve, reject) {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', url, true);
+      xhr.timeout = 120000; // 2 menit -- generus utk berkas 25MB di koneksi lambat, tapi tetap
+      // mencegah PUT menggantung tanpa batas kalau koneksi stall total (memicu retry di pemanggil).
+      xhr.setRequestHeader('Content-Type', mimeType || 'application/octet-stream');
+      xhr.upload.onprogress = function (e) {
+        if (e.lengthComputable && typeof onProgress === 'function') onProgress(e.loaded);
+      };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve(JSON.parse(xhr.responseText));
+          } catch (eParse) {
+            reject(new Error('Respons upload Drive tidak valid.'));
+          }
+        } else {
+          reject(new Error(`Upload ke Drive gagal (HTTP ${xhr.status})`));
+        }
+      };
+      xhr.onerror = function () { reject(new Error('Kendala jaringan saat upload ke Drive.')); };
+      xhr.ontimeout = function () { reject(new Error('Batas waktu upload ke Drive terlampaui.')); };
+      xhr.send(blob);
+    });
+  }
+
+  // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan). Attempt pertama pakai
+  // sesi yang sudah didapat dari langkah 1; retry minta SESI BARU (sesi resumable lama bisa saja
+  // sudah kedaluwarsa/gagal di tengah), folderId sudah diketahui jadi tidak perlu resolusi ulang.
   async function uploadSatuBerkasDenganRetry(k, item, maxRetries) {
     const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
     const labelBerkas = item.label || k;
-    const mapKecil = {};
-    mapKecil[k] = item;
 
     let lastErrorMsg = null;
     for (let attempt = 0; attempt <= limitRetry; attempt++) {
+      bytesTerunggahPerBerkas[k] = 0; // reset progress berkas ini kalau ini percobaan ulang
       if (attempt > 0) {
         if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}... ⏱️`;
         await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
@@ -622,32 +700,39 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       }
 
       try {
-        const res = await fetchDirectToGAS(dataPengguna.token, konteks, mapKecil);
-        if (res && res.sukses && res.link && res.link[k]) {
-          berkasSelesai++;
-          updateProgressUI(labelBerkas, false);
-          return { k: k, linkDrive: res.link[k], gagal: null };
+        let uploadSessionUri = daftarSesi[k] && daftarSesi[k].uploadSessionUri;
+        if (!uploadSessionUri || attempt > 0) {
+          const metaSatu = {};
+          metaSatu[k] = metaSatuBerkas(item);
+          const hasilUlang = await panggilAksiPromise('mintaUrlUploadBerkasDrive', dataPengguna.token, konteksDenganFolder, metaSatu);
+          if (!hasilUlang || !hasilUlang.sukses || !hasilUlang.daftarSesi || !hasilUlang.daftarSesi[k]) {
+            throw new Error(hasilUlang ? hasilUlang.pesan : 'Gagal menyiapkan ulang sesi upload.');
+          }
+          uploadSessionUri = hasilUlang.daftarSesi[k].uploadSessionUri;
         }
-        if (res && res.pesan && res.pesan.includes('Batas waktu')) {
-          lastErrorMsg = 'Server upload Google Drive tidak merespons (cold start). Coba ulangi beberapa saat.';
-        } else {
-          lastErrorMsg = res ? res.pesan : 'Tidak ada respons dari server upload.';
-        }
-      } catch (eNet) {
-        const errMsg = eNet && eNet.message ? eNet.message : 'timeout';
-        if (errMsg.includes('Batas waktu')) {
-          lastErrorMsg = 'Server upload Google Drive tidak merespons (cold start). Coba ulangi beberapa saat.';
-        } else {
-          lastErrorMsg = 'Kendala jaringan (' + errMsg + ').';
-        }
+
+        const blob = base64KeBlob(item.dataBase64, item.mimeType);
+        const dataPut = await putBlobKeDrive(uploadSessionUri, blob, item.mimeType, function (loaded) {
+          bytesTerunggahPerBerkas[k] = loaded;
+          updateProgressUI(labelBerkas, true);
+        });
+        if (!dataPut || !dataPut.id) throw new Error('Respons upload Drive tidak berisi ID berkas.');
+
+        bytesTerunggahPerBerkas[k] = metaMap[k].ukuranByte || bytesTerunggahPerBerkas[k];
+        berkasSelesai++;
+        updateProgressUI(labelBerkas, false);
+        return { k: k, fileId: dataPut.id, gagal: null };
+      } catch (eSatu) {
+        lastErrorMsg = 'Kendala jaringan (' + pesanErrorRamah(eSatu) + ').';
       }
     }
 
-    return { k: k, linkDrive: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
+    return { k: k, fileId: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
   }
 
-  // Concurrency Pool: batasi maksimal 2 antrean paralel agar tidak membebani limit GAS / Vercel
-  const CONCURRENCY_LIMIT = 2;
+  // Concurrency Pool: Drive API jauh lebih toleran dari kuota eksekusi simultan GAS, aman
+  // dinaikkan ke 4 antrean paralel (dulu dibatasi 2 khusus utk melindungi GAS).
+  const CONCURRENCY_LIMIT = 4;
   const hasilList = [];
   let indexAntrean = 0;
   let adaGagalFatal = false;
@@ -673,19 +758,35 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   }
   await Promise.all(workers);
 
-  if (progressContainer) {
-    progressContainer.classList.add('hidden');
-  }
-
   const gagalPertama = hasilList.find(function (r) { return r.gagal; });
   if (gagalPertama) {
+    if (progressContainer) progressContainer.classList.add('hidden');
     return { sukses: false, pesan: gagalPertama.gagal };
   }
 
-  const daftarLink = {};
-  hasilList.forEach(function (r) { if (r.linkDrive) daftarLink[r.k] = r.linkDrive; });
+  // Langkah 3: konfirmasi -- set izin akses "anyone with link" per berkas & bentuk link tampilan.
+  if (progressPersen) progressPersen.innerText = '99%';
+  if (progressBar) progressBar.style.width = '99%';
+  if (progressSub) progressSub.innerText = 'Menyelesaikan unggahan...';
+  const daftarFileId = {};
+  hasilList.forEach(function (r) { if (r.fileId) daftarFileId[r.k] = r.fileId; });
 
-  return { sukses: true, link: daftarLink };
+  // Retry di sini lebih penting dari langkah 1 -- byte SEMUA berkas sudah sukses terkirim ke
+  // Drive di titik ini, tinggal set izin akses. panggilAksiDenganRetry aman dipanggil ulang
+  // (permissions.create bersifat idempoten dalam praktik -- lihat _shared/driveApi.ts).
+  const hasilKonfirmasi = await panggilAksiDenganRetry('konfirmasiUploadBerkasDrive', 2, dataPengguna.token, folderId, daftarFileId);
+  if (!hasilKonfirmasi || !hasilKonfirmasi.sukses) {
+    if (progressContainer) progressContainer.classList.add('hidden');
+    return {
+      sukses: false,
+      pesan: 'Berkas sudah tersimpan di Drive, tapi gagal menyelesaikan konfirmasi: ' +
+        (hasilKonfirmasi ? hasilKonfirmasi.pesan : 'Tidak ada respons dari server.') +
+        ' Silakan coba simpan data sekali lagi.'
+    };
+  }
+
+  if (progressContainer) progressContainer.classList.add('hidden');
+  return hasilKonfirmasi;
 }
 
 async function kumpulkanDataForm() {
@@ -1416,10 +1517,15 @@ function formatRupiahTools(angka) {
 
 function inisialisasiMenuTools() {
   if (!pastikanLogin()) return;
+  // Keempatnya dipanggil serentak (bukan setTimeout berjenjang seperti sebelumnya) --
+  // itu hanya perlu dulu saat backend masih Google Apps Script (batas eksekusi
+  // paralel). Sekarang lewat Supabase Edge Function + SWR (api-bridge.js), tiap
+  // panggilan sudah mandiri: kalau ada cache, render instan; kalau tidak, fetch
+  // paralel jauh lebih cepat daripada dijeda manual.
   toolsMuatDaftarBatch();
-  setTimeout(toolsMuatPejabat, 200);
-  setTimeout(toolsMuatReferensiSk, 400);
-  setTimeout(toolsMuatSkLayanan, 600);
+  toolsMuatPejabat();
+  toolsMuatReferensiSk();
+  toolsMuatSkLayanan();
 }
 
 function toolsMuatDaftarBatch() {
@@ -1456,7 +1562,7 @@ function toolsRenderTabelBatch(daftar) {
     <td class="px-3 py-2 text-right font-mono text-xs">${formatRupiahTools(b.totalNominal)}</td>
     <td class="px-3 py-2 text-xs text-slate-500">${esc(tglDibuat)}</td>
     <td class="px-3 py-2 text-center">
-      <button onclick="toolsDownloadBatch(${b.id})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-xs transition">📥 Download</button>
+      <button onclick="toolsDownloadBatch(${b.id})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-xs transition">Download</button>
     </td>
   </tr>`;
   });
@@ -1473,7 +1579,7 @@ window.toolsBuatBatch = function () {
   const btn = document.getElementById('btn-tools-buat-batch');
   const labelAsli = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '⏳ Memproses...';
+  btn.innerHTML = 'Memproses...';
   document.getElementById('tools-preview-rekap').innerHTML = '';
 
   google.script.run
@@ -1566,7 +1672,7 @@ function toolsRenderFormPejabat(daftarPejabat) {
         <label class="block text-[11px] font-medium text-slate-500 mb-0.5">NIP</label>
         <input type="text" id="tools-pejabat-nip-${idAman}" value="${esc(p.nip)}" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
       </div>
-      <button onclick="toolsSimpanPejabat('${idAman}')" class="w-full px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs font-semibold transition">💾 Simpan</button>
+      <button onclick="toolsSimpanPejabat('${idAman}')" class="w-full px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-md text-xs font-semibold transition">Simpan</button>
     </div>`;
   });
   wrap.innerHTML = html;
@@ -1656,7 +1762,7 @@ function toolsRenderTabelSkLayanan(daftar) {
         placeholder="-" class="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md" />
     </td>
     <td class="px-3 py-2">
-      <button onclick="toolsSimpanSkLayanan('${esc(r.layananKode)}')" class="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200 rounded-md font-semibold text-xs transition">💾 Simpan</button>
+      <button onclick="toolsSimpanSkLayanan('${esc(r.layananKode)}')" class="px-2.5 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200 rounded-md font-semibold text-xs transition">Simpan</button>
     </td>
   </tr>`;
   });
@@ -1837,13 +1943,13 @@ function halamanBerikutnya() {
     if (isRoleKecKem_(dataPengguna.role) && statusVerif === "Berkas Tidak Lengkap") {
       if (tglLaporPerbaikan) {
         h += `<div class="mb-4 bg-sky-50 border border-sky-200 rounded-lg px-4 py-3">
-          <p class="text-xs text-sky-800">🔔 Sudah dilaporkan diperbaiki oleh <strong>${esc(dilaporOlehPerbaikan)}</strong> pada ${esc(tglLaporPerbaikan)} — menunggu dicek ulang Admin Utama.</p>
+          <p class="text-xs text-sky-800">Sudah dilaporkan diperbaiki oleh <strong>${esc(dilaporOlehPerbaikan)}</strong> pada ${esc(tglLaporPerbaikan)} — menunggu dicek ulang Admin Utama.</p>
         </div>`;
       } else {
         h += `<div class="mb-4 bg-sky-50 border border-sky-200 rounded-lg px-4 py-3">
           <p class="text-xs text-sky-800 mb-2">Sudah selesai memperbaiki berkas yang kurang? Beri tahu Admin Utama lewat sistem.</p>
           <button id="btn-lapor-perbaikan" class="bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-            📢 Laporkan Sudah Diperbaiki
+            Laporkan Sudah Diperbaiki
           </button>
         </div>`;
       }
@@ -1852,23 +1958,23 @@ function halamanBerikutnya() {
     if (dataPengguna.role === "UTAMA") {
       if (statusVerif === "Berkas Tidak Lengkap") {
         h += `<div class="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-          ${tglLaporPerbaikan ? `<p class="text-xs text-emerald-800 mb-2">🔔 Dilaporkan sudah diperbaiki oleh <strong>${esc(dilaporOlehPerbaikan)}</strong> (${esc(tglLaporPerbaikan)}). Cek berkasnya, lalu:</p>` : `<p class="text-xs text-emerald-800 mb-2">Kalau sudah dicek dan berkasnya benar sudah lengkap:</p>`}
+          ${tglLaporPerbaikan ? `<p class="text-xs text-emerald-800 mb-2">Dilaporkan sudah diperbaiki oleh <strong>${esc(dilaporOlehPerbaikan)}</strong> (${esc(tglLaporPerbaikan)}). Cek berkasnya, lalu:</p>` : `<p class="text-xs text-emerald-800 mb-2">Kalau sudah dicek dan berkasnya benar sudah lengkap:</p>`}
           <button id="btn-tandai-sudah-diperbaiki" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-            ✅ Tandai Sudah Diperbaiki
+            Tandai Sudah Diperbaiki
           </button>
         </div>`;
       }
       h += `<div class="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-        <p class="text-xs font-bold text-amber-900 uppercase mb-2">🔍 Verifikasi Admin Utama</p>
+        <p class="text-xs font-bold text-amber-900 uppercase mb-2">Verifikasi Admin Utama</p>
         <textarea id="input-keterangan-verifikasi" rows="2" placeholder="Tulis alasan jika data ini TIDAK memenuhi syarat..." class="w-full text-xs p-2 border border-amber-300 rounded-md mb-2"></textarea>
         <label class="block text-[10px] font-semibold text-amber-800 mb-1">Batas Waktu Perbaikan (khusus jika pilih "Berkas Tidak Lengkap")</label>
         <input type="date" id="input-batas-waktu-verifikasi" class="w-full text-xs p-2 border border-amber-300 rounded-md mb-2">
         <div class="flex gap-2">
           <button id="btn-tandai-berkas-tidak-lengkap" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-            📋 Tandai Berkas Tidak Lengkap
+            Tandai Berkas Tidak Lengkap
           </button>
           <button id="btn-tandai-tidak-memenuhi" class="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
-            ❌ Tandai Tidak Memenuhi Syarat
+            Tandai Tidak Memenuhi Syarat
           </button>
         </div>
       </div>`;
@@ -1887,7 +1993,7 @@ function halamanBerikutnya() {
       // Nama Rekening ada di index 12 — sisipkan catatan tepat di bawahnya (kalau ada)
       if (i === 12 && catatanNamaBeda) {
         h += `<div class="col-span-1 sm:col-span-2 lg:col-span-3 bg-amber-50/80 border border-amber-200/80 rounded-xl px-4 py-2.5">
-          <p class="text-xs text-amber-800"><span class="font-bold">📝 Catatan Nama Berbeda:</span> ${esc(catatanNamaBeda)}</p>
+          <p class="text-xs text-amber-800"><span class="font-bold">Catatan Nama Berbeda:</span> ${esc(catatanNamaBeda)}</p>
         </div>`;
       }
     }
@@ -1897,7 +2003,7 @@ function halamanBerikutnya() {
     const berkasList = getBerkasSesuaiLayanan(d[7]);
     h += `<div class="mt-5 border-t border-slate-200/80 pt-4">
       <p class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-        <span>📁</span> <span>Berkas & Dokumen Pendukung</span>
+        <span>Berkas & Dokumen Pendukung</span>
       </p>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
     berkasList.forEach(function (b) {
@@ -1915,7 +2021,7 @@ function halamanBerikutnya() {
     // Info sakelar tutup untuk kecamatan/kemenag
     if (isRoleKecKem_(dataPengguna.role) && inputDitutupGlobal) {
       h += `<div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-        <p class="text-sm text-amber-900 font-semibold mb-1">🔒 Periode Input Telah Ditutup</p>
+        <p class="text-sm text-amber-900 font-semibold mb-1">Periode Input Telah Ditutup</p>
         <p class="text-xs text-amber-800 leading-relaxed">
           Data ini tidak dapat diubah karena periode input tahun 2027 sudah berakhir. Perubahan data hanya dapat dilakukan oleh <strong>Admin Utama Dinas Sosial Kota Medan</strong> berdasarkan surat resmi dari instansi terkait.
         </p>
@@ -1962,13 +2068,13 @@ function halamanBerikutnya() {
     const btnTandai = document.getElementById('btn-tandai-tidak-memenuhi');
     if (btnTandai) {
       btnTandai.addEventListener('click', function () {
-        jalankanVerifikasi('Tidak Memenuhi Syarat', btnTandai, '❌ Tandai Tidak Memenuhi Syarat');
+        jalankanVerifikasi('Tidak Memenuhi Syarat', btnTandai, 'Tandai Tidak Memenuhi Syarat');
       });
     }
     const btnBerkasKurang = document.getElementById('btn-tandai-berkas-tidak-lengkap');
     if (btnBerkasKurang) {
       btnBerkasKurang.addEventListener('click', function () {
-        jalankanVerifikasi('Berkas Tidak Lengkap', btnBerkasKurang, '📋 Tandai Berkas Tidak Lengkap');
+        jalankanVerifikasi('Berkas Tidak Lengkap', btnBerkasKurang, 'Tandai Berkas Tidak Lengkap');
       });
     }
 
@@ -2047,7 +2153,6 @@ function halamanBerikutnya() {
   function renderEdit(d) {
     berkasBaruMap = {};
     let h = `<div class="bg-sky-50 border border-sky-200 rounded-xl px-4 py-2.5 mb-4 text-xs text-sky-800 flex items-center gap-2">
-      <span class="text-base">✏️</span>
       <span>Mode edit aktif. Ubah data yang diperlukan lalu klik <strong>Simpan Perubahan</strong> di bagian bawah.</span>
     </div>`;
     h += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">`;
@@ -2079,7 +2184,7 @@ function halamanBerikutnya() {
     const berkasList = getBerkasSesuaiLayanan(d[7]);
     h += `<div class="mt-5 border-t border-slate-200/80 pt-4">
       <p class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-        <span>📁</span> <span>Berkas & Dokumen</span> <span class="font-normal text-slate-400 text-[11px] normal-case">(klik "Ganti File" jika ingin mengunggah berkas pengganti)</span>
+        <span>Berkas & Dokumen</span> <span class="font-normal text-slate-400 text-[11px] normal-case">(klik "Ganti File" jika ingin mengunggah berkas pengganti)</span>
       </p>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">`;
     berkasList.forEach(function (b) {
@@ -2155,13 +2260,13 @@ function halamanBerikutnya() {
       tampilkanToast("Tidak ada perubahan yang dilakukan.", "info"); return;
     }
     btnSimpan.disabled = true;
-    btnSimpan.textContent = "⏳ Menyimpan...";
+    btnSimpan.textContent = "Menyimpan...";
 
     function eksekusiEdit(berkasUntukDikirim, idFolderBerkasUntukDikirim) {
       google.script.run
         .withSuccessHandler(function (res) {
           btnSimpan.disabled = false;
-          btnSimpan.textContent = "💾 Simpan Perubahan";
+          btnSimpan.textContent = "Simpan Perubahan";
           if (res && res.sukses) {
             tampilkanToast(res.pesan, "sukses");
             modeEdit = false;
@@ -2179,18 +2284,20 @@ function halamanBerikutnya() {
               saringDanTampilkanTabel(); // Render seketika 0ms
             }
 
-            // Invalidate cache saja, fetch ulang akan terjadi secara asinkron di belakang 
+            // Invalidate cache saja, fetch ulang akan terjadi secara asinkron di belakang
             // layar saat inisialisasiMenuLihatData dipanggil (SWR)
             invalidateCacheDataTransaksi();
-            // Panggil inisialisasi secara silent tanpa skeleton loader jika memungkinkan
-            if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData(true);
+            // inisialisasiMenuLihatData() tidak menerima parameter -- refresh di sini otomatis
+            // tanpa skeleton loader karena masterDataLihat sudah diisi lewat optimistic update
+            // di atas (fungsinya cuma menampilkan skeleton kalau array-nya masih kosong).
+            if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
           } else {
             tampilkanToast(res ? res.pesan : "Gagal menyimpan.", "gagal", { durasi: 6000 });
           }
         })
         .withFailureHandler(function (err) {
           btnSimpan.disabled = false;
-          btnSimpan.textContent = "💾 Simpan Perubahan";
+          btnSimpan.textContent = "Simpan Perubahan";
           tampilkanToast(pesanErrorRamah(err), "gagal", { durasi: 6000 });
         })
         .editDataPenerima(dataPengguna.token, nomorBarisAktif, { teks: teks, berkas: berkasUntukDikirim, idFolderBerkas: idFolderBerkasUntukDikirim || "" });
@@ -2202,7 +2309,7 @@ function halamanBerikutnya() {
       return;
     }
 
-    btnSimpan.textContent = "⏳ Mengunggah berkas...";
+    btnSimpan.textContent = "Mengunggah berkas...";
     const labelPerIdx = {};
     getBerkasSesuaiLayanan(dataAktif[7]).forEach(function (b) { labelPerIdx[b.idx] = b.label; });
     const berkasUntukUpload = {};
@@ -2225,7 +2332,7 @@ function halamanBerikutnya() {
       }
     } catch (e) {
       btnSimpan.disabled = false;
-      btnSimpan.textContent = "💾 Simpan Perubahan";
+      btnSimpan.textContent = "Simpan Perubahan";
       tampilkanToast("Gagal mempersiapkan berkas: " + e.message, "gagal");
       return;
     }
@@ -2236,18 +2343,18 @@ function halamanBerikutnya() {
     ).then(function (hasilUpload) {
       if (!hasilUpload || !hasilUpload.sukses) {
         btnSimpan.disabled = false;
-        btnSimpan.textContent = "💾 Simpan Perubahan";
+        btnSimpan.textContent = "Simpan Perubahan";
         tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), "gagal", { durasi: 6000 });
         return;
       }
-      btnSimpan.textContent = "⏳ Menyimpan...";
+      btnSimpan.textContent = "Menyimpan...";
       const link = hasilUpload.link || {};
       const idFolderBaru = link.idFolderBerkas || "";
       delete link.idFolderBerkas;
       eksekusiEdit(link, idFolderBaru);
     }).catch(function (errUpload) {
       btnSimpan.disabled = false;
-      btnSimpan.textContent = "💾 Simpan Perubahan";
+      btnSimpan.textContent = "Simpan Perubahan";
       tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), "gagal", { durasi: 6000 });
     });
   }
@@ -2354,7 +2461,13 @@ function ambilDataMemenuhiSyarat() {
     const teksGabungan = (row[1] + " " + row[2] + " " + row[15] + " " + row[8]).toLowerCase();
     const lolosCari = !kataKunci || teksGabungan.includes(kataKunci);
     if (lolosKec && lolosKel && lolosLay && lolosCari) {
-      dataLolos.push([nomor++, row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15], row[16], row[17], row[18]]);
+      // Persis 18 kolom, sejajar 1:1 dengan HEADER_EKSPOR di backend (domains/ekspor.ts) --
+      // row[18] (status verifikasi) SENGAJA tidak ikut, itu bukan bagian dari header ekspor.
+      // Sebelumnya row[18] ikut terkirim dan baru dibuang di backend lewat `.slice(0, HEADER_EKSPOR.length)`
+      // (logic pemotongan umum, bukan yang memang ditujukan untuk kasus ini) -- kebetulan hasilnya
+      // benar, tapi rapuh: kalau struktur masterDataLihat berubah, pemotongan generik itu bisa
+      // salah potong kolom tanpa ada error sama sekali.
+      dataLolos.push([nomor++, row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13], row[14], row[15], row[16], row[17]]);
     }
   }
   return dataLolos;
@@ -2400,9 +2513,15 @@ document.getElementById('btn-export-xlsx').addEventListener('click', function ()
     tampilkanToast("Tidak ada data ‘Memenuhi Syarat’ untuk diekspor" + (document.getElementById('filter-kecamatan').value || document.getElementById('filter-kelurahan').value || document.getElementById('filter-layanan').value ? " pada filter yang aktif." : "."), "info");
     return;
   }
-  const idToastProses = tampilkanToast("Sedang membuat file Excel (✅ Memenuhi Syarat), mohon tunggu...", "proses");
+  const btn = this;
+  // Konsisten dengan tombol Verifikasi Semua & Salin WA di toolbar yang sama --
+  // tanpa ini, klik ganda saat proses masih berjalan bisa memicu beberapa
+  // pembuatan file Excel sekaligus.
+  setTombolMemuat(btn, "Membuat File...");
+  const idToastProses = tampilkanToast("Sedang membuat file Excel (Memenuhi Syarat), mohon tunggu...", "proses");
   google.script.run
     .withSuccessHandler(function (res) {
+      pulihkanTombol(btn);
       tutupToast(idToastProses);
       if (res.sukses) {
         unduhFileBase64(res.base64, res.namaFile);
@@ -2411,7 +2530,11 @@ document.getElementById('btn-export-xlsx').addEventListener('click', function ()
         tampilkanToast("Gagal: " + res.pesan, "gagal", { durasi: 6000 });
       }
     })
-    .withFailureHandler(function (err) { tutupToast(idToastProses); tampilkanToast(pesanErrorRamah(err), "gagal", { durasi: 6000 }); })
+    .withFailureHandler(function (err) {
+      pulihkanTombol(btn);
+      tutupToast(idToastProses);
+      tampilkanToast(pesanErrorRamah(err), "gagal", { durasi: 6000 });
+    })
     .eksporDataKeSpreadsheet(dataPengguna.token, dataEkspor, buatNamaFile());
 });
 
@@ -2439,7 +2562,10 @@ document.getElementById('btn-verifikasi-massal').addEventListener('click', funct
         }
         saringDanTampilkanTabel();
         invalidateCacheDataTransaksi();
-        inisialisasiMenuLihatData(true); // sinkronkan dengan data resmi server secara silent
+        // inisialisasiMenuLihatData() tidak menerima parameter -- ini menyinkronkan dengan data
+        // resmi server tanpa skeleton loader karena masterDataLihat sudah diisi lewat update
+        // optimistis di atas (lihat komentar fungsinya: skeleton cuma tampil kalau array kosong).
+        inisialisasiMenuLihatData();
       })
       .withFailureHandler(function (err) {
         pulihkanTombol(btn);
@@ -2624,6 +2750,15 @@ document.getElementById('btn-refresh-data').addEventListener('click', function (
     masterDataLihat = [];
     const infoTotal = document.getElementById('info-total-penerima');
     if (infoTotal) infoTotal.innerText = "Total Data: Memuat...";
+    invalidateCacheDataTransaksi();
+    // Paksa buang cache SWR domain 'penerima' juga -- tanpa ini, klik Refresh dalam jeda
+    // ambang kesegaran (20 detik) hanya akan menampilkan ulang data cache lama walau
+    // tombolnya sudah ditekan, membuat pengguna mengira sudah dapat data terbaru padahal
+    // belum. broadcast:false karena ini cuma memaksa refresh di tab ini sendiri, bukan
+    // sinyal mutasi data yang perlu diteruskan ke tab/perangkat lain.
+    if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') {
+      window.djpmCache.invalidate(['penerima'], false);
+    }
     inisialisasiMenuLihatData();
   }
 });
@@ -2664,7 +2799,7 @@ function renderDashboardProgres(res, kecFilter) {
   const judulModal = document.getElementById('judul-modal-dashboard');
   if (judulModal) {
     const kecUntukJudul = kecFilter || dataPengguna.kecamatan || '';
-    let teksJudul = '📊 Dashboard Progres Verifikasi' + (kecUntukJudul ? ' — ' + kecUntukJudul.toUpperCase() : '');
+    let teksJudul = 'Dashboard Progres Verifikasi' + (kecUntukJudul ? ' — ' + kecUntukJudul.toUpperCase() : '');
     if (dataPengguna.kelurahanTerkunci) {
       teksJudul += ' — ' + dataPengguna.kelurahanTerkunci;
     }
@@ -2705,10 +2840,10 @@ function renderDashboardProgres(res, kecFilter) {
               ${tampilkanKuota ? `<p class="text-[11px] ${warnaSisa} font-semibold">Sisa Kuota: ${k.sisaKuota}</p>` : ''}
             </div>
             <div class="space-y-1.5 text-[11px]">
-              <div class="flex justify-between"><span class="text-slate-500">⏳ Proses Verifikasi</span><span class="font-bold">${k.prosesVerifikasi}</span></div>
-              <div class="flex justify-between"><span class="text-emerald-600">✅ Memenuhi Syarat</span><span class="font-bold text-emerald-700">${k.memenuhiSyarat}</span></div>
-              <div class="flex justify-between"><span class="text-amber-600">📋 Berkas Tidak Lengkap</span><span class="font-bold text-amber-700">${k.berkasTidakLengkap}</span></div>
-              <div class="flex justify-between"><span class="text-red-500">❌ Tidak Memenuhi Syarat</span><span class="font-bold text-red-600">${k.tidakMemenuhiSyarat}</span></div>
+              <div class="flex justify-between"><span class="text-slate-500">Proses Verifikasi</span><span class="font-bold">${k.prosesVerifikasi}</span></div>
+              <div class="flex justify-between"><span class="text-emerald-600">Memenuhi Syarat</span><span class="font-bold text-emerald-700">${k.memenuhiSyarat}</span></div>
+              <div class="flex justify-between"><span class="text-amber-600">Berkas Tidak Lengkap</span><span class="font-bold text-amber-700">${k.berkasTidakLengkap}</span></div>
+              <div class="flex justify-between"><span class="text-red-500">Tidak Memenuhi Syarat</span><span class="font-bold text-red-600">${k.tidakMemenuhiSyarat}</span></div>
             </div>
             <div class="mt-3 h-2 bg-slate-100 rounded-full overflow-hidden">
               <div class="bar-progres-animasi h-full bg-teal-600" style="width:0%" data-target-width="${persen}"></div>

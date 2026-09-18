@@ -25,7 +25,12 @@ import {
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
-import { konfirmasiUploadBerkas, mintaUrlUploadBerkas } from "./domains/upload.ts";
+import {
+  konfirmasiUploadBerkas,
+  konfirmasiUploadBerkasDrive,
+  mintaUrlUploadBerkas,
+  mintaUrlUploadBerkasDrive,
+} from "./domains/upload.ts";
 import {
   ambilDaftarBatchPembayaran,
   ambilDetailBatchPembayaran,
@@ -97,6 +102,8 @@ const ALLOWED: Record<string, Handler> = {
   ambilDataDetail,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
+  mintaUrlUploadBerkasDrive,
+  konfirmasiUploadBerkasDrive,
   ambilTahunTersedia,
   ambilDataTahunHakAkses,
   ambilRiwayatEdit,

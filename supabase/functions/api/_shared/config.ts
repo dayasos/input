@@ -14,6 +14,13 @@ export const TAHUN_AKTIF = Number(Deno.env.get("TAHUN_AKTIF")) || 2027;
 // backfill), aman hardcode dengan fallback env var kalau suatu saat perlu dialihkan ke salinan lain.
 export const SS_ID_PENYIMPANAN = Deno.env.get("SS_ID_PENYIMPANAN") || "1FqXYvce8wvFtWgDmMgXlWhX3AQ_9teHCa_WpftTrJSU";
 
+// ID folder induk Google Drive tempat seluruh berkas penerima diupload (sama persis
+// FOLDER_ID_INDUK di Kode.gs/kode_gas.js) -- sejak migrasi upload dari GAS ke Drive API v3
+// langsung (2026-09-18), folder ini WAJIB sudah di-share ke client_email Service Account
+// (kredensial GOOGLE_SHEETS_SA_KEY_JSON, lihat _shared/googleAuth.ts) sebagai Editor/Content
+// Manager -- tanpa share ini Service Account tidak bisa membuat subfolder/file di dalamnya.
+export const DRIVE_FOLDER_ID_INDUK = Deno.env.get("DRIVE_FOLDER_ID_INDUK") || "19rMR3gd6tQUh-l2JSdBim09EFzwePCg3";
+
 // 21 kecamatan Kota Medan, urutan tetap (sama persis KECAMATAN_MEDAN_URUT di Kode.gs baris
 // 1712-1717) — dipakai getDashboardProgresVerifikasi untuk mode "kemenag tanpa kecamatan tetap"
 // (pecah jadi 1 kartu per kecamatan) dan untuk mengurutkan kartu hasil akhir.
