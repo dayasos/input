@@ -146,6 +146,27 @@
       }
     }
   </style>
+  <style>
+    /* Anti-Flicker untuk elemen yang butuh Auth / Role */
+    html:not(.is-logged-in) .auth-show { display: none !important; }
+    html:not(.role-utama) .utama-show { display: none !important; }
+  </style>
+  <script>
+    (function() {
+      try {
+        var sesiRaw = sessionStorage.getItem('dana_jasa_sesi');
+        if (sesiRaw) {
+          var sesi = JSON.parse(sesiRaw);
+          if (sesi && sesi.token) {
+            document.documentElement.classList.add('is-logged-in');
+            if (sesi.role === 'UTAMA') {
+              document.documentElement.classList.add('role-utama');
+            }
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="/js/api-bridge.js"></script>
 </head>
@@ -164,7 +185,7 @@
           </h1>
           <p class="text-xs text-sky-100 mt-0.5 flex items-center flex-wrap gap-2">
             <span>Pemerintah Kota Medan &nbsp;·&nbsp; <span id="info-admin-subtitle"
-                style="color:#FDE047;font-weight:600;">Administratur : admin</span></span>
+                style="color:#FDE047;font-weight:600;">Administratur : ...</span></span>
             <span id="badge-realtime-status"
               class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
               title="Realtime Smart Sync">
@@ -194,7 +215,7 @@
             <span>LIHAT DATA</span>
           </button>
           <button id="tab-tools"
-            class="hidden px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
+            class="utama-show px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
@@ -202,7 +223,7 @@
             <span>TOOLS</span>
           </button>
           <button id="btn-retur-kematian"
-            class="hidden px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
+            class="auth-show px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
             title="Laporan Retur & Kematian">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-300 flex-shrink-0" fill="none"
               viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -225,7 +246,7 @@
             <span class="hidden md:inline">Pasang Aplikasi</span>
           </button>
           <button id="btn-kelola-user"
-            class="hidden bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            class="utama-show bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Kelola Pengguna (Admin Utama)">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-200" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -235,7 +256,7 @@
             <span>Kelola User</span>
           </button>
           <button id="fab-ganti-password"
-            class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-10 h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
+            class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-10 h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
             title="Akun Saya">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-300" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -244,7 +265,7 @@
             </svg>
           </button>
           <button id="btn-keluar-aplikasi"
-            class="hidden bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            class="auth-show bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Keluar Aplikasi">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
