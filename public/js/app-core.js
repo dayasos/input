@@ -243,6 +243,7 @@ let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
   } catch (e) { sesiTersimpan = null; }
 
   if (!sesiTersimpan || !sesiTersimpan.token) {
+    document.documentElement.classList.remove('is-logged-in', 'role-utama');
     if (modalLoginEl) modalLoginEl.classList.remove('hidden');
     return;
   }
@@ -287,6 +288,7 @@ let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
         }
       } else {
         try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
+        document.documentElement.classList.remove('is-logged-in', 'role-utama');
         if (modalLoginEl) modalLoginEl.classList.remove('hidden');
       }
     })
@@ -372,10 +374,22 @@ function tutupToast(id) {
 // SISTEM MODAL KONFIRMASI & DIALOG PESAN UNIVERSAL (Pengganti confirm & alert)
 // =========================================================================
 let _resolveKonfirmasi = null;
+let _timerTutupModalKonfirmasi = null;
 
 function _tutupModalKonfirmasiUniversal(hasil) {
   const modal = document.getElementById('modal-konfirmasi-universal');
-  if (modal) modal.classList.add('hidden');
+  if (modal) {
+    modal.classList.remove('opacity-100');
+    modal.classList.add('opacity-0', 'pointer-events-none');
+    if (_timerTutupModalKonfirmasi) {
+      clearTimeout(_timerTutupModalKonfirmasi);
+      _timerTutupModalKonfirmasi = null;
+    }
+    _timerTutupModalKonfirmasi = setTimeout(function () {
+      modal.classList.add('hidden');
+      _timerTutupModalKonfirmasi = null;
+    }, 200);
+  }
   if (typeof _resolveKonfirmasi === "function") {
     const fn = _resolveKonfirmasi;
     _resolveKonfirmasi = null;
@@ -443,11 +457,14 @@ function konfirmasiAksi(opsi) {
     }
   }
 
-  modal.classList.remove('hidden');
-  // Paksa reflow sinkron -- mitigasi bug rendering dikenal di sejumlah browser (kombinasi
-  // backdrop-blur + toggle display:none->flex kadang tidak ter-repaint sampai ada interaksi
-  // lain memaksa browser menggambar ulang). Membaca offsetHeight cukup untuk memicu reflow.
-  void modal.offsetHeight;
+  // Bersihkan timer penutupan sebelumnya jika masih ada agar modal tidak tiba-tiba tertutup
+  if (_timerTutupModalKonfirmasi) {
+    clearTimeout(_timerTutupModalKonfirmasi);
+    _timerTutupModalKonfirmasi = null;
+  }
+
+  modal.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+  modal.classList.add('opacity-100');
 
   return new Promise(function (resolve) {
     _resolveKonfirmasi = resolve;
@@ -608,6 +625,14 @@ function pastikanLogin() {
 
 function terapkanHakAkses(role, kecamatan, inputDitutup) {
   inputDitutupGlobal = !!inputDitutup;
+
+  // Sinkronkan class state login & role ke elemen root html agar CSS selector auth-show & utama-show akurat
+  document.documentElement.classList.add('is-logged-in');
+  if (role === "UTAMA") {
+    document.documentElement.classList.add('role-utama');
+  } else {
+    document.documentElement.classList.remove('role-utama');
+  }
 
   // Ambil elemen DOM secara langsung agar aman dari Temporal Dead Zone
   // (const tabInput, panelInput, dll dideklarasikan SETELAH fungsi ini di file)

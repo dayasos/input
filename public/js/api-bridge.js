@@ -472,6 +472,7 @@ class GoogleScriptRunProxy {
                 // Deteksi otomatis jika sesi kedaluwarsa dari server
                 if (typeof data.error === 'string' && (data.error.includes("SESI TIDAK SAH") || data.error.includes("Silakan login ulang"))) {
                   try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (_e) { }
+                  document.documentElement.classList.remove('is-logged-in', 'role-utama');
                   swrCache.clear();
                   const modalLogin = document.getElementById('modal-login');
                   if (modalLogin && modalLogin.classList.contains('hidden')) {
@@ -509,6 +510,7 @@ class GoogleScriptRunProxy {
 
               if (possibleErrMsg && (possibleErrMsg.includes("sesi tidak sah") || possibleErrMsg.includes("silakan login ulang") || possibleErrMsg.includes("sesi kedaluwarsa") || possibleErrMsg.includes("sesi anda telah berakhir"))) {
                 try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (_e) { }
+                document.documentElement.classList.remove('is-logged-in', 'role-utama');
                 swrCache.clear();
                 const modalLogin = document.getElementById('modal-login');
                 if (modalLogin && modalLogin.classList.contains('hidden')) {

@@ -92,14 +92,27 @@ async function bangunRantaiFolderPendaftar(accessToken: string, K: KonteksFolder
 
 // Advisory lock Postgres -- pengganti LockService.getScriptLock() di kode_gas.js (baris 390-402).
 // Transaction-scoped (pg_advisory_xact_lock): otomatis terlepas begitu transaksi selesai, tidak
-// mungkin lupa unlock walau terjadi error di tengah. Kunci dibangun dari kombinasi
-// kecamatan|layanan|nama|nik supaya submission BEDA tidak saling menunggu, hanya submission yang
-// sama persis (mis. disubmit 2x nyaris bersamaan dari 2 tab) yang diserialisasi.
+// mungkin lupa unlock walau terjadi error di tengah.
+//
+// PENTING: kunci lock HANYA berdasar `kecamatan` (bukan kecamatan|layanan|nama|nik seperti versi
+// sebelumnya). bangunRantaiFolderPendaftar() bikin 3 folder bersarang -- Kecamatan -> Layanan ->
+// "Nama (NIK)" -- dan folder Kecamatan/Layanan itu DIPAKAI BERSAMA oleh SEMUA registrant di
+// kecamatan itu, lintas layanan sekalipun. Kalau kunci lock ikut mengandung layanan/nama/nik
+// (versi lama), dua submission BEDA registrant (nik beda) yang nyaris bersamaan dapat lock key
+// BEDA -> keduanya bisa lolos cariAtauBuatSubfolder() bersamaan tanpa saling tahu -> folder
+// Kecamatan atau Layanan ke-DUPLIKAT di Drive (masing2 cuma diisi sebagian file, terlihat spt
+// "file/folder berantakan" saat banyak warga di kecamatan yang sama submit bersamaan).
+//
+// Konsekuensinya: semua submission dalam SATU kecamatan (apa pun layanannya) diserialisasi
+// selama tahap resolusi folder saja (beberapa panggilan Drive API, <1-2 detik) -- BUKAN selama
+// upload byte-nya (itu tetap paralel penuh, lock sudah lepas begitu folder ID didapat). Submission
+// lintas KECAMATAN BEDA tetap berjalan penuh paralel (lock key beda), jadi skala tetap terjaga di
+// kota dengan banyak kecamatan.
 async function resolveFolderPendaftarDenganLock(
   accessToken: string,
   K: KonteksFolderPendaftar,
 ): Promise<string> {
-  const kunciTeks = [K.kecamatan, K.layanan, K.nama, K.nik].map((v) => String(v || "")).join("|");
+  const kunciTeks = String(K.kecamatan || "");
   return await sql.begin(async (tx) => {
     await tx`select pg_advisory_xact_lock(hashtextextended(${kunciTeks}, 0))`;
     return await bangunRantaiFolderPendaftar(accessToken, K);
