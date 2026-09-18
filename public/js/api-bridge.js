@@ -59,6 +59,48 @@ async function _fetchViaProxy(payload) {
   });
 }
 
+/**
+ * Cek apakah sebuah pesan error dari server menandakan sesi login sudah tidak sah/habis.
+ * Mencakup baik pesan lama dari wajibSesi() ("SESI TIDAK SAH...") maupun pesan gerbang
+ * X-Session-Token di index.ts ("Akses Ditolak: Kredensial API tidak sah") yang dilempar
+ * SEBELUM aksi sempat berjalan saat token di header sudah kedaluwarsa/dihapus. Sengaja
+ * TIDAK mencocokkan "akses ditolak" secara umum karena itu juga dipakai untuk penolakan
+ * berbasis role (mis. "Akses ditolak: hanya Admin Utama...") yang bukan sesi habis.
+ */
+function _pesanMenandakanSesiHabis(pesan) {
+  if (typeof pesan !== 'string' || !pesan) return false;
+  const p = pesan.toLowerCase();
+  return p.includes('sesi tidak sah') ||
+    p.includes('silakan login ulang') ||
+    p.includes('sesi kedaluwarsa') ||
+    p.includes('sesi anda telah berakhir') ||
+    p.includes('kredensial api tidak sah');
+}
+
+/**
+ * Bersihkan sesi lokal & tampilkan modal login kembali. Dipanggil begitu server
+ * mengonfirmasi sesi sudah tidak sah lewat _pesanMenandakanSesiHabis().
+ */
+function _tanganiSesiHabis() {
+  try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (_e) { }
+  document.documentElement.classList.remove('is-logged-in', 'role-utama');
+  swrCache.clear();
+  const modalLogin = document.getElementById('modal-login');
+  if (modalLogin && modalLogin.classList.contains('hidden')) {
+    modalLogin.classList.remove('hidden');
+    const fsContainer = document.getElementById('fs-container');
+    if (fsContainer) {
+      fsContainer.disabled = true;
+      fsContainer.classList.add('opacity-50', 'pointer-events-none');
+    }
+    const panelRekap = document.getElementById('panel-rekap');
+    if (panelRekap) panelRekap.classList.add('hidden');
+    if (typeof tampilkanToast === "function") {
+      tampilkanToast("Sesi Anda telah berakhir. Silakan login kembali.", "peringatan", { durasi: 6000 });
+    }
+  }
+}
+
 // Aksi-aksi yang SELALU lewat Vercel proxy (butuh _secret, tidak bisa via session token)
 const _PROXY_ONLY_ACTIONS = new Set([
   'loginPengguna',
@@ -470,24 +512,8 @@ class GoogleScriptRunProxy {
             .then((data) => {
               if (data && data.error) {
                 // Deteksi otomatis jika sesi kedaluwarsa dari server
-                if (typeof data.error === 'string' && (data.error.includes("SESI TIDAK SAH") || data.error.includes("Silakan login ulang"))) {
-                  try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (_e) { }
-                  document.documentElement.classList.remove('is-logged-in', 'role-utama');
-                  swrCache.clear();
-                  const modalLogin = document.getElementById('modal-login');
-                  if (modalLogin && modalLogin.classList.contains('hidden')) {
-                    modalLogin.classList.remove('hidden');
-                    const fsContainer = document.getElementById('fs-container');
-                    if (fsContainer) {
-                      fsContainer.disabled = true;
-                      fsContainer.classList.add('opacity-50', 'pointer-events-none');
-                    }
-                    const panelRekap = document.getElementById('panel-rekap');
-                    if (panelRekap) panelRekap.classList.add('hidden');
-                    if (typeof tampilkanToast === "function") {
-                      tampilkanToast("Sesi Anda telah berakhir. Silakan login kembali.", "peringatan", { durasi: 6000 });
-                    }
-                  }
+                if (_pesanMenandakanSesiHabis(data.error)) {
+                  _tanganiSesiHabis();
                 }
 
                 const errObj = new Error(data.error);
@@ -502,30 +528,13 @@ class GoogleScriptRunProxy {
               const freshResult = data ? data.result : undefined;
 
               // Deteksi otomatis jika sesi kedaluwarsa (dari top-level error atau result object)
-              const possibleErrMsg = (
+              const possibleErrMsg =
                 (data && typeof data.error === 'string' ? data.error : '') ||
                 (freshResult && typeof freshResult === 'object' && typeof freshResult.error === 'string' ? freshResult.error : '') ||
-                (freshResult && typeof freshResult === 'object' && typeof freshResult.pesan === 'string' ? freshResult.pesan : '')
-              ).toLowerCase();
+                (freshResult && typeof freshResult === 'object' && typeof freshResult.pesan === 'string' ? freshResult.pesan : '');
 
-              if (possibleErrMsg && (possibleErrMsg.includes("sesi tidak sah") || possibleErrMsg.includes("silakan login ulang") || possibleErrMsg.includes("sesi kedaluwarsa") || possibleErrMsg.includes("sesi anda telah berakhir"))) {
-                try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (_e) { }
-                document.documentElement.classList.remove('is-logged-in', 'role-utama');
-                swrCache.clear();
-                const modalLogin = document.getElementById('modal-login');
-                if (modalLogin && modalLogin.classList.contains('hidden')) {
-                  modalLogin.classList.remove('hidden');
-                  const fsContainer = document.getElementById('fs-container');
-                  if (fsContainer) {
-                    fsContainer.disabled = true;
-                    fsContainer.classList.add('opacity-50', 'pointer-events-none');
-                  }
-                  const panelRekap = document.getElementById('panel-rekap');
-                  if (panelRekap) panelRekap.classList.add('hidden');
-                  if (typeof tampilkanToast === "function") {
-                    tampilkanToast("Sesi Anda telah berakhir. Silakan login kembali.", "peringatan", { durasi: 6000 });
-                  }
-                }
+              if (_pesanMenandakanSesiHabis(possibleErrMsg)) {
+                _tanganiSesiHabis();
               }
 
               // Jika ini adalah aksi mutasi, bersihkan domain cache terkait -- tapi HANYA jika
