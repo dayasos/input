@@ -81,14 +81,14 @@ self.addEventListener('fetch', (event) => {
   const isStaticAsset =
     url.origin === self.location.origin &&
     (url.pathname.startsWith('/js/') ||
-     url.pathname.startsWith('/icons/') ||
-     url.pathname.endsWith('.png') ||
-     url.pathname.endsWith('.jpg') ||
-     url.pathname.endsWith('.svg') ||
-     url.pathname.endsWith('.ico') ||
-     url.pathname.endsWith('.css') ||
-     url.pathname.endsWith('.js') ||
-     url.pathname === '/manifest.json');
+      url.pathname.startsWith('/icons/') ||
+      url.pathname.endsWith('.png') ||
+      url.pathname.endsWith('.jpg') ||
+      url.pathname.endsWith('.svg') ||
+      url.pathname.endsWith('.ico') ||
+      url.pathname.endsWith('.css') ||
+      url.pathname.endsWith('.js') ||
+      url.pathname === '/manifest.json');
 
   if (!isStaticAsset) {
     // Biarkan browser menangani request normal lainnya
