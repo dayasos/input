@@ -1227,7 +1227,7 @@ function murniGantiInstansi(instansi, targetBtn, otherBtn) {
   controlKecamatan.value = "";
   fsContainer.disabled = false;
   fsContainer.classList.remove('opacity-50', 'pointer-events-none');
-  setGembokSubFormulir(false);
+  resetSemuaKuncianForm();
   if (isRoleKemenag(dataPengguna.role)) { renderDropdownLayananTunggal(dataPengguna.role); }
   else { renderDropdownLayanan(instansi); }
 }
@@ -1295,10 +1295,6 @@ function bukaKunciForm(alasan) {
   if (!(alasan in window._kuncianAktif)) return;
   delete window._kuncianAktif[alasan];
   terapkanSemuaKuncian();
-
-  if (Object.keys(window._kuncianAktif).length === 0 && inputUmur.value !== "" && parseInt(inputUmur.value) < 18) {
-    setGembokSubFormulir(true);
-  }
 }
 
 function terapkanSemuaKuncian() {
@@ -1342,6 +1338,17 @@ function terapkanSemuaKuncian() {
   });
 
   updateStatusTombolSimpan();
+}
+
+/**
+ * Reset SEMUA alasan kunci form (USIA, NIK, REKENING, dst) sekaligus dan tutup modal
+ * peringatan usia kalau sedang terbuka. Dipakai saat formulir direset total (ganti instansi,
+ * klik "Reset Form") supaya tidak ada field yang tertinggal ke-disable dari isian sebelumnya.
+ */
+function resetSemuaKuncianForm() {
+  window._kuncianAktif = {};
+  terapkanSemuaKuncian();
+  if (modalUsia) modalUsia.classList.add('hidden');
 }
 
 function tampilkanPeringatan(idElemen, pesan) {

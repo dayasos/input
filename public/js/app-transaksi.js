@@ -4,23 +4,47 @@
 // Guard null diperlukan karena app-transaksi.js dieksekusi setelah app-core.js,
 // namun referensi const (inputTglLahir, dll) di app-core.js bergantung pada
 // elemen HTML yang harus sudah ada di DOM.
+
+// =========================================================================
+// VALIDASI USIA (minimal 18 tahun)
+// Pakai sistem kunci blok fieldset yang sama dengan NIK/Rekening (lihat URUTAN_FIELDSET &
+// kunciDariBlokSetelah di app-core.js). Saat usia < 18 tahun, hanya blok SETELAH Domisili &
+// Kecamatan (fs-sub-bawah, indeks 2) yang dikunci. Field tanggal lahir dan blok-blok sebelumnya
+// SENGAJA dibiarkan terbuka, supaya user bisa langsung memperbaiki kesalahan input tanpa perlu
+// refresh halaman.
+// =========================================================================
+const INDEKS_KUNCI_USIA = 2;
+
+function tetapkanUsiaValid() {
+  if (modalUsia) modalUsia.classList.add('hidden');
+  bukaKunciForm('USIA');
+}
+
+function tetapkanUsiaKurangSyarat() {
+  if (modalUsia) modalUsia.classList.remove('hidden');
+  kunciDariBlokSetelah('USIA', INDEKS_KUNCI_USIA, null);
+}
+
 if (inputTglLahir) {
   inputTglLahir.addEventListener('input', () => {
-    if (!inputTglLahir.value) { if (inputUmur) inputUmur.value = ""; setGembokSubFormulir(false); return; }
+    if (!inputTglLahir.value) {
+      if (inputUmur) inputUmur.value = "";
+      tetapkanUsiaValid();
+      return;
+    }
     const tglLahir = new Date(inputTglLahir.value);
     const tglPatokan = new Date("2027-01-01");
     let usia = tglPatokan.getFullYear() - tglLahir.getFullYear();
     const m = tglPatokan.getMonth() - tglLahir.getMonth();
     if (m < 0 || (m === 0 && tglPatokan.getDate() < tglLahir.getDate())) { usia--; }
     if (inputUmur) inputUmur.value = usia >= 0 ? usia : 0;
-    if (usia < 18) { if (modalUsia) modalUsia.classList.remove('hidden'); } else { setGembokSubFormulir(false); }
+    if (usia < 18) tetapkanUsiaKurangSyarat(); else tetapkanUsiaValid();
   });
 }
 
 if (btnModalUsiaOk) {
   btnModalUsiaOk.addEventListener('click', () => {
     if (modalUsia) modalUsia.classList.add('hidden');
-    setGembokSubFormulir(true);
     if (inputTglLahir) inputTglLahir.focus();
   });
 }
@@ -291,7 +315,8 @@ selectLayanan.addEventListener('change', evaluasiUploadKondisional);
 btnResetForm.addEventListener('click', () => {
   setTimeout(() => {
     inputUmur.value = "";
-    setGembokSubFormulir(false);
+    resetSemuaKuncianForm();
+
     const hiddenJenis = document.getElementById('jenis-tempat-gmm-hidden');
     if (hiddenJenis) hiddenJenis.value = "";
     resetSemuaStatusKoordinat();
@@ -299,7 +324,6 @@ btnResetForm.addEventListener('click', () => {
     resetKonfirmasiNamaBeda();
     evaluasiUploadKondisional();
 
-    window._kuncianAktif = {};
     sembunyikanPeringatan('peringatan-nik');
     sembunyikanPeringatan('peringatan-rekening');
     sembunyikanPeringatan('peringatan-tempat-tugas');
@@ -404,6 +428,10 @@ function pulihkanDrafLokalForm() {
       if (draf.inputTempatLahir && elTmpt) elTmpt.value = draf.inputTempatLahir;
       if (draf.inputTglLahir && inputTglLahir) {
         inputTglLahir.value = draf.inputTglLahir;
+        // Listener perhitungan umur & kunci USIA terpasang di event 'input' (app-transaksi.js
+        // baris ~8), bukan 'change' -- harus di-dispatch juga di sini, kalau tidak validasi
+        // umur tidak akan pernah jalan saat draf dipulihkan (umur bisa kosong & lolos submit).
+        inputTglLahir.dispatchEvent(new Event('input'));
         inputTglLahir.dispatchEvent(new Event('change'));
       }
       const elKecDom = document.getElementById('input-kecamatan');
