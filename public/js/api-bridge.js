@@ -33,7 +33,7 @@ function _getSessionToken() {
  * Mengeliminasi hop Vercel proxy → latensi turun ~100-500ms per request.
  * _secret tidak pernah ada di browser.
  */
-async function _fetchEdgeDirect(payload, sessionToken) {
+async function _fetchEdgeDirect(payload, sessionToken, signal) {
   return fetch(_SUPABASE_EDGE_URL, {
     method: 'POST',
     headers: {
@@ -43,6 +43,7 @@ async function _fetchEdgeDirect(payload, sessionToken) {
       'x-session-token': sessionToken,
     },
     body: JSON.stringify(payload),
+    signal,
   });
 }
 
@@ -51,12 +52,67 @@ async function _fetchEdgeDirect(payload, sessionToken) {
  * belum tersedia (mis. saat login), atau untuk aksi yang memerlukan _secret di body
  * (mis. loginPengguna, pulihkanSesi yang tidak bisa diautentikasi via session token).
  */
-async function _fetchViaProxy(payload) {
+async function _fetchViaProxy(payload, signal) {
   return fetch('/api/gas', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal,
   });
+}
+
+// Batas waktu tunggu 1 percobaan fetch aksi (bukan upload byte -- itu punya timeout XHR sendiri
+// di app-transaksi.js). Tanpa ini, koneksi yang stall total (bukan error, cuma menggantung) bikin
+// fetchPromise TIDAK PERNAH resolve/reject -- successHandler/failureHandler tidak pernah dipanggil
+// dan UI (tombol submit, spinner, dsb.) macet permanen sampai user reload manual.
+const _TIMEOUT_AKSI_MS = 25000;
+
+/** True hanya utk error level-jaringan (offline/DNS/stall) yang AMAN diulang tanpa efek samping. */
+function _apakahErrorLayakRetry(err) {
+  if (!err) return false;
+  if (err.name === 'AbortError') return true; // timeout _TIMEOUT_AKSI_MS kita sendiri
+  if (err instanceof TypeError) return true; // fetch gagal total: offline, DNS, CORS, koneksi ditolak
+  return false;
+}
+
+/**
+ * Bungkus 1 pemanggilan fetch dengan AbortController (timeout) + retry.
+ *
+ * PENTING soal retry pada aksi MUTASI (bolehRetry=false): request yang sudah sempat sampai &
+ * diproses server tapi RESPONSNYA hilang di jalan (mis. koneksi putus pas nunggu balasan) akan
+ * terlihat identik dengan request yang gagal terkirim sama sekali -- dari sisi browser sama2
+ * timeout/network error. Mengulang otomatis dalam kondisi begini berisiko menulis data 2x (mis.
+ * simpanDataKeSheet bikin baris penerima duplikat). Karena itu retry OTOMATIS hanya dinyalakan
+ * utk aksi yang terdaftar eksplisit di AKSI_BACA_AMAN_DIRETRY (whitelist baca-murni) -- utk aksi
+ * lain (termasuk mutasi), cukup pastikan tidak menggantung selamanya (timeout) dan biarkan user
+ * yang memutuskan submit ulang stlh cek data.
+ */
+async function _fetchAksiDenganTimeout(pembuatFetch, bolehRetry) {
+  const maxPercobaan = bolehRetry ? 3 : 1;
+  let errorTerakhir = null;
+
+  for (let percobaan = 0; percobaan < maxPercobaan; percobaan++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), _TIMEOUT_AKSI_MS);
+    try {
+      const res = await pembuatFetch(controller.signal);
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      errorTerakhir = err;
+      if (!_apakahErrorLayakRetry(err) || percobaan === maxPercobaan - 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 700 * (percobaan + 1)));
+    }
+  }
+
+  if (_apakahErrorLayakRetry(errorTerakhir)) {
+    const pesan = bolehRetry
+      ? 'Koneksi ke server terputus atau lambat setelah beberapa kali percobaan. Periksa koneksi internet Anda lalu coba lagi.'
+      : 'Koneksi terputus saat mengirim data. Jika ini aksi simpan/edit, periksa dulu apakah datanya sudah tersimpan sebelum mencoba lagi (hindari kirim ulang agar tidak dobel).';
+    throw new Error(pesan);
+  }
+  throw errorTerakhir;
 }
 
 /**
@@ -198,6 +254,30 @@ const MUTATION_INVALIDATIONS = {
   simpanReferensiSkWalikota: ['tools_referensi_sk'],
   simpanSkLayanan: ['tools_sk_layanan'],
 };
+
+// Daftar PUTIH (whitelist) aksi baca murni yang aman diulang otomatis kalau koneksi timeout/putus
+// -- lihat _fetchAksiDenganTimeout(). SENGAJA berupa whitelist eksplisit, BUKAN "semua aksi yang
+// tidak terdaftar di MUTATION_INVALIDATIONS": daftar mutasi di atas tidak lengkap (mis.
+// tambahUserBaru, hapusUser, ubahDataUserOlehAdmin, eksporDataKeSpreadsheet, buatTokenSSORetur,
+// mintaUrlUploadBerkas* juga menulis data tapi tidak terdaftar di sana karena tidak ikut skema
+// invalidasi cache SWR) -- pakai itu sbg sinyal retry-aman akan salah dan berisiko menulis data 2x
+// pada aksi yang lolos. Isi whitelist ini WAJIB dicek dulu (grep implementasinya di
+// supabase/functions/api/domains/*.ts) untuk memastikan benar-benar tanpa insert/update/delete
+// sebelum ditambah.
+const AKSI_BACA_AMAN_DIRETRY = new Set([
+  ...Object.keys(SWR_CONFIG),
+  'cekNikRealtime',
+  'cekRekeningRealtime',
+  'cekTempatTugasGandaRealtime',
+  'cekKuotaRealtime',
+  'cekKuotaTersedia',
+  'validasiDataBaru',
+  'pulihkanSesi',
+  'ambilDetailBatchPembayaran',
+  'getDaftarBerkasTidakLengkapUntukWA',
+  'ambilDaftarAkunLengkap',
+  'ping',
+]);
 
 // SWR Cache Manager
 
@@ -479,10 +559,17 @@ class GoogleScriptRunProxy {
             const pakaiDirect = sessionToken && !_PROXY_ONLY_ACTIONS.has(action);
 
             const fetchFn = pakaiDirect
-              ? () => _fetchEdgeDirect(payload, sessionToken)
-              : () => _fetchViaProxy(payload);
+              ? (signal) => _fetchEdgeDirect(payload, sessionToken, signal)
+              : (signal) => _fetchViaProxy(payload, signal);
 
-            fetchPromise = fetchFn()
+            // Hanya aksi baca murni yang terdaftar eksplisit di AKSI_BACA_AMAN_DIRETRY yang
+            // diulang otomatis kalau koneksi timeout/putus. Semua aksi lain (termasuk aksi tulis
+            // yang tidak sempat terdaftar di MUTATION_INVALIDATIONS) default TIDAK diulang --
+            // lihat komentar panjang di _fetchAksiDenganTimeout kenapa retry sembarangan berisiko
+            // dobel-tulis.
+            const bolehRetryOtomatis = AKSI_BACA_AMAN_DIRETRY.has(action);
+
+            fetchPromise = _fetchAksiDenganTimeout(fetchFn, bolehRetryOtomatis)
               .then(async (res) => {
                 const contentType = res.headers.get('content-type') || '';
                 if (!res.ok) {
