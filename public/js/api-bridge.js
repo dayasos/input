@@ -34,23 +34,27 @@ function _getSessionToken() {
  * _secret tidak pernah ada di browser.
  */
 async function _fetchEdgeDirect(payload, sessionToken, signal) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'apikey': _SUPABASE_ANON_KEY,
+    'Authorization': 'Bearer ' + _SUPABASE_ANON_KEY,
+  };
+  // sessionToken sengaja bisa kosong utk aksi publik spt loginPengguna (belum ada sesi saat
+  // dipanggil) -- lihat _AKSI_PUBLIK_LANGSUNG & gerbang "Mode 3" di index.ts. Header dilewati
+  // sama sekali drpd dikirim string "undefined" yg cuma bikin bingung log server.
+  if (sessionToken) headers['x-session-token'] = sessionToken;
   return fetch(_SUPABASE_EDGE_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': _SUPABASE_ANON_KEY,
-      'Authorization': 'Bearer ' + _SUPABASE_ANON_KEY,
-      'x-session-token': sessionToken,
-    },
+    headers,
     body: JSON.stringify(payload),
     signal,
   });
 }
 
 /**
- * Fetch via Vercel proxy (/api/gas) — dipakai sebagai fallback jika session token
- * belum tersedia (mis. saat login), atau untuk aksi yang memerlukan _secret di body
- * (mis. loginPengguna, pulihkanSesi yang tidak bisa diautentikasi via session token).
+ * Fetch via Vercel proxy (/api/gas) — dipakai sebagai fallback utk aksi yang tetap memerlukan
+ * _secret di body (mis. pulihkanSesi, logoutPengguna yang tidak bisa diautentikasi via session
+ * token, atau cron internal).
  */
 async function _fetchViaProxy(payload, signal) {
   return fetch('/api/gas', {
@@ -157,9 +161,15 @@ function _tanganiSesiHabis() {
   }
 }
 
+// Aksi yang boleh langsung ke Edge Function TANPA session token (belum ada sesi saat dipanggil).
+// Proteksi asli ada di aplikasi sendiri (hash password + rate-limit brute-force), bukan di
+// transport -- lihat komentar "Mode 3" di supabase/functions/api/index.ts.
+const _AKSI_PUBLIK_LANGSUNG = new Set([
+  'loginPengguna',
+]);
+
 // Aksi-aksi yang SELALU lewat Vercel proxy (butuh _secret, tidak bisa via session token)
 const _PROXY_ONLY_ACTIONS = new Set([
-  'loginPengguna',
   'pulihkanSesi',
   'logoutPengguna',
   'ping',
@@ -553,10 +563,12 @@ class GoogleScriptRunProxy {
             const payload = { action, args };
 
             // Pilih strategi fetch: langsung ke Edge Function atau via Vercel proxy.
-            // Aksi yang butuh _secret (login, pulihkan sesi) tetap via proxy.
-            // Semua aksi lain pakai Edge Function langsung jika session token tersedia.
+            // Aksi yang butuh _secret (pulihkan sesi, logout) tetap via proxy. Aksi publik
+            // (loginPengguna) langsung ke Edge Function walau BELUM ada session token. Aksi
+            // lain pakai Edge Function langsung jika session token tersedia.
             const sessionToken = _getSessionToken();
-            const pakaiDirect = sessionToken && !_PROXY_ONLY_ACTIONS.has(action);
+            const pakaiDirect = !_PROXY_ONLY_ACTIONS.has(action) &&
+              (Boolean(sessionToken) || _AKSI_PUBLIK_LANGSUNG.has(action));
 
             const fetchFn = pakaiDirect
               ? (signal) => _fetchEdgeDirect(payload, sessionToken, signal)

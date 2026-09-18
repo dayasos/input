@@ -248,7 +248,19 @@ Deno.serve(async (req: Request) => {
     isValidSessionHeader = Boolean(sesiDariHeader && sesiDariHeader.role);
   }
 
-  if (!isValidSecret && !isValidSessionHeader) {
+  // ── Mode 3: Aksi publik tanpa gerbang (2026-09-18) ─────────────────────────
+  // loginPengguna belum punya _secret maupun sesi saat dipanggil (ayam-telur: sesi baru ADA
+  // setelah login berhasil) -- selama ini dipaksa lewat proxy Vercel supaya bisa bawa _secret,
+  // menambah 1 hop (~100-500ms) yg TIDAK memberi proteksi user-facing nyata: _secret cuma
+  // proteksi internal Vercel<->Supabase, bukan rahasia yg mencegah orang mencoba login (siapa
+  // saja sudah bisa memanggil loginPengguna via /api/gas hari ini tanpa kredensial khusus).
+  // Proteksi asli login ada di APLIKASI: hash password (auth.ts) + rate-limit brute-force per
+  // username (bruteforce.ts, 5x gagal/15 menit) -- keduanya tetap jalan penuh lewat jalur ini.
+  // Sengaja HANYA loginPengguna yg dibuka di sini (bukan pulihkanSesi/logoutPengguna) supaya
+  // permukaan perubahan tetap kecil & mudah diaudit.
+  const isAksiPublikTanpaGerbang = action === "loginPengguna";
+
+  if (!isValidSecret && !isValidSessionHeader && !isAksiPublikTanpaGerbang) {
     return json({
       error: "Akses Ditolak: Kredensial API tidak sah",
       sukses: false,
