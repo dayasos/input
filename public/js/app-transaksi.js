@@ -557,12 +557,29 @@ function base64KeBlob(dataBase64, mimeType) {
   return new Blob([new Uint8Array(byteNumbers)], { type: mimeType || 'application/octet-stream' });
 }
 
+// Ukuran byte EXACT dari panjang string base64 -- WAJIB persis sama dengan ukuran blob asli yang
+// nanti benar-benar di-PUT (dipakai sbg X-Upload-Content-Length saat mulai sesi resumable Drive).
+// Rumus perkiraan lama (Math.round(length * 0.75)) meleset 1-2 byte tiap kali base64-nya punya
+// padding '=' (yaitu setiap kali ukuran asli TIDAK habis dibagi 3 -- mayoritas file dunia nyata) --
+// selisih sekecil itu membuat Drive mengira PUT ini BUKAN chunk terakhir (byte diterima < byte
+// yang dijanjikan), lalu menolak dgn 400 "jumlah byte harus kelipatan 262144" karena chunk
+// "non-final" itu memang wajib kelipatan 256KB, padahal kita selalu kirim seluruh file sekali PUT.
+function ukuranByteDariBase64(b64) {
+  if (!b64) return undefined;
+  const panjang = b64.length;
+  if (panjang === 0) return 0;
+  let padding = 0;
+  if (b64.charAt(panjang - 1) === '=') padding++;
+  if (b64.charAt(panjang - 2) === '=') padding++;
+  return Math.floor(panjang / 4) * 3 - padding;
+}
+
 function metaSatuBerkas(item) {
   return {
     namaFile: item.namaFile,
     mimeType: item.mimeType,
     label: item.label,
-    ukuranByte: item.dataBase64 ? Math.round(item.dataBase64.length * 0.75) : undefined
+    ukuranByte: ukuranByteDariBase64(item.dataBase64)
   };
 }
 
@@ -658,6 +675,7 @@ function cekStatusSesiUpload(url) {
     }
     xhr.timeout = 15000;
     xhr.setRequestHeader('Content-Range', 'bytes */*');
+    xhr.setRequestHeader('x-session-token', dataPengguna.token);
     xhr.onload = function () {
       if (xhr.status === 200 || xhr.status === 201) {
         try {
@@ -770,6 +788,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       xhr.timeout = 120000; // 2 menit -- generus utk berkas 25MB di koneksi lambat, tapi tetap
       // mencegah PUT menggantung tanpa batas kalau koneksi stall total (memicu retry di pemanggil).
       xhr.setRequestHeader('Content-Type', mimeType || 'application/octet-stream');
+      xhr.setRequestHeader('x-session-token', dataPengguna.token);
       xhr.upload.onprogress = function (e) {
         if (e.lengthComputable && typeof onProgress === 'function') onProgress(e.loaded);
       };
@@ -2951,7 +2970,7 @@ function renderDashboardProgres(res, kecFilter) {
     return;
   }
 
-  isi.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">` +
+  isi.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">` +
     res.kartu.map(function (k, i) {
       const selesai = k.memenuhiSyarat + k.tidakMemenuhiSyarat;
       const persen = k.total > 0 ? Math.round((selesai / k.total) * 100) : 0;

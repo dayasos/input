@@ -8,6 +8,7 @@ import {
   tautanLihatDrive,
 } from "../_shared/driveApi.ts";
 import { ambilAccessTokenGoogleDrive } from "../../_shared/googleAuth.ts";
+import { bangunUrlProxyUpload } from "../_shared/driveProxy.ts";
 
 const MIME_BERKAS_DIIZINKAN = [
   "image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif",
@@ -167,8 +168,11 @@ export async function konfirmasiUploadBerkas(
 //   1. mintaUrlUploadBerkasDrive() -- resolusi/buat folder SEKALI untuk seluruh submission (lihat
 //      _shared/driveApi.ts resolveFolderPendaftar, replikasi persis dapatkanFolderPendaftar_ di
 //      kode_gas.js baris 352-365), lalu minta sesi resumable per berkas (paralel). Browser lalu
-//      PUT byte MENTAH (bukan base64) langsung ke session URI masing-masing -- tidak lewat
-//      Vercel/Edge Function sama sekali.
+//      PUT byte MENTAH (bukan base64) ke URL PROXY Edge Function ini sendiri (BUKAN langsung ke
+//      googleapis.com lagi -- desain awal 2026-09-18 melakukan itu dan TERBUKTI diblokir CORS
+//      100% oleh browser, googleapis.com/upload/drive/v3 tidak pernah kirim header
+//      Access-Control-Allow-Origin. Diperbaiki hari yang sama: Edge Function proxy byte itu ke
+//      Google server-to-server, lihat _shared/driveProxy.ts).
 //   2. konfirmasiUploadBerkasDrive() -- dipanggil browser setelah semua PUT sukses (browser sudah
 //      punya fileId dari respons PUT), set izin "anyone with link" per file (pengganti
 //      file.setSharing di kode_gas.js baris 377) dan bentuk link tampilan.
@@ -227,9 +231,14 @@ export async function mintaUrlUploadBerkasDrive(
       return { kunci, sesi };
     }));
 
+    // Fungsi Supabase sendiri (bukan Google) yang dikembalikan ke browser -- browser PUT byte ke
+    // SINI (same-origin, CORS sudah kita kontrol sendiri di index.ts), Edge Function baru forward
+    // ke uploadSessionUri Google asli server-to-server. Lihat _shared/driveProxy.ts: PUT langsung
+    // browser -> googleapis.com TERBUKTI diblokir CORS 100% (dikonfirmasi tes browser nyata).
+    const basisFungsi = (Deno.env.get("SUPABASE_URL") || "").replace(/\/+$/, "") + "/functions/v1/api";
     const daftarSesi: Record<string, { uploadSessionUri: string }> = {};
     for (const { kunci, sesi } of hasilTiapBerkas) {
-      daftarSesi[kunci] = { uploadSessionUri: sesi.uploadSessionUri };
+      daftarSesi[kunci] = { uploadSessionUri: bangunUrlProxyUpload(basisFungsi, sesi.uploadSessionUri) };
     }
 
     return { sukses: true, folderId, daftarSesi };

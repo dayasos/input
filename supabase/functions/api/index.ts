@@ -75,6 +75,7 @@ import {
   ubahAkunSendiri,
   ubahProfilUser,
 } from "./domains/akun.ts";
+import { tanganiProxyUploadDrive } from "./_shared/driveProxy.ts";
 
 // deno-lint-ignore no-explicit-any
 type Handler = (...args: any[]) => unknown | Promise<unknown>;
@@ -151,8 +152,8 @@ const ALLOWED: Record<string, Handler> = {
 const CORS_HEADERS: Record<string, string> = {
   "content-type": "application/json",
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "POST, OPTIONS, GET",
-  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-session-token",
+  "access-control-allow-methods": "POST, PUT, OPTIONS, GET",
+  "access-control-allow-headers": "authorization, x-client-info, apikey, content-type, x-session-token, content-range",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -185,6 +186,15 @@ Deno.serve(async (req: Request) => {
   // Tangani CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
+  }
+
+  // Proxy PUT byte upload Drive (browser -> Edge Function -> Google, server-to-server, tidak
+  // kena CORS) -- lihat komentar panjang di _shared/driveProxy.ts kenapa ini WAJIB ada,
+  // menggantikan pola lama PUT langsung browser -> googleapis.com yang diblokir CORS.
+  const url = new URL(req.url);
+  if (url.pathname.endsWith("/drive-proxy-upload")) {
+    if (req.method === "PUT") return tanganiProxyUploadDrive(req, url);
+    return json({ sukses: false, pesan: "Method tidak didukung untuk endpoint ini." }, 405);
   }
 
   if (req.method !== "POST") {
