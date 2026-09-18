@@ -19,9 +19,9 @@ function bangunProgresKuotaHtml(grup) {
   grup.forEach(function (g) {
     const wh = warnaProgresKuota(g.persenLayanan);
     html += `<div class="mb-6">
-      <div class="flex items-center justify-between bg-slate-800 text-white px-4 py-2.5 rounded-t-lg">
-        <span class="text-sm font-bold tracking-wide">${esc(g.layanan)}</span>
-        <span class="text-xs font-bold px-2.5 py-1 rounded-full" style="background:${wh.bar};color:#fff;">
+      <div class="flex items-center justify-between bg-slate-800 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-t-lg gap-2">
+        <span class="text-xs sm:text-sm font-bold tracking-wide">${esc(g.layanan)}</span>
+        <span class="text-[11px] sm:text-xs font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full whitespace-nowrap" style="background:${wh.bar};color:#fff;">
           ${g.persenLayanan}% &nbsp;(${g.totalInput}/${g.totalKuota})
         </span>
       </div>
@@ -29,13 +29,13 @@ function bangunProgresKuotaHtml(grup) {
     g.baris.forEach(function (b) {
       const w = warnaProgresKuota(b.persen);
       const kecPendek = b.kecamatan.replace('MEDAN ', '');
-      html += `<div class="flex items-center gap-3 px-4 py-2.5">
-        <span class="w-32 shrink-0 text-xs font-semibold text-slate-700">${esc(kecPendek)}</span>
+      html += `<div class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-2.5">
+        <span class="w-20 sm:w-32 shrink-0 text-xs font-semibold text-slate-700 truncate" title="${esc(kecPendek)}">${esc(kecPendek)}</span>
         <div class="flex-1 h-4 rounded-full overflow-hidden" style="background:${w.bg};border:1px solid ${w.bar}33;">
           <div class="h-full rounded-full" style="width:${Math.min(b.persen, 100)}%;background:${w.bar};"></div>
         </div>
-        <span class="w-14 shrink-0 text-right text-xs font-bold" style="color:${w.text};">${b.persen}%</span>
-        <span class="w-16 shrink-0 text-right text-[11px] text-slate-500">${b.input}/${b.kuota}</span>
+        <span class="w-11 sm:w-14 shrink-0 text-right text-xs font-bold" style="color:${w.text};">${b.persen}%</span>
+        <span class="w-14 sm:w-16 shrink-0 text-right text-[10px] sm:text-[11px] text-slate-500">${b.input}/${b.kuota}</span>
       </div>`;
     });
     html += `</div></div>`;
@@ -2338,7 +2338,10 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
             updateStatusBadge('offline');
             jadwalkanReconnect();
           } else {
-            updateStatusBadge('connecting');
+            // Pada saat inisialisasi awal, jangan membuat badge berkedip ke amber jika koneksi belum error
+            if (percobaanReconnect > 0) {
+              updateStatusBadge('connecting');
+            }
           }
         });
 

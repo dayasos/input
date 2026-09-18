@@ -33,6 +33,23 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
     const role = (sesi.role || "").toString().trim().toUpperCase();
     const kecUser = (sesi.kecamatan || "").toString().trim().toUpperCase();
     const kecFilterInput = (kecamatanFilter || "").toString().trim().toUpperCase();
+    const kelurahanTerkunci = kelurahanTerkunciDari(sesi);
+    const subFilterGsm = subFilterGsmDari(sesi);
+
+    // Filter SQL dinamis berdasarkan hak akses user untuk memangkas latensi query & pemakaian memori
+    let filterClause = sql``;
+    if (role === "KECAMATAN" && kecUser) {
+      filterClause = sql`and upper(kecamatan) = ${kecUser} ${kelurahanTerkunci ? sql`and upper(kelurahan) = ${kelurahanTerkunci}` : sql``}`;
+    } else if (role === "UTAMA" && kecFilterInput) {
+      filterClause = sql`and upper(kecamatan) = ${kecFilterInput}`;
+    } else if (role !== "UTAMA" && role !== "KECAMATAN") {
+      const layKemenag = (sesi.role || "").toString().trim().toUpperCase();
+      if (kecUser) {
+        filterClause = sql`and upper(layanan) = ${layKemenag} and upper(kecamatan) = ${kecUser}`;
+      } else {
+        filterClause = sql`and upper(layanan) = ${layKemenag}`;
+      }
+    }
 
     // 4 query di bawah tidak saling bergantung -> jalankan paralel (Promise.all), bukan berurutan
     // (ditemukan saat code review — hasil akhir identik, cuma latensi dashboard ~4x lebih cepat).
@@ -43,7 +60,7 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
       sql`
         select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
         from penerima
-        where tahun = ${TAHUN_AKTIF}
+        where tahun = ${TAHUN_AKTIF} ${filterClause}
       `,
     ]);
 
@@ -74,13 +91,6 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
 
     // Kemenag TANPA kecamatan tetap -> pecah jadi 21 kartu (1 per kecamatan) untuk layanan itu.
     const modeKecamatanPisah = role !== "UTAMA" && role !== "KECAMATAN" && !kecUser;
-
-    if (barisSnapshot.length === 0) {
-      return { sukses: true, kartu: [], bisaFilterKecamatan: role === "UTAMA" };
-    }
-
-    const kelurahanTerkunci = kelurahanTerkunciDari(sesi);
-    const subFilterGsm = subFilterGsmDari(sesi);
 
     const rekap: Record<string, KartuDashboard> = {};
     const kunciKartu = (lay: string, kec: string) => (modeKecamatanPisah ? lay + "||" + kec : lay);

@@ -22,10 +22,10 @@ function perangkatIOS() {
   return false;
 }
 
-function cobaTampilkanBannerInstall() {
+function cobaTampilkanTombolHeader() {
   if (sudahTerinstalSebagaiPwa()) {
-    const banner = document.getElementById('banner-install-pwa');
-    if (banner) banner.classList.add('hidden');
+    try { localStorage.removeItem('djpm_pwa_capable'); } catch (e) { }
+    document.documentElement.classList.remove('pwa-installable');
     const btnHeader = document.getElementById('btn-header-install-pwa');
     if (btnHeader) {
       btnHeader.classList.add('hidden');
@@ -34,11 +34,23 @@ function cobaTampilkanBannerInstall() {
     return;
   }
 
-  // Tampilkan tombol pasang di header jika browser kompatibel
-  const btnHeader = document.getElementById('btn-header-install-pwa');
-  if (btnHeader && (promptInstalTersimpan || perangkatIOS())) {
-    btnHeader.classList.remove('hidden');
-    btnHeader.classList.add('flex');
+  // Tampilkan tombol pasang di header jika browser kompatibel & simpan kapabilitas
+  if (promptInstalTersimpan || perangkatIOS()) {
+    try { localStorage.setItem('djpm_pwa_capable', '1'); } catch (e) { }
+    document.documentElement.classList.add('pwa-installable');
+    const btnHeader = document.getElementById('btn-header-install-pwa');
+    if (btnHeader) {
+      btnHeader.classList.remove('hidden');
+      btnHeader.classList.add('flex');
+    }
+  }
+}
+
+function cobaTampilkanFloatingBanner() {
+  if (sudahTerinstalSebagaiPwa()) {
+    const banner = document.getElementById('banner-install-pwa');
+    if (banner) banner.classList.add('hidden');
+    return;
   }
 
   let sudahDitutup = false;
@@ -74,6 +86,11 @@ function cobaTampilkanBannerInstall() {
   }
 }
 
+function cobaTampilkanBannerInstall() {
+  cobaTampilkanTombolHeader();
+  cobaTampilkanFloatingBanner();
+}
+
 window.addEventListener('beforeinstallprompt', function (e) {
   e.preventDefault();
   promptInstalTersimpan = e;
@@ -82,7 +99,11 @@ window.addEventListener('beforeinstallprompt', function (e) {
 });
 
 window.addEventListener('appinstalled', function () {
-  try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
+  try {
+    sessionStorage.setItem('djpm_install_prompt_ditutup', '1');
+    localStorage.removeItem('djpm_pwa_capable');
+  } catch (e) { }
+  document.documentElement.classList.remove('pwa-installable');
   window.tutupBannerInstall();
   const btnHeader = document.getElementById('btn-header-install-pwa');
   if (btnHeader) {
@@ -157,10 +178,11 @@ window.togglePetunjukIos = function (buka) {
 };
 
 // Inisialisasi pengecekan PWA saat halaman siap
+cobaTampilkanTombolHeader();
 if (perangkatIOS() && !sudahTerinstalSebagaiPwa()) {
-  setTimeout(cobaTampilkanBannerInstall, 1200);
+  setTimeout(cobaTampilkanFloatingBanner, 1200);
 } else if (promptInstalTersimpan && !sudahTerinstalSebagaiPwa()) {
-  setTimeout(cobaTampilkanBannerInstall, 600);
+  setTimeout(cobaTampilkanFloatingBanner, 600);
 }
 
 // Registrasi Service Worker secara aman dan terjamin
@@ -1071,7 +1093,7 @@ tabTools.addEventListener('click', () => {
     google.script.run
       .withSuccessHandler(function (json) {
         try {
-          var res = JSON.parse(json);
+          var res = typeof json === 'string' ? JSON.parse(json) : json;
           if (!res.sukses) {
             tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-red-400">${esc(res.pesan || 'Gagal memuat.')}</td></tr>`;
             return;
@@ -1337,16 +1359,20 @@ function sembunyikanPeringatan(idElemen) {
 
 let debounceNikTimer = null;
 let nikTerakhirDicek = '';
+let waktuNikTerakhirDicek = 0;
 function triggerCekNik(force) {
   const nik = inputNik.value.trim();
   if (nik.length !== 16) {
     nikTerakhirDicek = '';
+    waktuNikTerakhirDicek = 0;
     sembunyikanPeringatan('peringatan-nik');
     bukaKunciForm('NIK');
     return;
   }
-  if (!force && nik === nikTerakhirDicek) return;
+  const baruSajaDicek = nik === nikTerakhirDicek && (Date.now() - waktuNikTerakhirDicek) < 30000;
+  if (baruSajaDicek) return;
   nikTerakhirDicek = nik;
+  waktuNikTerakhirDicek = Date.now();
 
   sembunyikanPeringatan('peringatan-nik');
   bukaKunciForm('NIK');
@@ -1375,6 +1401,7 @@ inputNik.addEventListener('input', function (e) {
     }, 400);
   } else {
     nikTerakhirDicek = '';
+    waktuNikTerakhirDicek = 0;
     sembunyikanPeringatan('peringatan-nik');
     bukaKunciForm('NIK');
   }
@@ -1382,16 +1409,20 @@ inputNik.addEventListener('input', function (e) {
 
 let debounceRekTimer = null;
 let rekTerakhirDicek = '';
+let waktuRekTerakhirDicek = 0;
 function triggerCekRekening(force) {
   const rek = inputNoRek.value.trim();
   if (rek.length !== 14) {
     rekTerakhirDicek = '';
+    waktuRekTerakhirDicek = 0;
     sembunyikanPeringatan('peringatan-rekening');
     bukaKunciForm('REKENING');
     return;
   }
-  if (!force && rek === rekTerakhirDicek) return;
+  const baruSajaDicek = rek === rekTerakhirDicek && (Date.now() - waktuRekTerakhirDicek) < 30000;
+  if (baruSajaDicek) return;
   rekTerakhirDicek = rek;
+  waktuRekTerakhirDicek = Date.now();
 
   sembunyikanPeringatan('peringatan-rekening');
   bukaKunciForm('REKENING');

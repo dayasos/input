@@ -503,33 +503,18 @@ function kompresGambar(file, maxDim, kualitas) {
   });
 }
 
-// Helper Upload Berkas
+// Helper Upload Berkas (Direct Binary Blob - bebas overhead Base64 & memory spike)
 async function prosesFileTerkompresi(file) {
   if (!file) return null;
-  try {
-    file = await kompresGambar(file);
-  } catch (eKompres) { }
-
+  try { file = await kompresGambar(file); } catch (_eKompres) { }
   const MAKS_BYTE = 25 * 1024 * 1024; // 25 MB per berkas
   if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
-
-  const base64Data = await new Promise(function (resolve, reject) {
-    const reader = new FileReader();
-    reader.onload = function () {
-      const res = reader.result;
-      resolve(res.substring(res.indexOf(',') + 1));
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', dataBase64: base64Data };
+  return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', file: file, ukuranByte: file.size };
 }
 
 async function bacaFileTerkompresi(inputEl) {
   if (!inputEl || !inputEl.files || inputEl.files.length === 0) return null;
   return prosesFileTerkompresi(inputEl.files[0]);
-
 }
 
 function panggilAksiPromise(namaAksi) {
@@ -546,40 +531,14 @@ function panggilAksiPromise(namaAksi) {
 // sekali -- yang lewat backend cuma metadata (nama/tipe/ukuran file) buat minta sesi upload, dan
 // konfirmasi izin-akses setelah selesai. Storage tujuan TETAP Google Drive.
 
-// Base64 -> Blob biner asli. dataBase64 sudah terlanjur dihasilkan lebih dulu di
-// kumpulkanDataForm()/prosesFileTerkompresi() (dipakai juga utk validasi ukuran & preview),
-// jadi konversi baliknya di sini murni operasi lokal (tidak ada network) sebelum PUT ke Drive --
-// hasil akhirnya sama seperti mengirim File asli, hanya lompat 1 langkah in-memory ekstra.
-function base64KeBlob(dataBase64, mimeType) {
-  const byteChars = atob(dataBase64);
-  const byteNumbers = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
-  return new Blob([new Uint8Array(byteNumbers)], { type: mimeType || 'application/octet-stream' });
-}
-
-// Ukuran byte EXACT dari panjang string base64 -- WAJIB persis sama dengan ukuran blob asli yang
-// nanti benar-benar di-PUT (dipakai sbg X-Upload-Content-Length saat mulai sesi resumable Drive).
-// Rumus perkiraan lama (Math.round(length * 0.75)) meleset 1-2 byte tiap kali base64-nya punya
-// padding '=' (yaitu setiap kali ukuran asli TIDAK habis dibagi 3 -- mayoritas file dunia nyata) --
-// selisih sekecil itu membuat Drive mengira PUT ini BUKAN chunk terakhir (byte diterima < byte
-// yang dijanjikan), lalu menolak dgn 400 "jumlah byte harus kelipatan 262144" karena chunk
-// "non-final" itu memang wajib kelipatan 256KB, padahal kita selalu kirim seluruh file sekali PUT.
-function ukuranByteDariBase64(b64) {
-  if (!b64) return undefined;
-  const panjang = b64.length;
-  if (panjang === 0) return 0;
-  let padding = 0;
-  if (b64.charAt(panjang - 1) === '=') padding++;
-  if (b64.charAt(panjang - 2) === '=') padding++;
-  return Math.floor(panjang / 4) * 3 - padding;
-}
-
+// Metadata satu berkas untuk persiapan sesi resumable Drive
 function metaSatuBerkas(item) {
+  const byteSize = item.ukuranByte || (item.file ? item.file.size : undefined);
   return {
     namaFile: item.namaFile,
     mimeType: item.mimeType,
     label: item.label,
-    ukuranByte: ukuranByteDariBase64(item.dataBase64)
+    ukuranByte: byteSize
   };
 }
 
@@ -625,17 +584,15 @@ function kunciCacheUploadDrive(nik, layanan, k) {
   return N + '::' + L + '::' + k;
 }
 
-function ambilCacheUploadSukses(nik, layanan, k, dataBase64) {
+function ambilCacheUploadSukses(nik, layanan, k, item) {
   const entri = cacheUploadSuksesDrive[kunciCacheUploadDrive(nik, layanan, k)];
-  if (!entri) return null;
-  if (Date.now() - entri.waktu > EXPIRY_CACHE_UPLOAD_MS) return null;
-  if (entri.dataBase64 !== dataBase64) return null;
+  if (!entri || Date.now() - entri.waktu > EXPIRY_CACHE_UPLOAD_MS) return null;
+  const sig = item ? `${item.namaFile}:${item.ukuranByte}` : '';
+  if (entri.sig !== sig) return null;
   return entri;
 }
 
-// Buang entri kedaluwarsa setiap kali ada entri baru masuk -- cache ini module-level (bertahan
-// selama tab tidak di-reload), tanpa ini bisa numpuk terus kalau 1 admin input banyak
-// pendaftar berbeda berturut-turut dalam sesi kerja yang panjang.
+// Buang entri kedaluwarsa setiap kali ada entri baru masuk
 function pruneCacheUploadKedaluwarsa() {
   const now = Date.now();
   Object.keys(cacheUploadSuksesDrive).forEach(function (kk) {
@@ -643,9 +600,10 @@ function pruneCacheUploadKedaluwarsa() {
   });
 }
 
-function simpanCacheUploadSukses(nik, layanan, k, dataBase64, fileId, folderId) {
+function simpanCacheUploadSukses(nik, layanan, k, item, fileId, folderId) {
   pruneCacheUploadKedaluwarsa();
-  cacheUploadSuksesDrive[kunciCacheUploadDrive(nik, layanan, k)] = { dataBase64: dataBase64, fileId: fileId, folderId: folderId, waktu: Date.now() };
+  const sig = item ? `${item.namaFile}:${item.ukuranByte}` : '';
+  cacheUploadSuksesDrive[kunciCacheUploadDrive(nik, layanan, k)] = { sig: sig, fileId: fileId, folderId: folderId, waktu: Date.now() };
 }
 
 // Dipanggil setelah submit/edit BENAR-BENAR tuntas tersimpan -- bersihkan cache khusus
@@ -675,7 +633,9 @@ function cekStatusSesiUpload(url) {
     }
     xhr.timeout = 15000;
     xhr.setRequestHeader('Content-Range', 'bytes */*');
-    xhr.setRequestHeader('x-session-token', dataPengguna.token);
+    if (typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token) {
+      xhr.setRequestHeader('x-session-token', dataPengguna.token);
+    }
     xhr.onload = function () {
       if (xhr.status === 200 || xhr.status === 201) {
         try {
@@ -699,12 +659,10 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const nikKonteks = konteks && konteks.nik;
   const layananKonteks = konteks && konteks.layanan;
 
-  // Pisahkan berkas yg SUDAH sukses terunggah sebelumnya (isi dataBase64 belum berubah) dari yg
-  // benar-benar perlu diunggah -- lihat komentar cacheUploadSuksesDrive di atas.
   const hasilDariCache = [];
   const kunciList = [];
   kunciListSemua.forEach(function (k) {
-    const cached = ambilCacheUploadSukses(nikKonteks, layananKonteks, k, berkasMap[k].dataBase64);
+    const cached = ambilCacheUploadSukses(nikKonteks, layananKonteks, k, berkasMap[k]);
     if (cached) {
       hasilDariCache.push({ k: k, fileId: cached.fileId, gagal: null, folderIdCache: cached.folderId });
     } else {
@@ -820,7 +778,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       bytesTerunggahPerBerkas[k] = metaMap[k].ukuranByte || bytesTerunggahPerBerkas[k];
       berkasSelesai++;
       updateProgressUI(labelBerkas, false);
-      simpanCacheUploadSukses(nikKonteks, layananKonteks, k, item.dataBase64, fileId, folderId);
+      simpanCacheUploadSukses(nikKonteks, layananKonteks, k, item, fileId, folderId);
       return { k: k, fileId: fileId, gagal: null };
     }
 
@@ -832,10 +790,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
         if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}... ⏱️`;
         await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
 
-        // SEBELUM minta sesi upload BARU, cek dulu status sesi sebelumnya -- kalau PUT byte
-        // percobaan lalu SEBENARNYA sudah sukses di sisi Drive (cuma respons yg gagal balik ke
-        // browser), pakai fileId itu langsung. Kalau langsung minta sesi baru tanpa cek ini, file
-        // dari attempt sebelumnya jadi yatim & DOBEL dgn file dari attempt ini.
         if (sesiUriAktif) {
           const fileIdSudahAda = await cekStatusSesiUpload(sesiUriAktif);
           if (fileIdSudahAda) return tandaiSelesai(fileIdSudahAda);
@@ -857,8 +811,7 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
         }
         sesiUriAktif = uploadSessionUri;
 
-        const blob = base64KeBlob(item.dataBase64, item.mimeType);
-        const dataPut = await putBlobKeDrive(uploadSessionUri, blob, item.mimeType, function (loaded) {
+        const dataPut = await putBlobKeDrive(uploadSessionUri, item.file, item.mimeType, function (loaded) {
           bytesTerunggahPerBerkas[k] = loaded;
           updateProgressUI(labelBerkas, true);
         });
@@ -873,9 +826,10 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     return { k: k, fileId: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
   }
 
-  // Concurrency Pool: Drive API jauh lebih toleran dari kuota eksekusi simultan GAS, aman
-  // dinaikkan ke 4 antrean paralel (dulu dibatasi 2 khusus utk melindungi GAS).
-  const CONCURRENCY_LIMIT = 4;
+  // Concurrency adaptif: 2 untuk jaringan seluler lemah/save-data agar bebas bufferbloat, 4 untuk wifi/kencang
+  const isKoneksiLambat = typeof navigator !== 'undefined' && navigator.connection &&
+    (navigator.connection.saveData || navigator.connection.effectiveType === '2g' || navigator.connection.effectiveType === '3g');
+  const CONCURRENCY_LIMIT = isKoneksiLambat ? 2 : 4;
   const hasilList = [];
   let indexAntrean = 0;
   let adaGagalFatal = false;
@@ -1020,7 +974,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   }
 
   const berkasMentah = dataObjek.__berkas || {};
-  const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].dataBase64; });
+  const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].file; });
 
   if (!adaBerkas) {
     loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
@@ -1033,8 +987,8 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   const berkasUntukUpload = {};
   Object.keys(berkasMentah).forEach(function (k) {
     const item = berkasMentah[k];
-    if (item && item.dataBase64) {
-      berkasUntukUpload[k] = { dataBase64: item.dataBase64, namaFile: item.namaFile, mimeType: item.mimeType, label: label[k] || k };
+    if (item && item.file) {
+      berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, ukuranByte: item.ukuranByte, label: label[k] || k };
     }
   });
 
@@ -1329,7 +1283,7 @@ function inisialisasiMenuLihatData() {
       if (tersimpan) {
         const parsed = JSON.parse(tersimpan);
         if (parsed && Array.isArray(parsed.rows) && parsed.rows.length > 0) {
-          masterDataLihat = parsed.rows;
+          masterDataLihat = urutkanDanIndexDataLihat(parsed.rows);
           waktuMasterDataLihat = parsed.waktu || Date.now();
           const infoTotal = document.getElementById('info-total-penerima');
           if (infoTotal) infoTotal.innerText = "Total Data: " + masterDataLihat.length + " Baris";
@@ -1350,9 +1304,9 @@ function inisialisasiMenuLihatData() {
   google.script.run
     .withSuccessHandler(function (jsonResponse) {
       try {
-        const response = jsonResponse ? JSON.parse(jsonResponse) : null;
+        const response = jsonResponse ? (typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse) : null;
         if (response && response.sukses) {
-          masterDataLihat = response.rows;
+          masterDataLihat = urutkanDanIndexDataLihat(response.rows || []);
           waktuMasterDataLihat = Date.now();
           try {
             sessionStorage.setItem('dana_jasa_lihat_cache', JSON.stringify({ rows: response.rows, waktu: waktuMasterDataLihat }));
@@ -1364,7 +1318,6 @@ function inisialisasiMenuLihatData() {
             return;
           }
           membangunOpsiFilter(masterDataLihat);
-          // halamanSekarang = 1; // DIHAPUS: Agar pengguna tidak kembali ke halaman 1 saat SWR refresh di background
           saringDanTampilkanTabel();
           setupPencarianRealtime();
         } else { tampilkanToast("Gagal memuat data: " + (response ? response.pesan : "Error JSON"), "gagal"); }
@@ -1549,8 +1502,21 @@ function resetSemuaFilter() {
 }
 window.resetSemuaFilter = resetSemuaFilter;
 
+function urutkanDanIndexDataLihat(rows) {
+  if (!Array.isArray(rows)) return [];
+  rows.forEach(function (r) {
+    r._cari = (String(r[1] || '') + ' ' + String(r[2] || '') + ' ' + String(r[15] || '') + ' ' + String(r[8] || '')).toLowerCase();
+  });
+  return rows.sort(function (a, b) {
+    const lay = (a[7] || '').localeCompare(b[7] || '');
+    if (lay !== 0) return lay;
+    const kec = (a[10] || '').localeCompare(b[10] || '');
+    if (kec !== 0) return kec;
+    return (a[11] || '').localeCompare(b[11] || '');
+  });
+}
+
 function saringDanTampilkanTabel() {
-  // Jika sedang menampilkan data tahun historis, alihkan ke renderer historis
   if (window._tahunDipilihGetter && window._tahunAktifGetter &&
     window._tahunDipilihGetter() !== window._tahunAktifGetter() &&
     window._dataHistorisSedang) {
@@ -1558,18 +1524,9 @@ function saringDanTampilkanTabel() {
     return;
   }
 
-  // Pastikan kolom Verifikasi tampil lagi saat berada di tahun aktif (2027)
   const thVerif = document.getElementById('th-verifikasi');
   if (thVerif) thVerif.classList.remove('hidden');
 
-  // Urutkan tampilan: Layanan > Kecamatan > Kelurahan (murni tampilan, tidak mengubah data di sheet)
-  masterDataLihat.sort(function (a, b) {
-    const lay = (a[7] || "").localeCompare(b[7] || "");
-    if (lay !== 0) return lay;
-    const kec = (a[10] || "").localeCompare(b[10] || "");
-    if (kec !== 0) return kec;
-    return (a[11] || "").localeCompare(b[11] || "");
-  });
   const valKec = document.getElementById('filter-kecamatan').value;
   const valKel = document.getElementById('filter-kelurahan').value;
   const valLay = document.getElementById('filter-layanan').value;
@@ -1588,8 +1545,8 @@ function saringDanTampilkanTabel() {
     const sudahLaporIni = !!row[19];
     const lolosVerif = !valVerif
       || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && sudahLaporIni) : statusRowIni === valVerif);
-    const teksGabungan = (row[1] + " " + row[2] + " " + row[15] + " " + row[8]).toLowerCase();
-    const lolosCari = !kataKunci || teksGabungan.includes(kataKunci);
+    const teksCari = row._cari || (String(row[1] || '') + ' ' + String(row[2] || '') + ' ' + String(row[15] || '') + ' ' + String(row[8] || '')).toLowerCase();
+    const lolosCari = !kataKunci || teksCari.includes(kataKunci);
     if (lolosKec && lolosKel && lolosLay && lolosCari && lolosVerif) dataLolosSaring.push(row);
   }
   const totalDataLolos = dataLolosSaring.length;
@@ -2468,9 +2425,10 @@ function halamanBerikutnya() {
           const processed = await prosesFileTerkompresi(item.file);
           if (processed) {
             berkasUntukUpload[k] = {
-              dataBase64: processed.dataBase64,
+              file: processed.file,
               namaFile: processed.namaFile,
               mimeType: processed.mimeType,
+              ukuranByte: processed.ukuranByte,
               label: labelPerIdx[k] || ("Kolom " + k)
             };
           }
@@ -2511,7 +2469,7 @@ function halamanBerikutnya() {
       .withSuccessHandler(function (jsonResponse) {
         try {
           if (modeEdit) return;
-          const response = JSON.parse(jsonResponse);
+          const response = typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse;
           if (!response.sukses) { isiKonten.innerHTML = `<p class="text-red-500 text-sm">Gagal memuat: ${response.pesan}</p>`; return; }
           dataAktif = response.dataLengkap;
           // Tampilkan tombol edit sesuai role & status sakelar

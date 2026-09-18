@@ -27,6 +27,13 @@
     window.addEventListener('beforeinstallprompt', function (e) {
       e.preventDefault();
       window.__pwaInstallPrompt = e;
+      try { localStorage.setItem('djpm_pwa_capable', '1'); } catch (err) { }
+      document.documentElement.classList.add('pwa-installable');
+      var btn = document.getElementById('btn-header-install-pwa');
+      if (btn) {
+        btn.classList.remove('hidden');
+        btn.classList.add('flex');
+      }
       if (typeof window.onPwaPromptReady === 'function') {
         window.onPwaPromptReady(e);
       }
@@ -36,7 +43,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=optional"
     rel="stylesheet">
   <style>
     @keyframes slideDownTopCenter {
@@ -147,6 +154,53 @@
     }
   </style>
   <style>
+    /* Critical Header Anti-FOUC & Anti-Blink (Instant Render 0ms) */
+    header {
+      background-color: #0f172a !important;
+      /* bg-slate-900 */
+      color: #ffffff !important;
+      /* text-white */
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 50 !important;
+    }
+
+    header h1 {
+      font-size: 1.125rem !important;
+      /* text-lg: 18px */
+      line-height: 1.375 !important;
+      /* leading-snug */
+      font-weight: 700 !important;
+      /* font-bold */
+      letter-spacing: 0.025em !important;
+      /* tracking-wide */
+      color: #ffffff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    header p {
+      font-size: 0.75rem !important;
+      /* text-xs: 12px */
+      color: #e0f2fe !important;
+      /* text-sky-100 */
+      margin-top: 0.125rem !important;
+      /* mt-0.5 */
+    }
+
+    @media (max-width: 640px) {
+      header h1 {
+        font-size: 0.875rem !important;
+        line-height: 1.3 !important;
+      }
+
+      header p {
+        font-size: 0.7rem !important;
+      }
+    }
+
     /* Anti-Flicker untuk elemen yang butuh Auth / Role */
     html:not(.is-logged-in) .auth-show {
       display: none !important;
@@ -155,10 +209,16 @@
     html:not(.role-utama) .utama-show {
       display: none !important;
     }
+
+    /* Anti-Flicker Tombol Pasang PWA di Header */
+    html.pwa-installable #btn-header-install-pwa {
+      display: inline-flex !important;
+    }
   </style>
   <script>
     (function () {
       try {
+        // 1. Auth & Role state instant detection
         var sesiRaw = sessionStorage.getItem('dana_jasa_sesi');
         if (sesiRaw) {
           var sesi = JSON.parse(sesiRaw);
@@ -169,6 +229,18 @@
             }
           }
         }
+        // 2. PWA capability instant detection (0ms) untuk mencegah tombol pasang ngeflesh
+        var isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+          window.navigator.standalone === true ||
+          (document.referrer && document.referrer.includes('android-app://'));
+        if (!isStandalone) {
+          var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || navigator.vendor || '') ||
+            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+          var isPwaCapable = localStorage.getItem('djpm_pwa_capable') === '1';
+          if (isIos || isPwaCapable) {
+            document.documentElement.classList.add('pwa-installable');
+          }
+        }
       } catch (e) { }
     })();
   </script>
@@ -176,21 +248,42 @@
   <script src="/js/api-bridge.js"></script>
 </head>
 
-<body class="bg-slate-100 min-h-screen flex flex-col">
+<body class="bg-slate-100 min-h-screen flex flex-col overflow-x-hidden">
 
-  <header class="bg-slate-900 text-white shadow-md py-4 px-6 sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-4">
-      <div class="flex items-center gap-4">
+  <header class="bg-slate-900 text-white shadow-md py-3 px-3.5 sm:py-4 sm:px-6 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-center gap-3 sm:gap-4">
+      <div class="flex items-center gap-3 sm:gap-4 w-full lg:w-auto">
         <img
-          src="data:image/png;base64,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"
-          alt="Logo Kota Medan" class="w-12 h-12 lg:w-14 lg:h-14 object-contain flex-shrink-0 drop-shadow-md">
-        <div class="text-center lg:text-left max-w-3xl">
-          <h1 class="text-lg font-bold tracking-wide leading-snug">
+          src="/logo-medan.png"
+          alt="Logo Kota Medan"
+          class="w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 object-contain flex-shrink-0 drop-shadow-md">
+        <div class="text-center lg:text-left max-w-3xl min-w-0 flex-1">
+          <h1 class="text-sm sm:text-base lg:text-lg font-bold tracking-wide leading-snug">
             SISTEM LAYANAN DATA PENERIMA DANA JASA PELAYANAN KEPADA WARGA PELAYAN MASYARAKAT KOTA MEDAN TAHUN 2027
           </h1>
-          <p class="text-xs text-sky-100 mt-0.5 flex items-center flex-wrap gap-2">
+          <p
+            class="text-[11px] sm:text-xs text-sky-100 mt-0.5 flex items-center justify-center lg:justify-start flex-wrap gap-1.5 sm:gap-2">
             <span>Pemerintah Kota Medan &nbsp;·&nbsp; <span id="info-admin-subtitle"
-                style="color:#FDE047;font-weight:600;">Administratur : ...</span></span>
+                style="color:#FDE047;font-weight:600;"></span></span>
+            <script>
+              (function () {
+                try {
+                  var s = sessionStorage.getItem('dana_jasa_sesi');
+                  if (s) {
+                    var p = JSON.parse(s);
+                    if (p && p.token) {
+                      var nama = p.namaLengkap || p.username || '';
+                      var sub = 'Administratur : ' + nama;
+                      var uid = (p.userId || '').toUpperCase().trim();
+                      if (uid.indexOf('KELURAHAN ') === 0) {
+                        sub += ' &nbsp;·&nbsp; Kelurahan ' + uid.substring('KELURAHAN '.length).trim();
+                      }
+                      document.getElementById('info-admin-subtitle').innerHTML = sub;
+                    }
+                  }
+                } catch (e) { }
+              })();
+            </script>
             <span id="badge-realtime-status"
               class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm"
               title="Realtime Smart Sync">
@@ -200,10 +293,11 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-3 flex-wrap justify-center lg:justify-end">
-        <nav class="flex gap-2 bg-slate-800 p-1 rounded-lg text-sm font-medium shrink-0">
+      <div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-center lg:justify-end w-full lg:w-auto">
+        <nav
+          class="flex gap-1.5 sm:gap-2 bg-slate-800 p-1 rounded-lg text-xs sm:text-sm font-medium shrink-0 max-w-full overflow-x-auto">
           <button id="tab-input"
-            class="px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5">
+            class="px-3 sm:px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5 whitespace-nowrap">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -211,7 +305,7 @@
             <span>INPUT DATA</span>
           </button>
           <button id="tab-rekap"
-            class="px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
+            class="px-3 sm:px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5 whitespace-nowrap">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
@@ -220,7 +314,7 @@
             <span>LIHAT DATA</span>
           </button>
           <button id="tab-tools"
-            class="utama-show px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5">
+            class="utama-show px-3 sm:px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5 whitespace-nowrap">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
@@ -228,7 +322,7 @@
             <span>TOOLS</span>
           </button>
           <button id="btn-retur-kematian"
-            class="auth-show px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-sm font-medium transition flex items-center gap-1.5"
+            class="auth-show px-2.5 sm:px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-xs sm:text-sm font-medium transition flex items-center gap-1.5 whitespace-nowrap"
             title="Laporan Retur & Kematian">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-300 flex-shrink-0" fill="none"
               viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -238,10 +332,10 @@
             <span>Retur & Kematian</span>
           </button>
         </nav>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2">
           <!-- Tombol Pasang PWA di Header (muncul jika browser mendukung instalasi PWA) -->
           <button id="btn-header-install-pwa" type="button" onclick="window.installAplikasi()"
-            class="hidden bg-sky-600/90 hover:bg-sky-500 active:scale-95 border border-sky-400/50 text-white px-3 h-10 rounded-lg shadow items-center justify-center gap-1.5 text-xs font-semibold transition"
+            class="hidden bg-sky-600/90 hover:bg-sky-500 active:scale-95 border border-sky-400/50 text-white px-2.5 sm:px-3 h-9 sm:h-10 rounded-lg shadow items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Pasang Aplikasi DJPM 2027 ke Layar Utama">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-200" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -251,7 +345,7 @@
             <span class="hidden md:inline">Pasang Aplikasi</span>
           </button>
           <button id="btn-kelola-user"
-            class="utama-show bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            class="utama-show bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Kelola Pengguna (Admin Utama)">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-200" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -261,7 +355,7 @@
             <span>Kelola User</span>
           </button>
           <button id="fab-ganti-password"
-            class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-10 h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
+            class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-9 h-9 sm:w-10 sm:h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
             title="Akun Saya">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-300" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -270,7 +364,7 @@
             </svg>
           </button>
           <button id="btn-keluar-aplikasi"
-            class="auth-show bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-3.5 h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            class="auth-show bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
             title="Keluar Aplikasi">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
@@ -284,7 +378,7 @@
     </div>
   </header>
 
-  <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6">
+  <main class="flex-grow max-w-7xl w-full mx-auto p-3 sm:p-5 md:p-6">
 
     <section id="panel-input" class="space-y-6">
 
@@ -298,7 +392,7 @@
             disimpan ke database.</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
           <div>
             <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Pilih Instansi Pengelola <span class="text-red-500">*</span>
@@ -412,7 +506,7 @@
                 class="hidden items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all duration-300 shadow-sm">
               </div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Jenis Layanan Jasa <span class="text-red-500">*</span>
@@ -440,7 +534,7 @@
                 <p id="peringatan-tempat-tugas" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
               </div>
 
-              <div>
+              <div class="sm:col-span-2 lg:col-span-1">
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Alamat Tempat Tugas <span class="text-red-500">*</span>
                 </label>
@@ -468,8 +562,8 @@
             </div>
 
             <fieldset id="fs-sub-identitas" class="space-y-4">
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="md:col-span-2">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="sm:col-span-2 lg:col-span-2">
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Nama Lengkap (Sesuai KTP) <span
                       class="text-red-500">*</span></label>
                   <input type="text" name="inputNama" id="input-nama" placeholder="Masukkan nama lengkap"
@@ -498,7 +592,7 @@
               </div>
             </fieldset>
 
-            <fieldset class="grid grid-cols-1 md:grid-cols-4 gap-4 my-4" id="fs-sub-domisili-kec">
+            <fieldset class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 my-4" id="fs-sub-domisili-kec">
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1.5">Tempat Lahir <span
                     class="text-red-500">*</span></label>
@@ -519,43 +613,41 @@
                   class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm bg-slate-100 font-bold text-slate-700 focus:outline-none shadow-2xs">
               </div>
 
-              <div class="p-0 m-0 grid grid-cols-1">
-                <div>
-                  <label class="block text-xs font-medium text-slate-600 mb-1.5">Kecamatan Domisili <span
-                      class="text-red-500">*</span></label>
-                  <select name="controlKecamatan" id="input-kecamatan"
-                    class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
-                    required>
-                    <option value="">-- PILIH KECAMATAN DOMISILI --</option>
-                    <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
-                    <option value="MEDAN AREA">MEDAN AREA</option>
-                    <option value="MEDAN BARAT">MEDAN BARAT</option>
-                    <option value="MEDAN BARU">MEDAN BARU</option>
-                    <option value="MEDAN BELAWAN">MEDAN BELAWAN</option>
-                    <option value="MEDAN DELI">MEDAN DELI</option>
-                    <option value="MEDAN DENAI">MEDAN DENAI</option>
-                    <option value="MEDAN HELVETIA">MEDAN HELVETIA</option>
-                    <option value="MEDAN JOHOR">MEDAN JOHOR</option>
-                    <option value="MEDAN KOTA">MEDAN KOTA</option>
-                    <option value="MEDAN LABUHAN">MEDAN LABUHAN</option>
-                    <option value="MEDAN MAIMUN">MEDAN MAIMUN</option>
-                    <option value="MEDAN MARELAN">MEDAN MARELAN</option>
-                    <option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
-                    <option value="MEDAN PETISAH">MEDAN PETISAH</option>
-                    <option value="MEDAN POLONIA">MEDAN POLONIA</option>
-                    <option value="MEDAN SELAYANG">MEDAN SELAYANG</option>
-                    <option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option>
-                    <option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option>
-                    <option value="MEDAN TIMUR">MEDAN TIMUR</option>
-                    <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
-                  </select>
-                </div>
+              <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5">Kecamatan Domisili <span
+                    class="text-red-500">*</span></label>
+                <select name="controlKecamatan" id="input-kecamatan"
+                  class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
+                  required>
+                  <option value="">-- PILIH KECAMATAN DOMISILI --</option>
+                  <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
+                  <option value="MEDAN AREA">MEDAN AREA</option>
+                  <option value="MEDAN BARAT">MEDAN BARAT</option>
+                  <option value="MEDAN BARU">MEDAN BARU</option>
+                  <option value="MEDAN BELAWAN">MEDAN BELAWAN</option>
+                  <option value="MEDAN DELI">MEDAN DELI</option>
+                  <option value="MEDAN DENAI">MEDAN DENAI</option>
+                  <option value="MEDAN HELVETIA">MEDAN HELVETIA</option>
+                  <option value="MEDAN JOHOR">MEDAN JOHOR</option>
+                  <option value="MEDAN KOTA">MEDAN KOTA</option>
+                  <option value="MEDAN LABUHAN">MEDAN LABUHAN</option>
+                  <option value="MEDAN MAIMUN">MEDAN MAIMUN</option>
+                  <option value="MEDAN MARELAN">MEDAN MARELAN</option>
+                  <option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
+                  <option value="MEDAN PETISAH">MEDAN PETISAH</option>
+                  <option value="MEDAN POLONIA">MEDAN POLONIA</option>
+                  <option value="MEDAN SELAYANG">MEDAN SELAYANG</option>
+                  <option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option>
+                  <option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option>
+                  <option value="MEDAN TIMUR">MEDAN TIMUR</option>
+                  <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
+                </select>
               </div>
             </fieldset>
 
             <fieldset id="fs-sub-bawah" class="space-y-6">
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="md:col-span-3">
+              <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div class="sm:col-span-2 lg:col-span-3">
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Alamat Domisili Lengkap (Sesuai KTP)
                     <span class="text-red-500">*</span></label>
                   <input type="text" name="inputAlamat" id="input-alamat"
@@ -585,15 +677,15 @@
                   <h3 class="text-xs font-bold text-sky-300 uppercase tracking-wider">C. Data Rekening Bank & Kontak
                   </h3>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                  <div class="sm:col-span-1 lg:col-span-3">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nama Pemilik Rekening (Harus Sesuai
                       Buku Tabungan) <span class="text-red-500">*</span></label>
                     <input type="text" name="inputNamaRekening" id="input-nama-rek" placeholder="Nama pemilik rekening"
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
                   </div>
-                  <div>
+                  <div class="sm:col-span-1 lg:col-span-3">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nomor Rekening Bank Sumut <span
                         class="text-red-500">*</span></label>
                     <input type="text" name="inputNoRekening" id="input-no-rek" maxlength="14"
@@ -602,9 +694,7 @@
                       required>
                     <p id="peringatan-rekening" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
                   </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
+                  <div class="sm:col-span-1 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Kantor Cabang Bank Sumut <span
                         class="text-red-500">*</span></label>
                     <input type="text" name="inputKantorCabang" id="input-cabang-bank"
@@ -612,7 +702,7 @@
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
                   </div>
-                  <div>
+                  <div class="sm:col-span-1 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nomor Kontak / WhatsApp <span
                         class="text-red-500">*</span></label>
                     <input type="text" name="inputNoKontak" id="input-kontak" maxlength="13"
@@ -620,9 +710,7 @@
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
                   </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
+                  <div class="sm:col-span-2 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Kepemilikan Kartu BPJS
                       Ketenagakerjaan
                       <span class="text-red-500">*</span></label>
@@ -648,7 +736,7 @@
                   <h3 class="text-xs font-bold text-sky-300 uppercase tracking-wider">D. Upload Dokumen Berkas Pendukung
                   </h3>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
                   <div
                     class="p-3.5 bg-slate-50/70 border border-slate-200/80 hover:border-sky-300/80 rounded-xl transition shadow-2xs">
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">KTP (Kartu Tanda Penduduk) <span
@@ -682,10 +770,9 @@
                       required>
                   </div>
                   <div
-                    class="p-3.5 bg-slate-50/70 border border-slate-200/80 hover:border-sky-300/80 rounded-xl transition shadow-2xs col-span-2">
+                    class="p-3.5 bg-slate-50/70 border border-slate-200/80 hover:border-sky-300/80 rounded-xl transition shadow-2xs col-span-1 sm:col-span-2 lg:col-span-3">
                     <label class="block text-xs font-semibold text-slate-700 mb-1.5">Surat Pernyataan Hanya Menerima
-                      Satu
-                      Jenis Dana Jasa dan Bukan ASN/BUMN/BUMD/TNI/POLRI <span class="text-red-500">*</span></label>
+                      Satu Jenis Dana Jasa dan Bukan ASN/BUMN/BUMD/TNI/POLRI <span class="text-red-500">*</span></label>
                     <input type="file" name="filePernyataan" accept="image/*,.pdf"
                       class="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 transition cursor-pointer"
                       required>
@@ -804,7 +891,7 @@
 
               <div class="pt-4 border-t border-slate-200 flex flex-col-reverse sm:flex-row justify-end gap-3">
                 <button type="reset" id="btn-reset-form"
-                  class="w-full sm:w-auto px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 active:scale-95 transition shadow-2xs flex items-center justify-center gap-2">
+                  class="w-full sm:w-auto px-5 py-2.5 min-h-[44px] border border-slate-300 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-50 active:scale-95 transition shadow-2xs flex items-center justify-center gap-2">
                   <svg class="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                     stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -813,7 +900,7 @@
                   <span>Kosongkan Form</span>
                 </button>
                 <button type="submit" id="btn-simpan-data"
-                  class="w-full sm:w-auto px-6 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                  class="w-full sm:w-auto px-6 py-2.5 min-h-[44px] bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-md transition flex items-center justify-center gap-2">
                   <svg class="w-4 h-4 text-sky-100" fill="none" viewBox="0 0 24 24" stroke="currentColor"
                     stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -844,14 +931,14 @@
       </div>
 
       <div class="flex flex-col gap-3 mb-6 border-b border-slate-100 pb-4">
-        <div class="flex justify-between items-start gap-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
           <div>
             <h2 class="text-xl font-bold text-slate-800">Data Rekapitulasi Penerima DJPM</h2>
             <p class="text-xs text-slate-500 mt-1">Menampilkan data terverifikasi berdasarkan hak akses instansi Anda.
             </p>
           </div>
           <div id="info-total-penerima"
-            class="flex-shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-1 rounded-lg text-xs font-semibold border-2 border-sky-400">
+            class="self-start sm:self-auto flex-shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-1 rounded-lg text-xs font-semibold border-2 border-sky-400">
             Total Data: Dimuat
           </div>
         </div>
@@ -974,8 +1061,8 @@
             <span>Reset Filter</span>
           </button>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-          <div>
+        <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+          <div class="col-span-2 lg:col-span-1">
             <label class="block text-xs font-medium text-slate-600 mb-1">Cari Nama / NIK / No.HP</label>
             <input type="text" id="input-cari-global" oninput="saringDanTampilkanTabel()"
               placeholder="Ketik kata kunci..."
@@ -1083,11 +1170,11 @@
 
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Buat / Perbarui Data Pembayaran</h3>
-        <div class="flex flex-wrap items-end gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 items-end">
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">Bulan Pembayaran</label>
             <select id="tools-select-bulan"
-              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
               <option value="">-- Pilih Bulan --</option>
               <option>JANUARI</option>
               <option>FEBRUARI</option>
@@ -1106,14 +1193,14 @@
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">Jenis Pembayaran</label>
             <select id="tools-select-jenis"
-              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500">
               <option value="">-- Pilih Jenis --</option>
               <option value="DJPM">DJPM</option>
               <option value="BPJS">BPJS TK</option>
             </select>
           </div>
           <button id="btn-tools-buat-batch" onclick="toolsBuatBatch()"
-            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">
+            class="w-full sm:col-span-2 lg:col-span-1 px-4 py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs font-semibold transition min-h-[38px] flex items-center justify-center">
             Tarik Data Terkini (AKTIF)
           </button>
         </div>
@@ -1144,26 +1231,26 @@
 
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Pejabat Penandatangan</h3>
-        <div id="tools-form-pejabat" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        <div id="tools-form-pejabat" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
 
       <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
         <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide mb-3">Referensi SK Wali Kota</h3>
         <p class="text-[11px] text-slate-400 mb-3">Dipakai di judul dokumen Excel pembayaran DJPM per layanan. Boleh
           dikosongkan dulu jika SK belum terbit — akan tampil "(BELUM DITETAPKAN)".</p>
-        <div class="flex flex-wrap items-end gap-3">
-          <div>
+        <div class="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div class="w-full sm:w-64">
             <label class="block text-xs font-medium text-slate-600 mb-1">Nomor SK</label>
             <input type="text" id="tools-sk-nomor" placeholder="mis. 123/456.K/2027"
-              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 w-64" />
+              class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
           </div>
-          <div>
+          <div class="w-full sm:w-auto">
             <label class="block text-xs font-medium text-slate-600 mb-1">Tanggal SK</label>
             <input type="date" id="tools-sk-tanggal"
-              class="px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
+              class="w-full sm:w-auto px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500" />
           </div>
           <button onclick="toolsSimpanReferensiSk()"
-            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition">
+            class="w-full sm:w-auto px-4 py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs font-semibold transition min-h-[38px] flex items-center justify-center">
             Simpan</button>
         </div>
       </div>

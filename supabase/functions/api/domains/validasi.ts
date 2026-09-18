@@ -99,7 +99,7 @@ export async function cekKuotaTersedia(kecamatan: string, layanan: string, jumla
     } else {
       const rowsPakai = await sql`
         select count(*)::int as jumlah from penerima
-        where tahun = ${TAHUN_AKTIF} and kecamatan = ${kecUpper} and layanan = ${layUpper}
+        where tahun = ${TAHUN_AKTIF} and upper(kecamatan) = ${kecUpper} and upper(layanan) = ${layUpper}
       `;
       jumlahTerpakai = rowsPakai[0]?.jumlah ?? 0;
     }
