@@ -526,9 +526,20 @@ class GoogleScriptRunProxy {
                 }
               }
 
-              // Jika ini adalah aksi mutasi, bersihkan domain cache terkait
+              // Jika ini adalah aksi mutasi, bersihkan domain cache terkait -- tapi HANYA jika
+              // mutasi benar-benar berhasil (result.sukses !== false). Tanpa cek ini, mutasi yang
+              // ditolak di level aplikasi (mis. role tidak diizinkan, atau exception yang ditangkap
+              // dan dikembalikan sbg {sukses:false}) tetap membuang cache + broadcast realtime ke
+              // semua sesi admin lain padahal tidak ada perubahan data sama sekali.
               if (mutationDomains) {
-                swrCache.invalidate(mutationDomains, true);
+                let hasilMutasi = freshResult;
+                if (typeof hasilMutasi === 'string') {
+                  try { hasilMutasi = JSON.parse(hasilMutasi); } catch (_e) { /* biarkan apa adanya */ }
+                }
+                const mutasiGagal = hasilMutasi && typeof hasilMutasi === 'object' && hasilMutasi.sukses === false;
+                if (!mutasiGagal) {
+                  swrCache.invalidate(mutationDomains, true);
+                }
               }
 
               // Jika ini aksi SWR, bandingkan data baru dengan cache

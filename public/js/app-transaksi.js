@@ -2539,6 +2539,7 @@ document.getElementById('btn-export-xlsx').addEventListener('click', function ()
 });
 
 document.getElementById('btn-verifikasi-massal').addEventListener('click', function () {
+  if (!pastikanLogin()) return;
   const btn = this;
   konfirmasiAksi({
     judul: "Verifikasi Massal Memenuhi Syarat",
