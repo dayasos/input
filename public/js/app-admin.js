@@ -364,6 +364,24 @@ function tampilkanModalUpdate() {
           btnSimpan.disabled = false; btnSimpan.textContent = "SIMPAN & LANJUTKAN";
           if (res && res.sukses) {
             modal.classList.add('hidden');
+            // Nama baru saja diisi lewat modal ini (blm pernah tersimpan sblmnya, makanya
+            // subtitle header masih fallback ke username sejak login) -- perbarui subtitle
+            // & sessi lokal seketika, jangan tunggu revalidasi sesi berikutnya (reload/hard
+            // refresh) supaya nama langsung tampil sesuai yg baru diinput. Diseragamkan ke UPPER
+            // CASE spy sama persis dgn normalisasi yg dilakukan server (simpanProfilUser di
+            // akun.ts men-toUpperCase() nama sblm disimpan) -- kalau tidak, subtitle akan tampil
+            // huruf besar/kecil sesuai ketikan user dulu, lalu "berubah sendiri" jadi UPPERCASE
+            // begitu revalidasi sesi berikutnya jalan, seperti bug/tidak konsisten.
+            const namaTersimpan = nama.toUpperCase();
+            try {
+              const sesiRaw = sessionStorage.getItem('dana_jasa_sesi');
+              if (sesiRaw) {
+                const sesi = JSON.parse(sesiRaw);
+                sesi.namaLengkap = namaTersimpan;
+                sessionStorage.setItem('dana_jasa_sesi', JSON.stringify(sesi));
+              }
+            } catch (_e) { }
+            renderAdminSubtitle(namaTersimpan, dataPengguna.kelurahanTerkunci);
             terapkanHakAkses(role, kecamatan, inputDitutup);
             if (typeof mulaiVersionCheck === "function") mulaiVersionCheck();
           } else {
@@ -1103,11 +1121,12 @@ function tampilkanModalUpdate() {
 // Masuk Aplikasi
 function masukSetelahAuth(res, usernameFallback) {
   const usernameFinal = res.username || usernameFallback || "";
+  const namaLengkapFinal = (res.profil && res.profil.namaLengkap) ? res.profil.namaLengkap : "";
 
   try {
     sessionStorage.setItem('dana_jasa_sesi', JSON.stringify({
       token: res.token, username: usernameFinal, role: res.role,
-      kecamatan: res.kecamatan, userId: res.userId || ""
+      kecamatan: res.kecamatan, userId: res.userId || "", namaLengkap: namaLengkapFinal
     }));
   } catch (e) { }
 
@@ -1125,15 +1144,7 @@ function masukSetelahAuth(res, usernameFallback) {
     dataPengguna.kelurahanTerkunci = userIdUpper.substring("KELURAHAN ".length).trim();
   }
 
-  const elSubtitle = document.getElementById('info-admin-subtitle');
-  if (elSubtitle) {
-    const namaLengkap = (res.profil && res.profil.namaLengkap) ? res.profil.namaLengkap : usernameFinal;
-    let teksSubtitle = 'Administratur : ' + namaLengkap;
-    if (dataPengguna.kelurahanTerkunci) {
-      teksSubtitle += ' &nbsp;·&nbsp; Kelurahan ' + dataPengguna.kelurahanTerkunci;
-    }
-    elSubtitle.innerHTML = teksSubtitle;
-  }
+  renderAdminSubtitle(namaLengkapFinal || usernameFinal, dataPengguna.kelurahanTerkunci);
 
   if (window._muatDaftarTahun) window._muatDaftarTahun();
   document.getElementById('modal-login').classList.add('hidden');

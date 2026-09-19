@@ -1,12 +1,20 @@
-// Service Worker DJPM 2027 (v3)
+// Service Worker DJPM 2027 (v4)
 // Fitur:
 // 1. Memenuhi syarat Installable PWA.
 // 2. Network-First untuk Navigasi Dokumen HTML (agar reload selalu menyajikan versi terkini saat online).
-// 3. Stale-While-Revalidate HANYA untuk aset statis lokal (/js/, icons, logo, manifest, css).
-// 4. MUTLAK BYPASS untuk: request non-GET, endpoint API (/api/), Google Drive/APIs, dan Supabase.
-// 5. Otomatis membersihkan cache versi lama saat aktivasi.
+// 3. Network-First (fallback cache) untuk skrip /js/ -- skrip ini berisi logika (bukan cuma
+//    tampilan), jadi TIDAK boleh stale: dulu dipukul rata dgn ikon/gambar pakai Stale-While-
+//    Revalidate, akibatnya perbaikan bug baru butuh hard refresh manual utk tampil (SW selalu
+//    menyajikan versi cache lama seketika, baru memperbarui cache di latar belakang utk load
+//    BERIKUTNYA -- 1 load selalu tertinggal 1 versi, dan kalau SW_VERSION lupa dinaikkan saat
+//    deploy, cache lama itu tidak pernah tergantikan sama sekali).
+// 4. Stale-While-Revalidate utk aset statis non-skrip (icons, logo, manifest, css) -- aman basi
+//    sebentar demi kecepatan karena tidak mengandung logika.
+// 5. MUTLAK BYPASS untuk: request non-GET, endpoint API (/api/), Google Drive/APIs, dan Supabase.
+// 6. Otomatis membersihkan cache versi lama saat aktivasi + langsung ambil alih tab yang terbuka
+//    (skipWaiting + clients.claim) supaya versi baru aktif tanpa perlu tutup semua tab.
 
-const SW_VERSION = 'djpm-sw-v3';
+const SW_VERSION = 'djpm-sw-v4';
 const STATIC_CACHE_NAME = `djpm-static-${SW_VERSION}`;
 
 // Daftar aset inti yang di-precache saat instalasi
@@ -37,6 +45,16 @@ self.addEventListener('activate', (event) => {
       );
     }).then(() => self.clients.claim())
   );
+});
+
+// Terima sinyal SKIP_WAITING dari halaman (lihat registrasi SW di app-core.js). Instalasi baru
+// sebenarnya sudah otomatis skipWaiting() di atas, tapi handler ini membuat pesan yang sudah
+// dikirim halaman tidak hilang percuma dan tetap aman kalau strategi auto-skip di atas suatu
+// saat diubah.
+self.addEventListener('message', (event) => {
+  if (event && event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -77,17 +95,42 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. Hanya aset statis lokal yang di-cache (JS, CSS, Gambar, Font, Manifest)
+  // 4. Skrip aplikasi (/js/): Network-First -- selalu coba versi terbaru dulu, cache hanya
+  // sebagai fallback offline/koneksi gagal. Mencegah bug yang sudah diperbaiki di kode tetap
+  // tersaji dari cache lama sampai user hard refresh.
+  const isScriptAsset = url.origin === self.location.origin && url.pathname.startsWith('/js/');
+  if (isScriptAsset) {
+    event.respondWith(
+      caches.open(STATIC_CACHE_NAME).then((cache) => {
+        return fetch(req).then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+            cache.put(req, networkResponse.clone());
+            return networkResponse;
+          }
+          // Respons jaringan tidak sehat (mis. 500/502/503 sementara di origin/CDN) -- jangan
+          // pecahkan halaman kalau ada salinan cache yang masih valid, pakai itu dulu drpd
+          // meneruskan respons error ke browser.
+          return cache.match(req).then((cached) => cached || networkResponse);
+        }).catch(() => {
+          // fetch() gagal total (offline/DNS) -- kalau cache juga kosong (mis. kunjungan
+          // pertama yg langsung offline), Response.error() dipakai supaya respondWith() tetap
+          // menerima Response yang valid, bukan undefined (yg bikin browser lempar TypeError).
+          return cache.match(req).then((cached) => cached || Response.error());
+        });
+      })
+    );
+    return;
+  }
+
+  // 5. Aset statis lain (ikon, gambar, css, manifest): di-cache
   const isStaticAsset =
     url.origin === self.location.origin &&
-    (url.pathname.startsWith('/js/') ||
-      url.pathname.startsWith('/icons/') ||
+    (url.pathname.startsWith('/icons/') ||
       url.pathname.endsWith('.png') ||
       url.pathname.endsWith('.jpg') ||
       url.pathname.endsWith('.svg') ||
       url.pathname.endsWith('.ico') ||
       url.pathname.endsWith('.css') ||
-      url.pathname.endsWith('.js') ||
       url.pathname === '/manifest.json');
 
   if (!isStaticAsset) {
@@ -95,7 +138,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Stale-While-Revalidate untuk aset statis lokal
+  // 6. Stale-While-Revalidate untuk aset statis non-skrip (aman basi sebentar, tidak ada logika)
   event.respondWith(
     caches.open(STATIC_CACHE_NAME).then((cache) => {
       return cache.match(req).then((cachedResponse) => {

@@ -187,6 +187,74 @@ if (perangkatIOS() && !sudahTerinstalSebagaiPwa()) {
 
 // Registrasi Service Worker secara aman dan terjamin
 if ('serviceWorker' in navigator) {
+  // Cek generik "ada overlay/modal input yang sedang terbuka" -- formSedangDiisi() saja HANYA
+  // memeriksa #form-pembayaran, padahal ada banyak modal/overlay lain (tambah/edit user, ganti
+  // password, profil awal, overlay upload "loading-overlay", dsb.) yang datanya/prosesnya juga
+  // bisa hilang kalau halaman di-reload paksa tanpa peringatan. Semua overlay di app ini
+  // konsisten memakai kelas "fixed inset-0" + "hidden" saat tertutup (lihat markup index.html),
+  // jadi cek generik berbasis kelas ini menjangkau overlay apa pun (bukan cuma yg id-nya diawali
+  // "modal-") tanpa perlu daftar id manual yang gampang basi kalau ada modal baru ditambah.
+  // #modal-login DIKECUALIKAN: modal itu selalu terbuka tiap kali sesi belum/tidak lagi valid
+  // (bukan cuma sesaat), dan isinya cuma username/password kosong -- kalau ikut dihitung,
+  // reload otomatis tidak akan pernah jalan tiap kali tab kebetulan sedang nganggur di layar
+  // login, dan fitur "tidak perlu hard refresh lagi" ini jadi tidak berguna sama sekali.
+  function adaOverlayTerbuka() {
+    try {
+      const overlays = document.querySelectorAll('.fixed.inset-0');
+      for (let i = 0; i < overlays.length; i++) {
+        if (overlays[i].id === 'modal-login') continue;
+        if (!overlays[i].classList.contains('hidden')) return true;
+      }
+    } catch (e) { }
+    return false;
+  }
+
+  // Cek "ada aksi (baca/tulis) yang sedang berjalan ke server" lewat peta permintaan in-flight
+  // milik api-bridge.js -- mis. modal konfirmasi baru saja ditutup tapi permintaan simpan/ubah
+  // yang dipicunya masih berjalan. Tanpa ini, reload paksa bisa membatalkan permintaan tsb di
+  // sisi klien tanpa toast sukses/gagal apa pun.
+  function adaAksiSedangBerjalan() {
+    try { return Boolean(window.djpmCache && window.djpmCache._inFlightRequests.size > 0); } catch (e) { return false; }
+  }
+
+  function amanUntukReload() {
+    if (typeof formSedangDiisi === 'function' && formSedangDiisi()) return false;
+    if (adaOverlayTerbuka() || adaAksiSedangBerjalan()) return false;
+    return true;
+  }
+
+  // Reload otomatis saat SW baru ambil alih tab yang sedang terbuka (mis. versi baru dideploy
+  // sementara user tetap membuka tab lama). Hanya dipasang jika tab ini SUDAH dikontrol SW
+  // sebelumnya (kunjungan lama) -- pada kunjungan pertama (belum ada controller sama sekali)
+  // clients.claim() di sw.js juga memicu controllerchange, dan reload di situ cuma buang-buang
+  // tanpa manfaat karena tidak ada JS lama yang perlu diperbarui. Kalau saat itu ada modal/aksi
+  // yang menghalangi, JANGAN menyerah selamanya (controllerchange cuma terpicu SEKALI per versi
+  // SW) -- coba lagi berkala sampai kondisinya aman. Guard "sudahReload" SENGAJA variabel
+  // in-memory (bukan sessionStorage): tujuannya cuma menahan reload dobel dalam 1 kali muat
+  // halaman ini, BUKAN memblokir reload utk deploy berikutnya -- begitu halaman ini reload,
+  // context JS-nya diganti total & variabel ini otomatis kembali false utk deploy berikutnya.
+  let sudahReload = false;
+  let retryTimer = null; // dilacak di luar handler spy tidak dobel timer kalau controllerchange
+                          // sempat terpicu lagi (mis. deploy kedua) selagi retry loop pertama
+                          // masih menunggu modal/aksi selesai.
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (sudahReload || retryTimer) return;
+      if (!amanUntukReload()) {
+        retryTimer = setInterval(function () {
+          if (sudahReload) { clearInterval(retryTimer); return; }
+          if (!amanUntukReload()) return;
+          clearInterval(retryTimer);
+          sudahReload = true;
+          location.reload();
+        }, 20000);
+        return;
+      }
+      sudahReload = true;
+      location.reload();
+    });
+  }
+
   const doRegisterSw = function () {
     navigator.serviceWorker.register('/sw.js')
       .then(function (reg) {
@@ -284,13 +352,8 @@ let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
       dataPengguna.kelurahanTerkunci = uid.substring("KELURAHAN ".length).trim();
     }
 
-    const elSubtitle = document.getElementById('info-admin-subtitle');
-    if (elSubtitle && dataPengguna.username) {
-      let teksSub = 'Administratur : ' + (sesiTersimpan.namaLengkap || dataPengguna.username);
-      if (dataPengguna.kelurahanTerkunci) {
-        teksSub += ' &nbsp;·&nbsp; Kelurahan ' + dataPengguna.kelurahanTerkunci;
-      }
-      elSubtitle.innerHTML = teksSub;
+    if (dataPengguna.username) {
+      renderAdminSubtitle(sesiTersimpan.namaLengkap || dataPengguna.username, dataPengguna.kelurahanTerkunci);
     }
 
     if (modalLoginEl) modalLoginEl.classList.add('hidden');
@@ -860,6 +923,21 @@ if (btnKelolaUserNav) {
 function esc(val) {
   return String(val === null || val === undefined ? '' : val)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Satu-satunya tempat yang merender "Administratur : <nama> [· Kelurahan <x>]" di header --
+// dipakai oleh masukSetelahAuth, cobaPulihkanSesi, dan handler simpan Profil Awal. Sebelum ini
+// logikanya digandakan persis di 3 tempat itu (+ 1 salinan lagi di index.html yg jalan sebelum
+// app-core.js dimuat, jadi TETAP terpisah dgn escBootstrap sendiri) -- ketahuan rawan waktu satu
+// dari 4 salinan itu lupa di-esc() dan jadi celah XSS. Cukup ubah di sini kalau formatnya berubah.
+function renderAdminSubtitle(namaLengkap, kelurahanTerkunci) {
+  const elSubtitle = document.getElementById('info-admin-subtitle');
+  if (!elSubtitle) return;
+  let teks = 'Administratur : ' + esc(namaLengkap);
+  if (kelurahanTerkunci) {
+    teks += ' &nbsp;·&nbsp; Kelurahan ' + esc(kelurahanTerkunci);
+  }
+  elSubtitle.innerHTML = teks;
 }
 
 let instansiAktif = "";

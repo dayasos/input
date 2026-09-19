@@ -264,15 +264,19 @@
             <script>
               (function () {
                 try {
+                  function escBootstrap(val) {
+                    return String(val === null || val === undefined ? '' : val)
+                      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                  }
                   var s = sessionStorage.getItem('dana_jasa_sesi');
                   if (s) {
                     var p = JSON.parse(s);
                     if (p && p.token) {
                       var nama = p.namaLengkap || p.username || '';
-                      var sub = 'Administratur : ' + nama;
+                      var sub = 'Administratur : ' + escBootstrap(nama);
                       var uid = (p.userId || '').toUpperCase().trim();
                       if (uid.indexOf('KELURAHAN ') === 0) {
-                        sub += ' &nbsp;·&nbsp; Kelurahan ' + uid.substring('KELURAHAN '.length).trim();
+                        sub += ' &nbsp;·&nbsp; Kelurahan ' + escBootstrap(uid.substring('KELURAHAN '.length).trim());
                       }
                       document.getElementById('info-admin-subtitle').innerHTML = sub;
                     }
