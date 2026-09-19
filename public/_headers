@@ -1,0 +1,7 @@
+# Header keamanan untuk Cloudflare Pages — padanan dari blok "headers" di vercel.json.
+# Vite menyalin isi folder public/ ke root dist/ apa adanya, dan Cloudflare Pages membaca file
+# _headers ini otomatis dari root hasil build. Format: https://developers.cloudflare.com/pages/configuration/headers/
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=*, camera=*, microphone=*, clipboard-read=*, clipboard-write=*
