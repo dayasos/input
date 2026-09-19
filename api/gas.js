@@ -37,10 +37,6 @@ async function fetchWithRetry(url, options, maxRetries = 1, timeoutMs = 15000) {
   throw lastError;
 }
 
-// GAS masih diterima sebagai URL yang SAH (isGas) murni sebagai escape hatch operasional darurat
-// lewat env var — bukan sesuatu yang otomatis dipakai proxy ini. Selama GAS_API_URL/
-// SUPABASE_EDGE_FUNCTION_URL tidak sengaja diisi URL script.google.com, jalur ini tidak pernah
-// dipakai.
 function sanitizeUrl(raw) {
   if (!raw) return DEFAULT_TARGET_URL;
   let u = raw.trim().replace(/^["']|["']$/g, '');
@@ -48,9 +44,8 @@ function sanitizeUrl(raw) {
   if (u.startsWith('http://') && !u.includes('localhost') && !u.includes('127.0.0.1')) {
     u = 'https://' + u.slice(7);
   }
-  const isGas = u.startsWith('https://script.google.com/macros/s/');
   const isSupabase = u.includes('/functions/v1/');
-  if (!isGas && !isSupabase) {
+  if (!isSupabase) {
     return DEFAULT_TARGET_URL;
   }
   return u;
@@ -141,12 +136,6 @@ export default async function handler(req, res) {
     payloadObj = {};
   }
 
-  // Routing khusus untuk upload ke Google Drive.
-  // Fallback ke URL GAS terbaru jika env var GAS_DRIVE_UPLOAD_URL belum diset di Vercel.
-  if (payloadObj.action === 'uploadSatuBerkasKeDrive' || payloadObj.action === 'uploadSemuaBerkasKeDrive') {
-    targetUrl = process.env.GAS_DRIVE_UPLOAD_URL || 'https://script.google.com/macros/s/AKfycbxaZew7XLOaE4IVT5fLxARcPeuNqck4NVuV7cpgVO0rTuqEm3n_I8TpW9FsG5WUoiwSaA/exec';
-  }
-
   const secretToken = process.env.GAS_SECRET_TOKEN;
   if (!secretToken) {
     return res.status(500).json({
@@ -169,8 +158,6 @@ export default async function handler(req, res) {
     'uploadSemuaBerkasKeSupabase',
     'mintaUrlUploadBerkas',
     'konfirmasiUploadBerkas',
-    'uploadSatuBerkasKeDrive',
-    'uploadSemuaBerkasKeDrive',
   ]);
   let timeoutMs;
   if (REALTIME_CHECK_ACTIONS.has(payloadObj.action)) {
@@ -221,7 +208,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json(data);
   } catch (err) {
-    const backendName = targetUrl.includes('script.google.com') ? 'Google Drive Microservice (Apps Script)' : 'Supabase Edge Function';
+    const backendName = 'Supabase Edge Function';
     console.error(`Vercel Proxy Error for action [${payloadObj.action}] timeout=${timeoutMs}ms (${backendName}):`, err.message);
 
     // Bedakan antara respon bukan JSON (parse error) vs kesalahan jaringan/timeout
