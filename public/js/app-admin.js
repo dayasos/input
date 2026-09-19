@@ -1187,6 +1187,12 @@ function masukSetelahAuth(res, usernameFallback) {
   })();
 
   function prosesLogin() {
+    // Guard anti-double-submit: dulu hanya tombol yang di-disable, tapi handler Enter-key di kedua
+    // input (di bawah) memanggil prosesLogin() langsung tanpa cek ini -- Enter beruntun cepat/
+    // key-repeat OS bisa kirim beberapa loginPengguna() bersamaan dgn kredensial sama. Taruh cek
+    // di SATU tempat (awal fungsi) supaya menutup semua jalur pemanggil (klik, submit form, Enter
+    // di 2 input) sekaligus.
+    if (btnLogin && btnLogin.disabled) return;
     const inputUser = document.getElementById('login-username');
     const inputPassEl = document.getElementById('login-password');
     const loginError = document.getElementById('login-error');

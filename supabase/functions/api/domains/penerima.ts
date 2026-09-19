@@ -368,6 +368,30 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
   }
 
+  // ── Idempotency: cegah data dobel saat browser retry akibat timeout/koneksi putus ──
+  // Frontend mengirim `idempotencyKey` (UUID v4) yang di-generate SEKALI saat tombol Konfirmasi
+  // diklik. Jika request pertama berhasil tapi responsnya hilang di jalan (timeout/koneksi putus),
+  // browser akan retry dengan kunci yang SAMA — dan server langsung beri tahu "sudah berhasil"
+  // tanpa menulis data lagi.
+  const idempotencyKey = typeof formObject.idempotencyKey === "string"
+    ? formObject.idempotencyKey.trim()
+    : null;
+
+  if (idempotencyKey) {
+    try {
+      const existing = await sql`
+        SELECT result FROM idempotency_keys WHERE key = ${idempotencyKey} LIMIT 1
+      `;
+      if (existing.length > 0) {
+        // Sudah pernah diproses — kembalikan hasil asli tanpa tulis ulang.
+        return existing[0].result as { sukses: boolean; pesan: string };
+      }
+    } catch (_errIdempotency) {
+      // Jika tabel belum ada / error DB sementara, lanjutkan proses normal (fail-open).
+      // Tidak blokir user hanya karena cek idempotency gagal.
+    }
+  }
+
   try {
     // ── Pemetaan nilai form (port 1:1 dari Kode.gs baris 1011-1039) ──
     const nama = ((formObject.inputNama as string) || "").trim().toUpperCase();
@@ -544,17 +568,38 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
 
     if (!insertSukses) throw lastError;
 
-    return { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
+    const hasilSimpan = { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
+
+    // Simpan idempotency key agar retry berikutnya (jika koneksi tadi putus) langsung beri tahu sukses.
+    if (idempotencyKey) {
+      try {
+        await sql`
+          INSERT INTO idempotency_keys (key, result) VALUES (${idempotencyKey}, ${JSON.stringify(hasilSimpan)}::jsonb)
+          ON CONFLICT (key) DO NOTHING
+        `;
+      } catch (_e) {
+        // Gagal simpan key tidak perlu menghentikan proses — data sudah masuk, ini hanya safety net.
+      }
+    }
+
+    return hasilSimpan;
+
   } catch (error) {
-    // Tangkap pelanggaran unique constraint (NIK/rekening/tempat tugas ganda lewat race condition)
+    // Tangkap pelanggaran unique constraint (NIK/rekening/tempat tugas ganda lewat race condition).
+    // PENTING: index rekening & tempat-tugas dipindah ke partisi tahun aktif dan namanya jadi
+    // "uq_penerima_<TAHUN>_..." (mis. uq_penerima_2027_rekening) sejak migrasi
+    // 20260914150000_longgarkan_tempat_tugas_arsip.sql / 20260914151500_longgarkan_rekening_arsip.sql
+    // -- match pola dgn regex (bukan string literal lama) supaya tetap kena walau tahun aktif
+    // berganti (uq_penerima_2028_rekening, dst). uq_penerima_nik TIDAK dipindah (tetap di tabel
+    // induk), jadi namanya tetap tanpa tahun.
     const msg = String(error);
     if (msg.includes("uq_penerima_nik")) {
       return { sukses: false, pesan: "GAGAL: NIK sudah terdaftar (race condition). Coba lagi." };
     }
-    if (msg.includes("uq_penerima_rekening")) {
+    if (/uq_penerima(_\d{4})?_rekening/.test(msg)) {
       return { sukses: false, pesan: "GAGAL: Nomor rekening sudah terdaftar (race condition). Coba lagi." };
     }
-    if (msg.includes("uq_penerima_tempat_tugas")) {
+    if (/uq_penerima(_\d{4})?_tempat_tugas/.test(msg)) {
       return {
         sukses: false,
         pesan: "GAGAL: Tempat tugas sudah memiliki penerima untuk layanan ini (race condition). Coba lagi.",

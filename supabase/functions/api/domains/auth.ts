@@ -1,5 +1,5 @@
 import { sql } from "../_shared/db.ts";
-import { hashString } from "../_shared/hash.ts";
+import { bandingkanHashConstantTime, hashString } from "../_shared/hash.ts";
 import { ambilSesi, buatSesi, hapusSesi } from "../_shared/sesi.ts";
 import { catatGagal, cekTerkunci, resetPercobaan } from "../_shared/bruteforce.ts";
 
@@ -26,7 +26,7 @@ export async function loginPengguna(username: string, password: string) {
       limit 1
     `;
 
-    if (rows.length > 0 && rows[0].password_hash === passwordHashInput) {
+    if (rows.length > 0 && bandingkanHashConstantTime(rows[0].password_hash, passwordHashInput)) {
       await resetPercobaan(usernameUpper);
       const akun = rows[0];
       const token = await buatSesi({

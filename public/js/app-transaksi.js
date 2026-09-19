@@ -314,6 +314,11 @@ selectLayanan.addEventListener('change', evaluasiUploadKondisional);
 
 btnResetForm.addEventListener('click', () => {
   setTimeout(() => {
+    // Form direset dari awal (baik krn submit sukses, atau user membatalkan sendiri) --
+    // kunci idempotency yang menggantung (kalau ada) sudah tidak relevan lagi krn form
+    // berikutnya bisa jadi data yang sama sekali berbeda. Submit berikutnya WAJIB kunci baru.
+    idempotencyKeySimpan = null;
+    idempotencyFingerprintSimpan = null;
     inputUmur.value = "";
     resetSemuaKuncianForm();
 
@@ -553,11 +558,13 @@ function panggilAksiPromise(namaAksi) {
   });
 }
 
-// Upload langsung ke Google Drive lewat Drive API v3 + resumable upload session (2026-09-18) --
-// pengganti fetchDirectToGAS/uploadSemuaBerkasKeDrive (GAS). Byte file di-PUT LANGSUNG dari
-// browser ke Google (lihat putBlobKeDrive di bawah), tidak lewat Vercel/Edge Function/GAS sama
-// sekali -- yang lewat backend cuma metadata (nama/tipe/ukuran file) buat minta sesi upload, dan
-// konfirmasi izin-akses setelah selesai. Storage tujuan TETAP Google Drive.
+// Upload ke Google Drive lewat Drive API v3 + resumable upload session (2026-09-18) --
+// pengganti fetchDirectToGAS/uploadSemuaBerkasKeDrive (GAS). Metadata (nama/tipe/ukuran file)
+// minta sesi lewat backend (Edge Function), tapi byte file ITU SENDIRI TIDAK PUT langsung
+// browser->Google -- direct-to-Google diblokir CORS, jadi PUT-nya lewat URL PROXY Edge Function
+// kita (lihat putBlobKeDrive di bawah & driveProxy.ts), yang meneruskan body apa adanya ke Google
+// server-to-server. Storage tujuan TETAP Google Drive, tapi byte SEKARANG 2 hop (browser->Edge
+// Function->Google), bukan 1 hop langsung -- relevan kalau debug soal kecepatan/limit upload.
 
 // Metadata satu berkas untuk persiapan sesi resumable Drive
 function metaSatuBerkas(item) {
@@ -641,6 +648,59 @@ function bersihkanCacheUploadUntukNik(nik, layanan) {
   Object.keys(cacheUploadSuksesDrive).forEach(function (kk) {
     if (kk.indexOf(prefix) === 0) delete cacheUploadSuksesDrive[kk];
   });
+  const semuaPending = bacaSemuaSesiPending();
+  let berubah = false;
+  Object.keys(semuaPending).forEach(function (kk) {
+    if (kk.indexOf(prefix) === 0) { delete semuaPending[kk]; berubah = true; }
+  });
+  if (berubah) tulisSemuaSesiPending(semuaPending);
+}
+
+// Persist sesi upload yg SEDANG berjalan/belum dikonfirmasi ke sessionStorage (bukan cuma
+// in-memory seperti cacheUploadSuksesDrive di atas) -- supaya kalau tab reload/crash TEPAT
+// setelah PUT byte sukses tapi SEBELUM konfirmasiUploadBerkasDrive jalan, percobaan berikutnya
+// (bahkan setelah reload) bisa mendeteksi lewat cekStatusSesiUpload bahwa sesi lama itu ternyata
+// sudah sebagian/seluruhnya ter-upload, drpd langsung minta sesi baru & meninggalkan file lama
+// jadi FILE DOBEL YATIM di Drive (permission tak pernah diset krn konfirmasi tak pernah jalan).
+const KUNCI_STORAGE_SESI_PENDING = 'djpm_sesi_upload_pending_v1';
+const EXPIRY_SESI_PENDING_MS = EXPIRY_CACHE_UPLOAD_MS; // selaras dgn cache upload sukses di atas
+
+function bacaSemuaSesiPending() {
+  try {
+    const raw = sessionStorage.getItem(KUNCI_STORAGE_SESI_PENDING);
+    return raw ? JSON.parse(raw) : {};
+  } catch (_e) { return {}; }
+}
+
+function tulisSemuaSesiPending(obj) {
+  try { sessionStorage.setItem(KUNCI_STORAGE_SESI_PENDING, JSON.stringify(obj)); }
+  catch (_e) { /* storage penuh/diblokir (mode privat dll) -- abaikan, degradasi ke perilaku lama */ }
+}
+
+function simpanSesiPendingKeStorage(nik, layanan, k, item, uploadSessionUri, folderId) {
+  const semua = bacaSemuaSesiPending();
+  const now = Date.now();
+  Object.keys(semua).forEach(function (kk) {
+    if (now - semua[kk].waktu > EXPIRY_SESI_PENDING_MS) delete semua[kk];
+  });
+  const sig = item ? `${item.namaFile}:${item.ukuranByte}` : '';
+  semua[kunciCacheUploadDrive(nik, layanan, k)] = { uploadSessionUri: uploadSessionUri, folderId: folderId, sig: sig, waktu: now };
+  tulisSemuaSesiPending(semua);
+}
+
+function ambilSesiPendingDariStorage(nik, layanan, k, item) {
+  const semua = bacaSemuaSesiPending();
+  const entri = semua[kunciCacheUploadDrive(nik, layanan, k)];
+  if (!entri || Date.now() - entri.waktu > EXPIRY_SESI_PENDING_MS) return null;
+  const sig = item ? `${item.namaFile}:${item.ukuranByte}` : '';
+  if (entri.sig !== sig) return null;
+  return entri;
+}
+
+function hapusSesiPendingDariStorage(nik, layanan, k) {
+  const semua = bacaSemuaSesiPending();
+  delete semua[kunciCacheUploadDrive(nik, layanan, k)];
+  tulisSemuaSesiPending(semua);
 }
 
 // Cek status sesi resumable yg SUDAH ADA (dipakai sblm retry bikin sesi BARU) -- PUT kosong dgn
@@ -650,13 +710,16 @@ function bersihkanCacheUploadUntukNik(nik, layanan) {
 // ke browser (mis. koneksi putus tepat setelah Drive selesai proses, sebelum body respons
 // terkirim). Tanpa cek ini, retry lama langsung minta sesi baru & upload ulang dari nol,
 // meninggalkan file dari attempt sebelumnya sbg FILE DOBEL yatim di Drive.
+// Return shape: { complete: true, fileId } | { complete: false, partial: true, resumeFromByte } |
+// { complete: false, partial: false, gone: true }. "gone" berarti sesi sudah tidak valid (404/410,
+// respons tak terduga, atau network error saat cek) -- pemanggil harus minta sesi baru.
 function cekStatusSesiUpload(url) {
   return new Promise(function (resolve) {
     const xhr = new XMLHttpRequest();
     try {
       xhr.open('PUT', url, true);
     } catch (e) {
-      resolve(null);
+      resolve({ complete: false, partial: false, gone: true });
       return;
     }
     xhr.timeout = 15000;
@@ -668,14 +731,25 @@ function cekStatusSesiUpload(url) {
       if (xhr.status === 200 || xhr.status === 201) {
         try {
           const data = JSON.parse(xhr.responseText);
-          resolve(data && data.id ? data.id : null);
-          return;
-        } catch (eParse) { /* fallthrough ke resolve(null) di bawah */ }
+          if (data && data.id) { resolve({ complete: true, fileId: data.id }); return; }
+        } catch (eParse) { /* fallthrough ke gone di bawah */ }
+        resolve({ complete: false, partial: false, gone: true });
+        return;
       }
-      resolve(null); // 308 (belum lengkap), 404/410 (sesi hilang/kedaluwarsa), atau lainnya
+      if (xhr.status === 308) {
+        // Resume Incomplete -- kalau sudah ada byte masuk, Google sertakan header
+        // "Range: bytes=0-N" (byte 0..N SUDAH diterima, lanjut dari N+1). Kalau belum ada byte
+        // sama sekali, sesi tetap valid tapi header Range ini tidak disertakan.
+        const rangeHeader = xhr.getResponseHeader('Range');
+        const match = rangeHeader ? /bytes=0-(\d+)/.exec(rangeHeader) : null;
+        resolve({ complete: false, partial: true, resumeFromByte: match ? Number(match[1]) + 1 : 0 });
+        return;
+      }
+      // 404/410 (sesi hilang/kedaluwarsa) atau status lain tak terduga -> anggap sesi tak valid lagi
+      resolve({ complete: false, partial: false, gone: true });
     };
-    xhr.onerror = function () { resolve(null); };
-    xhr.ontimeout = function () { resolve(null); };
+    xhr.onerror = function () { resolve({ complete: false, partial: false, gone: true }); };
+    xhr.ontimeout = function () { resolve({ complete: false, partial: false, gone: true }); };
     xhr.send();
   });
 }
@@ -689,13 +763,16 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
 
   const hasilDariCache = [];
   const kunciList = [];
+  const sesiPendingDariStorage = {}; // k -> { uploadSessionUri, folderId, sig, waktu } (lihat T4)
   kunciListSemua.forEach(function (k) {
     const cached = ambilCacheUploadSukses(nikKonteks, layananKonteks, k, berkasMap[k]);
     if (cached) {
       hasilDariCache.push({ k: k, fileId: cached.fileId, gagal: null, folderIdCache: cached.folderId });
-    } else {
-      kunciList.push(k);
+      return;
     }
+    kunciList.push(k);
+    const pending = ambilSesiPendingDariStorage(nikKonteks, layananKonteks, k, berkasMap[k]);
+    if (pending) sesiPendingDariStorage[k] = pending;
   });
 
   // Semua berkas sudah pernah sukses terunggah (isi sama persis) -- lompat langsung ke langkah
@@ -725,20 +802,47 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     if (progressSub) progressSub.innerText = 'Menyiapkan pengunggahan berkas ke Google Drive...';
   }
 
-  // Langkah 1: minta sesi resumable Drive utk SELURUH berkas sekaligus (1 request) -- backend
-  // resolve/buat rantai folder (Kecamatan/Layanan/Nama(NIK)) SEKALI di sini, baru inisiasi sesi
-  // upload per berkas secara paralel. Lihat domains/upload.ts::mintaUrlUploadBerkasDrive.
+  // Langkah 1: minta sesi resumable Drive -- backend resolve/buat rantai folder
+  // (Kecamatan/Layanan/Nama(NIK)) SEKALI di sini, baru inisiasi sesi upload per berkas secara
+  // paralel. Lihat domains/upload.ts::mintaUrlUploadBerkasDrive.
+  //
+  // T4: berkas yg SUDAH punya sesi pending tersimpan dari tab-life sebelumnya (reload/crash
+  // setelah PUT byte sukses tapi sebelum konfirmasi -- lihat sesiPendingDariStorage di atas)
+  // TIDAK ikut diminta sesi baru di sini. Sesi lamanya akan dicek dulu statusnya (lewat
+  // cekStatusSesiUpload di uploadSatuBerkasDenganRetry) sebelum diputuskan lanjut/reset --
+  // supaya kalau ternyata sudah (sebagian/seluruhnya) ter-upload, tidak minta sesi baru & bikin
+  // file lama jadi FILE DOBEL YATIM di Drive.
   const metaMap = {};
   kunciList.forEach(function (k) { metaMap[k] = metaSatuBerkas(berkasMap[k]); });
 
-  const hasilSesiAwal = await panggilAksiDenganRetry('mintaUrlUploadBerkasDrive', 2, dataPengguna.token, konteks, metaMap);
-  if (!hasilSesiAwal || !hasilSesiAwal.sukses) {
-    if (progressContainer) progressContainer.classList.add('hidden');
-    return { sukses: false, pesan: hasilSesiAwal ? hasilSesiAwal.pesan : 'Tidak ada respons dari server saat menyiapkan upload.' };
+  const kunciButuhSesiBaru = kunciList.filter(function (k) { return !sesiPendingDariStorage[k]; });
+  let folderId = null;
+  let daftarSesi = {};
+  if (kunciButuhSesiBaru.length > 0) {
+    const metaMapBaru = {};
+    kunciButuhSesiBaru.forEach(function (k) { metaMapBaru[k] = metaMap[k]; });
+    const hasilSesiAwal = await panggilAksiDenganRetry('mintaUrlUploadBerkasDrive', 2, dataPengguna.token, konteks, metaMapBaru);
+    if (!hasilSesiAwal || !hasilSesiAwal.sukses) {
+      if (progressContainer) progressContainer.classList.add('hidden');
+      return { sukses: false, pesan: hasilSesiAwal ? hasilSesiAwal.pesan : 'Tidak ada respons dari server saat menyiapkan upload.' };
+    }
+    folderId = hasilSesiAwal.folderId;
+    daftarSesi = hasilSesiAwal.daftarSesi || {};
+    kunciButuhSesiBaru.forEach(function (k) {
+      if (daftarSesi[k] && daftarSesi[k].uploadSessionUri) {
+        simpanSesiPendingKeStorage(nikKonteks, layananKonteks, k, berkasMap[k], daftarSesi[k].uploadSessionUri, folderId);
+      }
+    });
   }
-  const folderId = hasilSesiAwal.folderId;
+  // Berkas dgn sesi pending dari storage: pakai lagi URI sesi lamanya (tandai dariPending supaya
+  // uploadSatuBerkasDenganRetry SELALU cek status dulu, tidak asumsi byte 0 spt sesi baru).
+  // folderId 1 NIK+layanan seharusnya sama persis siapa pun sumbernya -- fallback ke yg tersimpan
+  // di sesi pending kalau tidak ada batch sesi-baru sama sekali (semua berkas dari pending).
+  Object.keys(sesiPendingDariStorage).forEach(function (k) {
+    daftarSesi[k] = { uploadSessionUri: sesiPendingDariStorage[k].uploadSessionUri, dariPending: true };
+    if (!folderId) folderId = sesiPendingDariStorage[k].folderId;
+  });
   const konteksDenganFolder = Object.assign({}, konteks, { folderId: folderId });
-  let daftarSesi = hasilSesiAwal.daftarSesi || {};
 
   // Progress agregat BYTE-LEVEL (bukan cuma lompat per-file selesai) -- total dihitung dari
   // ukuranByte tiap berkas (sudah dikirim ke backend di langkah 1), lalu tiap berkas melaporkan
@@ -767,16 +871,29 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   }
 
   // PUT byte ke Drive lewat XHR (bukan fetch) supaya bisa dapat event progress real-time.
-  function putBlobKeDrive(url, blob, mimeType, onProgress) {
+  // resumeFromByte>0 (T5): lanjutkan sesi resumable yg sebagian sudah ter-upload -- kirim HANYA
+  // sisa byte yg belum masuk (blob.slice), dgn header Content-Range (BUKAN Content-Type -- protokol
+  // resumable upload Drive cuma menerima Content-Type di request PEMBUKA sesi, chunk lanjutan wajib
+  // tanpa itu). onProgress selalu dipanggil dgn posisi byte ABSOLUT (relatif ke seluruh file),
+  // bukan relatif ke potongan yg dikirim, supaya progress bar tetap akurat saat resume.
+  function putBlobKeDrive(url, blob, mimeType, onProgress, resumeFromByte, totalBytes) {
     return new Promise(function (resolve, reject) {
+      const mulaiDariByte = resumeFromByte || 0;
+      const ukuranTotal = totalBytes || blob.size;
+      const bodyDikirim = mulaiDariByte > 0 ? blob.slice(mulaiDariByte) : blob;
+
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', url, true);
       xhr.timeout = 120000; // 2 menit -- generus utk berkas 25MB di koneksi lambat, tapi tetap
       // mencegah PUT menggantung tanpa batas kalau koneksi stall total (memicu retry di pemanggil).
-      xhr.setRequestHeader('Content-Type', mimeType || 'application/octet-stream');
+      if (mulaiDariByte > 0) {
+        xhr.setRequestHeader('Content-Range', `bytes ${mulaiDariByte}-${ukuranTotal - 1}/${ukuranTotal}`);
+      } else {
+        xhr.setRequestHeader('Content-Type', mimeType || 'application/octet-stream');
+      }
       xhr.setRequestHeader('x-session-token', dataPengguna.token);
       xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable && typeof onProgress === 'function') onProgress(e.loaded);
+        if (e.lengthComputable && typeof onProgress === 'function') onProgress(mulaiDariByte + e.loaded);
       };
       xhr.onload = function () {
         if (xhr.status >= 200 && xhr.status < 300) {
@@ -791,44 +908,61 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       };
       xhr.onerror = function () { reject(new Error('Kendala jaringan saat upload ke Drive.')); };
       xhr.ontimeout = function () { reject(new Error('Batas waktu upload ke Drive terlampaui.')); };
-      xhr.send(blob);
+      xhr.send(bodyDikirim);
     });
   }
 
   // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan). Attempt pertama pakai
-  // sesi yang sudah didapat dari langkah 1; retry minta SESI BARU (sesi resumable lama bisa saja
-  // sudah kedaluwarsa/gagal di tengah), folderId sudah diketahui jadi tidak perlu resolusi ulang.
+  // sesi yang sudah didapat dari langkah 1 (atau dipulihkan dari storage, lihat T4); retry
+  // (attempt>0) ATAU sesi yg dipulihkan dari tab-life sebelumnya SELALU dicek dulu statusnya ke
+  // Google (cekStatusSesiUpload) sebelum PUT -- sesi itu bisa saja sudah SEBAGIAN/SELURUHNYA
+  // ter-upload tanpa sepengetahuan kita (T5: resume dari byte yg sudah masuk, bukan restart
+  // total; T4: kalau ternyata sudah lengkap, langsung dianggap selesai tanpa PUT ulang sama
+  // sekali). Sesi BENAR-BENAR baru (baru diminta di attempt ini) tidak perlu dicek -- pasti byte 0.
   async function uploadSatuBerkasDenganRetry(k, item, maxRetries) {
     const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
     const labelBerkas = item.label || k;
+    const totalByteBerkas = metaMap[k].ukuranByte || (item.file ? item.file.size : 0);
 
     function tandaiSelesai(fileId) {
-      bytesTerunggahPerBerkas[k] = metaMap[k].ukuranByte || bytesTerunggahPerBerkas[k];
+      bytesTerunggahPerBerkas[k] = totalByteBerkas || bytesTerunggahPerBerkas[k];
       berkasSelesai++;
       updateProgressUI(labelBerkas, false);
       simpanCacheUploadSukses(nikKonteks, layananKonteks, k, item, fileId, folderId);
+      hapusSesiPendingDariStorage(nikKonteks, layananKonteks, k); // T4: tuntas, jejak sesi pending tidak perlu lagi
       return { k: k, fileId: fileId, gagal: null };
     }
 
     let lastErrorMsg = null;
     let sesiUriAktif = daftarSesi[k] && daftarSesi[k].uploadSessionUri;
+    // Sesi yg dipulihkan dari storage (tab-life sebelumnya) belum diketahui progressnya -- WAJIB
+    // dicek dulu walau ini baru attempt pertama di run ini.
+    let sesiPerluDicekStatusnya = Boolean(daftarSesi[k] && daftarSesi[k].dariPending);
+
     for (let attempt = 0; attempt <= limitRetry; attempt++) {
       bytesTerunggahPerBerkas[k] = 0; // reset progress berkas ini kalau ini percobaan ulang
       if (attempt > 0) {
         if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}... ⏱️`;
         await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
-
-        if (sesiUriAktif) {
-          const fileIdSudahAda = await cekStatusSesiUpload(sesiUriAktif);
-          if (fileIdSudahAda) return tandaiSelesai(fileIdSudahAda);
-        }
+        sesiPerluDicekStatusnya = true; // sesi ini sudah pernah dipakai PUT di attempt sebelumnya
       } else {
         updateProgressUI(labelBerkas, true);
       }
 
+      let resumeFromByte = 0;
+      if (sesiUriAktif && sesiPerluDicekStatusnya) {
+        const status = await cekStatusSesiUpload(sesiUriAktif);
+        if (status.complete) return tandaiSelesai(status.fileId);
+        if (status.partial) {
+          resumeFromByte = status.resumeFromByte || 0;
+        } else {
+          sesiUriAktif = null; // sesi sudah tak valid (gone) -- minta baru di bawah
+        }
+      }
+
       try {
         let uploadSessionUri = sesiUriAktif;
-        if (!uploadSessionUri || attempt > 0) {
+        if (!uploadSessionUri) {
           const metaSatu = {};
           metaSatu[k] = metaSatuBerkas(item);
           const hasilUlang = await panggilAksiPromise('mintaUrlUploadBerkasDrive', dataPengguna.token, konteksDenganFolder, metaSatu);
@@ -836,13 +970,16 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
             throw new Error(hasilUlang ? hasilUlang.pesan : 'Gagal menyiapkan ulang sesi upload.');
           }
           uploadSessionUri = hasilUlang.daftarSesi[k].uploadSessionUri;
+          resumeFromByte = 0; // sesi baru, pasti mulai dari 0
         }
         sesiUriAktif = uploadSessionUri;
+        sesiPerluDicekStatusnya = true; // kalau attempt berikutnya perlu, sesi ini sudah "dipakai"
+        simpanSesiPendingKeStorage(nikKonteks, layananKonteks, k, item, uploadSessionUri, folderId);
 
-        const dataPut = await putBlobKeDrive(uploadSessionUri, item.file, item.mimeType, function (loaded) {
-          bytesTerunggahPerBerkas[k] = loaded;
+        const dataPut = await putBlobKeDrive(uploadSessionUri, item.file, item.mimeType, function (bytesAbsolut) {
+          bytesTerunggahPerBerkas[k] = bytesAbsolut;
           updateProgressUI(labelBerkas, true);
-        });
+        }, resumeFromByte, totalByteBerkas);
         if (!dataPut || !dataPut.id) throw new Error('Respons upload Drive tidak berisi ID berkas.');
 
         return tandaiSelesai(dataPut.id);
@@ -977,12 +1114,18 @@ function labelBerkasSimpanBaru(layanan) {
 }
 
 function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
+  // Sertakan idempotency key agar server bisa mengenali retry dari pengiriman yang sama.
+  if (idempotencyKeySimpan) dataObjek.idempotencyKey = idempotencyKeySimpan;
+
   function eksekusiSimpan() {
     google.script.run
       .withSuccessHandler(function (response) {
         if (typeof pulihkanTombol === 'function') pulihkanTombol();
         loadingOverlay.classList.add('hidden');
         if (response.sukses) {
+          // Setelah sukses, reset kunci — pengiriman berikutnya harus pakai kunci baru.
+          idempotencyKeySimpan = null;
+          idempotencyFingerprintSimpan = null;
           bersihkanCacheUploadUntukNik(dataObjek.inputNik, dataObjek.selectLayanan);
           invalidateCacheDataTransaksi();
           hapusDrafLokalForm();
@@ -996,7 +1139,28 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
       .withFailureHandler(function (errSimpan) {
         if (typeof pulihkanTombol === 'function') pulihkanTombol();
         loadingOverlay.classList.add('hidden');
-        tampilkanToast(pesanErrorRamah(errSimpan), 'gagal', { durasi: 6000 });
+        // Jika error karena koneksi putus/timeout (bukan error validasi dari server),
+        // tampilkan panduan khusus agar operator tidak panik dan tahu apa yang harus dilakukan.
+        const pesanError = errSimpan && errSimpan.message ? errSimpan.message : String(errSimpan);
+        const adalahErrorKoneksi = pesanError.includes('Koneksi terputus') ||
+          pesanError.includes('timeout') || pesanError.includes('Timeout') ||
+          pesanError.includes('network') || pesanError.includes('fetch');
+        if (adalahErrorKoneksi) {
+          // Respons hilang bukan berarti data gagal masuk -- server bisa saja sudah commit
+          // sebelum koneksi putus (lihat idempotency key di atas). Buang cache "Lihat Data"/
+          // dashboard/kuota supaya SARAN toast di bawah ("cek menu Lihat Data") betul2 akurat --
+          // tanpa ini, cache SWR yang masih dianggap segar (<20 detik) akan menampilkan data
+          // BASI tanpa fetch ulang sama sekali, membuat user salah kira data belum tersimpan.
+          if (window.djpmCache) window.djpmCache.invalidate(['penerima', 'dashboard', 'kuota'], true);
+          tampilkanToast(
+            '⚠️ Koneksi terputus saat mengirim. Cek menu Lihat Data — jika data sudah ada, maka BERHASIL. ' +
+            'Jika belum ada, tekan Simpan lagi. Data tidak akan dobel.',
+            'peringatan',
+            { durasi: 12000 }
+          );
+        } else {
+          tampilkanToast(pesanErrorRamah(errSimpan), 'gagal', { durasi: 6000 });
+        }
       })
       .simpanDataKeSheet(dataPengguna.token, dataObjek);
   }
@@ -1159,6 +1323,27 @@ function bangunHtmlHighlight(namaAsli, kataPembanding) {
 let namaBerbedaDikonfirmasi = false;
 let catatanPerbedaanNamaTersimpan = "";
 
+// Kunci unik sekali pakai (UUID) yang di-generate SAAT tombol Konfirmasi diklik.
+// Dikirim bersama data ke server. Jika koneksi putus setelah data berhasil masuk
+// tapi sebelum respons balik ke browser, retry dengan kunci SAMA akan langsung
+// mendapat jawaban sukses dari server tanpa menulis data dobel.
+let idempotencyKeySimpan = null;
+// "Sidik jari" data yang terakhir dipakai membuat idempotencyKeySimpan -- dipakai memastikan
+// key lama HANYA dipakai ulang kalau NIK/rekening yang dikirim benar2 sama seperti percobaan
+// sebelumnya. Tanpa ini, kalau submit pertama sudah sukses (tapi responsnya hilang) lalu user
+// keliru mengubah NIK/rekening sebelum menekan Simpan lagi, key lama bisa membuat server
+// mengembalikan hasil sukses yang di-cache dari data LAMA tanpa menulis data BARU yang berbeda.
+let idempotencyFingerprintSimpan = null;
+
+function generateUUID() {
+  // RFC 4122 UUID v4 — cukup unik untuk idempotency key.
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 function resetKonfirmasiNamaBeda() {
   namaBerbedaDikonfirmasi = false;
   catatanPerbedaanNamaTersimpan = "";
@@ -1266,6 +1451,17 @@ formPembayaran.addEventListener('submit', (e) => {
 
 document.getElementById('btn-konfirmasi-ok').addEventListener('click', function () {
   document.getElementById('modal-konfirmasi-simpan').classList.add('hidden');
+  // Pakai lagi kunci idempotency yang masih menggantung dari percobaan sebelumnya HANYA kalau
+  // data yang mau dikirim (NIK + nomor rekening) persis sama seperti saat kunci itu dibuat --
+  // supaya retry manual (buka modal lagi -> Konfirmasi lagi) dgn data SAMA dikenali server sbg
+  // pengiriman yang sama (bukan dobel), tapi kalau user sempat mengubah NIK/rekening di antara
+  // percobaan, kunci lama dibuang dan yang baru dibuat (mencegah server keliru mengembalikan hasil
+  // cache dari data lama utk data baru yang berbeda).
+  const fingerprintSaatIni = (inputNik ? inputNik.value : '') + '|' + (inputNoRek ? inputNoRek.value : '');
+  if (!idempotencyKeySimpan || idempotencyFingerprintSimpan !== fingerprintSaatIni) {
+    idempotencyKeySimpan = generateUUID();
+    idempotencyFingerprintSimpan = fingerprintSaatIni;
+  }
   prosesValidasiDanSimpan();
 });
 

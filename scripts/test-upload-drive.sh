@@ -69,8 +69,12 @@ echo "-> Folder ID: $FOLDER_ID"
 echo "-> Upload session URI didapat."
 
 echo
-echo "== 3. PUT byte file LANGSUNG ke Google (bukan ke edge function) =="
-PUT_RES=$(curl -sS -X PUT "$UPLOAD_URI" -H "Content-Type: $TEST_MIME" --data-binary "@$TEST_FILE")
+echo "== 3. PUT byte file lewat proxy Edge Function (driveProxy.ts) ke Google =="
+# CATATAN (2026-09-19): sejak fix CORS 2026-09-18, UPLOAD_URI di atas SUDAH berupa URL proxy
+# Edge Function kita (endpoint /drive-proxy-upload), BUKAN lagi URL googleapis.com langsung --
+# proxy ini WAJIB header x-session-token (lihat driveProxy.ts tanganiProxyUploadDrive). Tanpa
+# header ini permintaan akan ditolak 401, bukan menguji upload sungguhan.
+PUT_RES=$(curl -sS -X PUT "$UPLOAD_URI" -H "Content-Type: $TEST_MIME" -H "x-session-token: $TOKEN" --data-binary "@$TEST_FILE")
 echo "$PUT_RES"
 FILE_ID=$(ambil_json "$PUT_RES" "id")
 echo "-> File ID: $FILE_ID"

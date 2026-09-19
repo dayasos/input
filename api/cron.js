@@ -27,11 +27,19 @@ export default async function handler(req, res) {
   const rawUrl = process.env.SUPABASE_EDGE_FUNCTION_URL ||
     (process.env.GAS_API_URL && process.env.GAS_API_URL.includes('/functions/v1/') ? process.env.GAS_API_URL : '');
   const supabaseUrl = rawUrl ? rawUrl.trim().replace(/^["']|["']$/g, '') : '';
-  const gasSecret = process.env.GAS_SECRET_TOKEN || 'DJPM2027_DEFAULT_SECRET';
+  // Secret WAJIB diset lewat env var -- TIDAK ADA LAGI fallback ke nilai default yang tertulis
+  // di kode. Pola yang sama sudah dibenahi di api/gas.js (2026-09-15) setelah nilai default itu
+  // ketahuan masih dipakai di produksi -- ini kejadian yang sama, cuma kelewat di file ini.
+  const gasSecret = process.env.GAS_SECRET_TOKEN || '';
 
   if (!supabaseUrl) {
     return res.status(500).json({
       error: 'SUPABASE_EDGE_FUNCTION_URL belum diset di environment variables Vercel.'
+    });
+  }
+  if (!gasSecret) {
+    return res.status(500).json({
+      error: 'GAS_SECRET_TOKEN belum diset di environment variables Vercel. Cron dihentikan (fail-closed) daripada mengirim secret default yang bisa ditebak.'
     });
   }
 

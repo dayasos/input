@@ -294,8 +294,11 @@ async function pastikanSheetTersedia(spreadsheetId: string, accessToken: string,
         body: JSON.stringify({ requests }),
       });
     }
-  } catch (_e) {
-    // Non-blocking fallback
+  } catch (e) {
+    // Non-blocking: kegagalan bikin sheet baru tidak menghentikan proses backup utama.
+    // Tetap di-log (BUKAN dibungkam total) supaya muncul di Supabase Function Logs -- tanpa ini,
+    // sheet target bisa hilang/gagal dibuat berkali-kali tanpa ada jejak sama sekali.
+    console.error("backup-spreadsheet: gagal pastikanSheetTersedia:", e);
   }
 }
 
@@ -315,7 +318,28 @@ Deno.serve(async (req: Request) => {
   const secretHeader = req.headers.get("x-sync-secret") || "";
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-  const expectedSecret = Deno.env.get("SYNC_WORKER_SECRET") || Deno.env.get("GAS_SECRET_TOKEN") || "DJPM2027_BACKUP_SECRET";
+  // PENTING -- PRASYARAT SEBELUM DEPLOY PERUBAHAN INI:
+  // Fallback hardcode "DJPM2027_BACKUP_SECRET" SUDAH DIHAPUS (2026-09-19) karena literal yang
+  // SAMA PERSIS ada di migrasi git supabase/migrations/20260916160000_realtime_auth_and_backup_cron.sql
+  // (coalesce(... , 'DJPM2027_BACKUP_SECRET') pada job pg_cron) -- siapapun yang baca repo bisa
+  // panggil endpoint ini tanpa otorisasi asli selama Vault secret belum diset. Sekarang fail-closed
+  // sama seperti pola di api/cron.js (2026-09-15).
+  //
+  // WAJIB DILAKUKAN DULU SEBELUM DEPLOY: buka Supabase Dashboard -> Database -> Vault, pastikan
+  // ada secret bernama "sync_worker_secret" terisi (nilai bebas, string acak panjang), DAN nilai
+  // itu SAMA PERSIS dengan yang dipakai di coalesce() pada migrasi 20260916160000 di atas. Kalau
+  // belum ada / belum disamakan, cron backup 3x/hari akan berhenti total (500) tanpa peringatan
+  // lain begitu perubahan ini di-deploy.
+  const expectedSecret = Deno.env.get("SYNC_WORKER_SECRET") || Deno.env.get("GAS_SECRET_TOKEN") || "";
+
+  if (!expectedSecret) {
+    return new Response(JSON.stringify({
+      error: "SYNC_WORKER_SECRET belum diset di environment/Vault. Backup dihentikan (fail-closed) daripada menerima secret default yang bisa ditebak dari kode.",
+    }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
   if (secretHeader !== expectedSecret && token !== expectedSecret) {
     return new Response(JSON.stringify({ error: "Unauthorized: Kredensial tidak sah" }), {
@@ -488,13 +512,19 @@ Deno.serve(async (req: Request) => {
         },
         body: JSON.stringify({ values: [logRow] }),
       },
-    ).catch(() => { /* non-blocking */ });
+    ).catch((e) => {
+      // Non-blocking: gagal nulis log tidak boleh gagalkan backup yg sudah sukses -- tapi tetap
+      // di-log supaya tidak sepenuhnya tak berjejak (lihat catatan T9 di plan review).
+      console.error("backup-spreadsheet: gagal append Log_Backup:", e);
+    });
 
     // 10. Catat log ke tabel log_backup_sistem di PostgreSQL
     await sql`
       insert into log_backup_sistem (waktu, status, jumlah_baris, durasi_ms, mode, pesan_error)
       values (now(), 'SUKSES', ${mergedPenerima.values.length - 1}, ${durasiMs}, ${mode}, ${keteranganLog})
-    `.catch(() => { /* non-blocking */ });
+    `.catch((e) => {
+      console.error("backup-spreadsheet: gagal insert log_backup_sistem (SUKSES):", e);
+    });
 
     return new Response(
       JSON.stringify({
@@ -513,11 +543,17 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     const pesan = error instanceof Error ? error.message : String(error);
     const durasiMs = Date.now() - mulai;
+    // Backup GAGAL -- ini yang paling penting utk kelihatan. Log dulu ke console (Supabase
+    // Function Logs) SEBELUM coba tulis ke DB, supaya kalau tulis log kegagalan ini SENDIRI ikut
+    // gagal (mis. DB down), kegagalan backup-nya tetap tercatat di suatu tempat.
+    console.error(`backup-spreadsheet: BACKUP GAGAL (mode=${mode}, durasi=${durasiMs}ms):`, pesan);
 
     await sql`
       insert into log_backup_sistem (waktu, status, jumlah_baris, durasi_ms, mode, pesan_error)
       values (now(), 'GAGAL', 0, ${durasiMs}, ${mode}, ${pesan})
-    `.catch(() => { /* non-blocking */ });
+    `.catch((e) => {
+      console.error("backup-spreadsheet: gagal insert log_backup_sistem (GAGAL) -- lihat baris di atas utk pesan error asli:", e);
+    });
 
     return new Response(
       JSON.stringify({

@@ -18,7 +18,14 @@ function buatToken(): string {
 
 type CacheSesiEntry = { data: DataSesi; expiryMs: number };
 const _sesiCache = new Map<string, CacheSesiEntry>();
-const SESI_CACHE_TTL_MS = 60_000; // 60 detik
+// Cache in-memory ini PER-ISOLATE Deno -- Supabase Edge Function jalan di banyak isolate paralel,
+// dan hapusSesi() cuma bersihkan cache di isolate yang menangani request logout itu (lihat
+// invalidasiSesiCache di bawah). Isolate LAIN yang kebetulan sudah cache token yang sama tetap
+// menganggap sesi valid sampai TTL ini habis, walau baris di DB sudah dihapus -- celah desain
+// bawaan, bukan bug baru. TTL sengaja pendek (bukan 60 detik seperti semula) utk memperkecil
+// jendela "logout belum berlaku di semua request" ini, sambil tetap dapat manfaat cache utk
+// request beruntun dalam 1 isolate yang sama.
+const SESI_CACHE_TTL_MS = 10_000; // 10 detik
 
 function _ambilDariCache(token: string): DataSesi | null {
   const entry = _sesiCache.get(token);

@@ -69,7 +69,7 @@ async function _fetchViaProxy(payload, signal) {
 // di app-transaksi.js). Tanpa ini, koneksi yang stall total (bukan error, cuma menggantung) bikin
 // fetchPromise TIDAK PERNAH resolve/reject -- successHandler/failureHandler tidak pernah dipanggil
 // dan UI (tombol submit, spinner, dsb.) macet permanen sampai user reload manual.
-const _TIMEOUT_AKSI_MS = 25000;
+const _TIMEOUT_AKSI_MS = 58000;
 
 /** True hanya utk error level-jaringan (offline/DNS/stall) yang AMAN diulang tanpa efek samping. */
 function _apakahErrorLayakRetry(err) {
@@ -586,7 +586,12 @@ class GoogleScriptRunProxy {
                 const contentType = res.headers.get('content-type') || '';
                 if (!res.ok) {
                   if (res.status === 413) {
-                    throw new Error('Ukuran berkas melebihi batas upload Vercel (maks 4.5 MB). Mohon perkecil ukuran foto atau berkas yang diunggah.');
+                    // Sejak upload berkas dipindah ke jalur proxy Drive (driveProxy.ts, 2026-09-18),
+                    // byte file TIDAK lagi lewat jalur aksi JSON ini -- jadi 413 di sini bukan lagi
+                    // soal ukuran FOTO/BERKAS (pesan lama sebut "batas Vercel 4.5MB" sudah usang &
+                    // salah diagnosis). Kalau muncul, ini soal ukuran PAYLOAD AKSI itu sendiri
+                    // (mis. terlalu banyak data terkirim di satu panggilan), bukan berkas upload.
+                    throw new Error('Ukuran permintaan terlalu besar untuk diproses server. Coba lagi dengan data yang lebih kecil.');
                   }
                   if (res.status === 504) {
                     throw new Error('Permintaan ke server mengalami batas waktu (timeout). Silakan coba beberapa saat lagi.');

@@ -146,8 +146,15 @@ export interface HasilSesiResumable {
 }
 
 // Langkah 1 protokol resumable upload Drive: minta "sesi upload" (Location header), belum kirim
-// byte apa pun. Browser yang nanti PUT langsung ke uploadSessionUri ini -- byte file TIDAK PERNAH
-// singgah di Edge Function/Vercel.
+// byte apa pun.
+//
+// KOREKSI (2026-09-19): komentar sebelumnya di sini bilang byte file "TIDAK PERNAH singgah di
+// Edge Function/Vercel" -- itu SUDAH TIDAK BENAR sejak 2026-09-18. uploadSessionUri ini TIDAK
+// dikirim apa adanya ke browser: upload.ts membungkusnya lewat bangunUrlProxyUpload() (lihat
+// driveProxy.ts) krn PUT browser->Google langsung diblokir CORS. Browser PUT byte ke URL PROXY
+// Edge Function kita, yang lalu meneruskan SELURUH body (tidak di-chunk) ke Google secara
+// server-to-server. Jadi byte file SEKARANG lewat Edge Function (2 hop: browser->Edge
+// Function->Google), bukan 1 hop langsung -- lihat catatan risiko ukuran/waktu di driveProxy.ts.
 export async function mulaiSesiResumable(
   accessToken: string,
   folderId: string,
