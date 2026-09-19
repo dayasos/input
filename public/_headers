@@ -4,4 +4,4 @@
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: geolocation=*, camera=*, microphone=*, clipboard-read=*, clipboard-write=*
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), clipboard-read=(), clipboard-write=(self)

@@ -2,16 +2,20 @@
   "name": "djpm-2027",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "npm run build:css && vite",
+    "build": "npm run build:css && vite build",
+    "build:css": "tailwindcss -i ./tailwind.input.css -o ./public/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./tailwind.input.css -o ./public/css/tailwind.css --watch",
     "preview": "vite preview",
     "check-lines": "node scripts/verify-lines.js"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.3",
     "googleapis": "^178.0.0",
     "pg": "^8.23.0",
     "pptxgenjs": "^4.0.1",
     "supabase": "^2.116.0",
+    "tailwindcss": "^4.3.3",
     "vite": "^8.3.0"
   }
 }

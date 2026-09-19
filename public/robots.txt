@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://inputdjpm2027.vercel.app/sitemap.xml

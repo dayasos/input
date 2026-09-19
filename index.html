@@ -5,6 +5,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sistem Layanan Data Penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027</title>
+  <meta name="description"
+    content="Portal resmi Pemerintah Kota Medan untuk input dan verifikasi data penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Tahun 2027, digunakan oleh operator Kecamatan dan Kantor Kementerian Agama se-Kota Medan.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://inputdjpm2027.vercel.app/">
+  <!-- Open Graph & Twitter Card -- supaya link yang dibagikan (WhatsApp/Telegram/email, maupun
+       hasil pencarian) tampil dengan judul, deskripsi, dan gambar yang rapi. -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="DJPM 2027 - Pemerintah Kota Medan">
+  <meta property="og:title" content="Sistem Layanan Data Penerima Dana Jasa Pelayanan Kota Medan 2027">
+  <meta property="og:description"
+    content="Portal internal input & verifikasi data penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027.">
+  <meta property="og:image" content="https://inputdjpm2027.vercel.app/icons/icon-512.png">
+  <meta property="og:url" content="https://inputdjpm2027.vercel.app/">
+  <meta property="og:locale" content="id_ID">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Sistem Layanan Data Penerima Dana Jasa Pelayanan Kota Medan 2027">
+  <meta name="twitter:description"
+    content="Portal internal input & verifikasi data penerima Dana Jasa Pelayanan Kepada Warga Pelayan Masyarakat Kota Medan Tahun 2027.">
+  <meta name="twitter:image" content="https://inputdjpm2027.vercel.app/icons/icon-512.png">
   <link rel="icon" type="image/png" href="/logo-medan.png">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
@@ -37,7 +56,10 @@
       }
     });
   </script>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Tailwind di-compile saat build (npm run build:css), BUKAN Play CDN -- CDN itu
+       eksplisit tidak direkomendasikan untuk production oleh Tailwind sendiri: JIT-compile
+       ulang di browser tiap render + 1 request blocking ke CDN pihak ketiga. -->
+  <link rel="stylesheet" href="/css/tailwind.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -242,8 +264,12 @@
       } catch (e) { }
     })();
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/js/api-bridge.js"></script>
+  <!-- defer (bukan blocking): urutan eksekusi antar script defer tetap terjaga sesuai posisi
+       di dokumen, termasuk relatif thd app-core.js/app-transaksi.js/app-admin.js di akhir body
+       -- jangan hapus defer dari salah satu tanpa menambahkannya ke semua, lihat urutan sama
+       di penutup body. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="/js/api-bridge.js" defer></script>
 </head>
 
 <body class="bg-slate-100 min-h-screen flex flex-col overflow-x-hidden">
@@ -2935,9 +2961,9 @@
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
-  <script src="/js/app-core.js"></script>
-  <script src="/js/app-transaksi.js"></script>
-  <script src="/js/app-admin.js"></script>
+  <script src="/js/app-core.js" defer></script>
+  <script src="/js/app-transaksi.js" defer></script>
+  <script src="/js/app-admin.js" defer></script>
 
 
 </body>

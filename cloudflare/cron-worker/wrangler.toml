@@ -1,0 +1,24 @@
+# Worker terpisah khusus untuk cron harian "cekBatasWaktuVerifikasi".
+#
+# KENAPA TERPISAH DARI PROJECT PAGES:
+# Cloudflare Pages Functions (folder /functions di root project) TIDAK mendukung Cron Triggers --
+# itu fitur khusus Workers biasa. Jadi situs (Pages) dan cron ini adalah DUA deployment terpisah
+# di akun Cloudflare yang sama. Tidak saling bergantung -- kalau salah satu bermasalah, yang lain
+# tetap jalan normal.
+#
+# CARA DEPLOY (dari folder ini, cloudflare/cron-worker/):
+#   npx wrangler login          # sekali saja, buka browser utk otorisasi akun Cloudflare
+#   npx wrangler secret put GAS_SECRET_TOKEN
+#   npx wrangler secret put SUPABASE_EDGE_FUNCTION_URL
+#   npx wrangler secret put SUPABASE_ANON_KEY
+#   npx wrangler secret put CRON_SECRET       # opsional, utk trigger manual via HTTP
+#   npx wrangler deploy
+
+name = "djpm2027-cron"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# 18:00 UTC setiap hari = 01:00 WIB (WIB = UTC+7). Sama persis dengan jadwal
+# "crons" di vercel.json sebelumnya.
+[triggers]
+crons = ["0 18 * * *"]

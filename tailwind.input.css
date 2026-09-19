@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Sumber yang di-scan untuk kelas Tailwind (pengganti Play CDN yang men-scan seluruh DOM di
+   browser saat runtime -- lihat catatan "kenapa tidak pakai CDN" di index.html). */
+@source "./index.html";
+@source "./public/js/**/*.js";
+
+/* Kelas yang dibentuk dinamis lewat template literal (mis. `bg-${warnaBox}-50` di
+   app-transaksi.js renderBaca()) tidak bisa dideteksi scanner statis di atas -- daftarkan
+   eksplisit di sini SETIAP kali variabel warna baru ditambah, jangan andalkan kebetulan
+   sudah dipakai literal di tempat lain. */
+@source inline("bg-{amber,red}-50");
+@source inline("border-{amber,red}-200");
+@source inline("text-{amber,red}-700");
+@source inline("text-{amber,red}-500");
