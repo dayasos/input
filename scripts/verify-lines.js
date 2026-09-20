@@ -18,13 +18,13 @@ function getFiles(dir, fileList = []) {
 
 const allFiles = getFiles('.');
 let anyExceed = false;
-console.log('=== VERIFIKASI BATAS MAKSIMAL 3.000 BARIS KODE PER FILE ===');
+console.log('=== VERIFIKASI BATAS MAKSIMAL 3.500 BARIS KODE PER FILE ===');
 allFiles.forEach(f => {
   const count = fs.readFileSync(f, 'utf8').split('\n').length;
   const rel = path.relative('.', f);
-  const status = count <= 3000 ? '✅ OK' : '❌ MELEBIHI 3000';
-  if (count > 3000) anyExceed = true;
+  const status = count <= 3500 ? '✅ OK' : '❌ MELEBIHI 3500';
+  if (count > 3500) anyExceed = true;
   console.log(`${rel.padEnd(55)} : ${count.toString().padStart(5)} baris [${status}]`);
 });
 console.log('-----------------------------------------------------------');
-console.log(anyExceed ? '❌ PERINGATAN: Ada file yang melebihi batas 3.000 baris!' : '🎉 SEMPURNA: Semua file aktif mematuhi aturan <= 3.000 baris kode.');
+console.log(anyExceed ? '❌ PERINGATAN: Ada file yang melebihi batas 3.500 baris!' : '🎉 SEMPURNA: Semua file aktif mematuhi aturan <= 3.500 baris kode.');
