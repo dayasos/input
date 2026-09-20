@@ -2394,13 +2394,13 @@ var _LIST_KECAMATAN_MEDAN = (typeof DAFTAR_KECAMATAN_MEDAN !== 'undefined' && Ar
   ];
 
 var DAFTAR_JENIS_IBADAH_ADMIN = [
-  { val: 'MASJID', label: 'MASJID 🕌' },
-  { val: 'MUSHOLLA', label: 'MUSHOLLA 🕋' },
-  { val: 'GEREJA', label: 'GEREJA ⛪' },
-  { val: 'PGK', label: 'PETUGAS GEREJA KATOLIK (PGK) ✝️' },
-  { val: 'VIHARA', label: 'VIHARA 🛕' },
-  { val: 'KUIL', label: 'KUIL 🏛️' },
-  { val: 'VIHARA_KLENTENG_KUIL', label: 'VIHARA / KLENTENG / KUIL 🏮' }
+  { val: 'MASJID', label: 'MASJID' },
+  { val: 'MUSHOLLA', label: 'MUSHOLLA' },
+  { val: 'GEREJA', label: 'GEREJA' },
+  { val: 'PGK', label: 'PETUGAS GEREJA KATOLIK (PGK)' },
+  { val: 'VIHARA', label: 'VIHARA' },
+  { val: 'KUIL', label: 'KUIL' },
+  { val: 'VIHARA_KLENTENG_KUIL', label: 'VIHARA / KLENTENG / KUIL' }
 ];
 
 let _halamanRiAktif = 1;
@@ -2410,13 +2410,13 @@ let _cacheBarisRi = {};
 
 function badgeJenisRumahIbadah(jenis) {
   const j = String(jenis || '').toUpperCase();
-  if (j === 'MASJID') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">MASJID</span>';
-  if (j === 'MUSHOLLA') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-teal-100 text-teal-800 border border-teal-200">MUSHOLLA</span>';
-  if (j === 'GEREJA') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-sky-100 text-sky-800 border border-sky-200">GEREJA</span>';
-  if (j === 'PGK') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-indigo-100 text-indigo-800 border border-indigo-200">GEREJA KATOLIK</span>';
-  if (j === 'VIHARA') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-100 text-amber-800 border border-amber-200">VIHARA</span>';
-  if (j === 'KUIL') return '<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-orange-100 text-orange-800 border border-orange-200">KUIL</span>';
-  return `<span class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-700 border border-slate-200">${typeof esc === 'function' ? esc(j) : j}</span>`;
+  if (j === 'MASJID') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">MASJID</span>';
+  if (j === 'MUSHOLLA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-700 border border-teal-200">MUSHOLLA</span>';
+  if (j === 'GEREJA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-sky-50 text-sky-700 border border-sky-200">GEREJA</span>';
+  if (j === 'PGK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">GEREJA KATOLIK</span>';
+  if (j === 'VIHARA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">VIHARA</span>';
+  if (j === 'KUIL') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">KUIL</span>';
+  return `<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700 border border-slate-200">${typeof esc === 'function' ? esc(j) : j}</span>`;
 }
 
 function pastikanModalRumahIbadahSiap() {
@@ -2431,9 +2431,13 @@ function pastikanModalRumahIbadahSiap() {
     <div id="modal-kelola-rumah-ibadah" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4" onclick="if(event.target===this)this.classList.add('hidden')">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
         <!-- Header -->
-        <div class="flex justify-between items-center px-6 py-4 bg-slate-800 text-white shrink-0">
-          <div class="flex items-center gap-2.5">
-            <span class="text-xl sm:text-2xl">🕌</span>
+        <div class="flex justify-between items-center px-5 sm:px-6 py-4 bg-slate-800 text-white shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
             <div>
               <h3 class="text-sm font-bold tracking-wide uppercase">Manajemen Data Rumah Ibadah</h3>
               <p class="text-[11px] text-slate-300">Kelola master data rumah ibadah se-Kota Medan secara terpusat</p>
@@ -2447,8 +2451,10 @@ function pastikanModalRumahIbadahSiap() {
           <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 min-w-0">
             <div class="relative flex-1 min-w-0">
               <input type="text" id="cari-kelola-ri" placeholder="Cari tempat ibadah, alamat, kelurahan..." oninput="filterTabelRumahIbadah()"
-                class="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white" style="text-transform:none">
-              <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">🔍</span>
+                class="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white" style="text-transform:none">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
             <div class="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
               <select id="filter-jenis-kelola-ri" onchange="filterTabelRumahIbadah()"
@@ -2465,12 +2471,18 @@ function pastikanModalRumahIbadahSiap() {
           </div>
           <div class="flex items-center justify-end gap-2 shrink-0">
             <button type="button" onclick="muatDaftarRumahIbadahAdmin(_halamanRiAktif)"
-              class="flex-1 sm:flex-initial justify-center px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1">
-              🔄 Refresh
+              class="flex-1 sm:flex-initial justify-center px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 active:scale-95">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>Muat Ulang</span>
             </button>
             <button type="button" onclick="bukaModalTambahRumahIbadah()"
-              class="flex-1 sm:flex-initial justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1">
-              ➕ Tambah Rumah Ibadah
+              class="flex-1 sm:flex-initial justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Tambah Rumah Ibadah</span>
             </button>
           </div>
         </div>
@@ -2487,7 +2499,7 @@ function pastikanModalRumahIbadahSiap() {
                   <th class="px-3 py-2.5">Kecamatan</th>
                   <th class="px-3 py-2.5">Kelurahan</th>
                   <th class="px-3 py-2.5">Alamat</th>
-                  <th class="px-3 py-2.5 text-center w-28">Aksi</th>
+                  <th class="px-3 py-2.5 text-center w-36">Aksi</th>
                 </tr>
               </thead>
               <tbody id="tbody-kelola-ri" class="divide-y divide-slate-100 bg-white text-slate-700">
@@ -2505,13 +2517,19 @@ function pastikanModalRumahIbadahSiap() {
           <span id="info-total-kelola-ri" class="text-xs text-slate-500 font-medium text-center sm:text-left">Total: 0 data</span>
           <div class="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap">
             <button type="button" id="btn-prev-page-ri" onclick="gantiHalamanRi(-1)"
-              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">
-              ◀ Sebelumnya
+              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              <span>Sebelumnya</span>
             </button>
-            <span id="label-halaman-ri" class="text-xs font-semibold text-slate-700 px-1">1 / 1</span>
+            <span id="label-halaman-ri" class="text-xs font-semibold text-slate-700 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-xs">1 / 1</span>
             <button type="button" id="btn-next-page-ri" onclick="gantiHalamanRi(1)"
-              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">
-              Berikutnya ▶
+              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
+              <span>Berikutnya</span>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
             </button>
             <button type="button" onclick="document.getElementById('modal-kelola-rumah-ibadah').classList.add('hidden')"
               class="ml-1 sm:ml-2 px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">
@@ -2526,8 +2544,12 @@ function pastikanModalRumahIbadahSiap() {
     <div id="modal-form-rumah-ibadah" class="hidden fixed inset-0 z-[170] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4" onclick="if(event.target===this)this.classList.add('hidden')">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">
         <div class="flex justify-between items-center px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-800 text-white shrink-0">
-          <div class="flex items-center gap-2">
-            <span class="text-lg">🕌</span>
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
             <div>
               <h3 id="judul-modal-form-ri" class="text-sm font-bold tracking-wide uppercase">Tambah Rumah Ibadah Baru</h3>
               <p class="text-[11px] text-slate-300">Isi kelengkapan data rumah ibadah Kota Medan</p>
@@ -2573,8 +2595,11 @@ function pastikanModalRumahIbadahSiap() {
             <button type="button" onclick="document.getElementById('modal-form-rumah-ibadah').classList.add('hidden')"
               class="flex-1 sm:flex-initial px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition text-center">Batal</button>
             <button type="submit" id="btn-submit-mri"
-              class="flex-1 sm:flex-initial px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition text-center">
-              Simpan Data
+              class="flex-1 sm:flex-initial px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition text-center flex items-center justify-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Simpan Data</span>
             </button>
           </div>
         </form>
@@ -2669,14 +2694,16 @@ function muatDaftarRumahIbadahAdmin(page) {
             <td class="px-3 py-2.5 text-center">
               <div class="flex items-center justify-center gap-1.5">
                 <button type="button" onclick="bukaModalEditRumahIbadah(${r.id})"
-                  class="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
+                  class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
                   title="Edit Data">
-                  ✏️ Edit
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  <span>Edit</span>
                 </button>
                 <button type="button" onclick="konfirmasiHapusRumahIbadah(${r.id}, '${(r.nama || '').replace(/'/g, "\\'")}')"
-                  class="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
+                  class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
                   title="Hapus Data">
-                  🗑️ Hapus
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  <span>Hapus</span>
                 </button>
               </div>
             </td>
@@ -2704,7 +2731,7 @@ function bukaModalTambahRumahIbadah() {
   if (idEl) idEl.value = '';
 
   const judul = document.getElementById('judul-modal-form-ri');
-  if (judul) judul.textContent = '➕ Tambah Rumah Ibadah Baru';
+  if (judul) judul.textContent = 'Tambah Rumah Ibadah Baru';
 
   const selectKel = document.getElementById('mri-kelurahan');
   if (selectKel) selectKel.innerHTML = '<option value="">-- Pilih Kelurahan --</option>';
@@ -2758,7 +2785,7 @@ function bukaModalEditRumahIbadah(id) {
   const alamatEl = document.getElementById('mri-alamat');
   const judul = document.getElementById('judul-modal-form-ri');
 
-  if (judul) judul.textContent = '✏️ Edit Data Rumah Ibadah';
+  if (judul) judul.textContent = 'Edit Data Rumah Ibadah';
   if (idEl) idEl.value = row.id;
   if (jenisEl) jenisEl.value = row.jenis;
   if (kecEl) kecEl.value = row.kecamatan;
