@@ -754,6 +754,12 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (btnKelolaUser) btnKelolaUser.classList.toggle('hidden', role !== "UTAMA");
   const btnKelolaRumahIbadah = document.getElementById('btn-kelola-rumah-ibadah');
   if (btnKelolaRumahIbadah) btnKelolaRumahIbadah.classList.toggle('hidden', role !== "UTAMA");
+  if (role !== "UTAMA") {
+    const mKelolaRi = document.getElementById('modal-kelola-rumah-ibadah');
+    if (mKelolaRi) mKelolaRi.classList.add('hidden');
+    const mFormRi = document.getElementById('modal-form-rumah-ibadah');
+    if (mFormRi) mFormRi.classList.add('hidden');
+  }
   const btnDashboardProgres = document.getElementById('btn-dashboard-progres');
   if (btnDashboardProgres) btnDashboardProgres.classList.remove('hidden');
 

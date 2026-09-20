@@ -2578,9 +2578,6 @@ function pastikanModalRumahIbadahSiap() {
             </button>
           </div>
         </form>
-            </button>
-          </div>
-        </form>
       </div>
     </div>
   `);
@@ -2614,6 +2611,12 @@ function gantiHalamanRi(arah) {
 }
 
 function muatDaftarRumahIbadahAdmin(page) {
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    if (typeof tampilkanToast === 'function') {
+      tampilkanToast('Akses ditolak: Hanya Admin Utama yang memiliki wewenang.', 'gagal');
+    }
+    return;
+  }
   pastikanModalRumahIbadahSiap();
   _halamanRiAktif = Math.max(1, page || 1);
 
@@ -2689,6 +2692,10 @@ function muatDaftarRumahIbadahAdmin(page) {
 }
 
 function bukaModalTambahRumahIbadah() {
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    if (typeof tampilkanToast === 'function') tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menambah data.', 'gagal');
+    return;
+  }
   pastikanModalRumahIbadahSiap();
   const form = document.getElementById('form-modal-ri');
   if (form) form.reset();
@@ -2735,6 +2742,10 @@ function handleKecamatanFormRiChange(callbackKelurahanDipilih) {
 }
 
 function bukaModalEditRumahIbadah(id) {
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    if (typeof tampilkanToast === 'function') tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat mengedit data.', 'gagal');
+    return;
+  }
   const row = _cacheBarisRi[id];
   if (!row) return;
 
@@ -2764,6 +2775,13 @@ function bukaModalEditRumahIbadah(id) {
 
 function simpanRumahIbadah(event) {
   if (event) event.preventDefault();
+
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    if (typeof tampilkanToast === 'function') {
+      tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menyimpan data.', 'gagal');
+    }
+    return;
+  }
 
   const id = document.getElementById('mri-id')?.value;
   const jenis = (document.getElementById('mri-jenis')?.value || '').trim();
@@ -2826,6 +2844,13 @@ function simpanRumahIbadah(event) {
 }
 
 async function konfirmasiHapusRumahIbadah(id, nama) {
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    if (typeof tampilkanToast === 'function') {
+      tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menghapus data.', 'gagal');
+    }
+    return;
+  }
+
   const yakin = (typeof window.konfirmasiAksi === 'function')
     ? await window.konfirmasiAksi({
       judul: 'Hapus Tempat Ibadah',
