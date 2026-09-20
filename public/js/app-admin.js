@@ -694,9 +694,9 @@ function tampilkanModalUpdate() {
       wrap.className = "rounded-xl px-4 py-3 border border-red-200 bg-red-50";
       labelEl.className = "text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-red-600";
       valueEl.className = "text-sm font-bold text-red-900";
-      valueEl.textContent = "🔒 DITUTUP";
-      ikonEl.textContent = "🔒";
-      btn.textContent = "🔓 BUKA PERIODE INPUT";
+      valueEl.textContent = "DITUTUP";
+      ikonEl.innerHTML = '<div class="w-10 h-10 rounded-xl bg-red-100 border border-red-200 text-red-600 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg></div>';
+      btn.innerHTML = '<span class="inline-flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg><span>BUKA PERIODE INPUT</span></span>';
       btn.className = "w-full py-2.5 font-bold text-sm rounded-lg shadow transition bg-emerald-600 hover:bg-emerald-700 text-white";
       btn.disabled = false;
       btn.onclick = function () { konfirmasiToggleSakelar(true); };
@@ -704,9 +704,9 @@ function tampilkanModalUpdate() {
       wrap.className = "rounded-xl px-4 py-3 border border-emerald-200 bg-emerald-50";
       labelEl.className = "text-[10px] font-semibold uppercase tracking-wider mb-0.5 text-emerald-600";
       valueEl.className = "text-sm font-bold text-emerald-900";
-      valueEl.textContent = "🔓 DIBUKA";
-      ikonEl.textContent = "🔓";
-      btn.textContent = "🔒 TUTUP PERIODE INPUT";
+      valueEl.textContent = "DIBUKA";
+      ikonEl.innerHTML = '<div class="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-200 text-emerald-600 flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg></div>';
+      btn.innerHTML = '<span class="inline-flex items-center justify-center gap-2"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg><span>TUTUP PERIODE INPUT</span></span>';
       btn.className = "w-full py-2.5 font-bold text-sm rounded-lg shadow transition bg-red-600 hover:bg-red-700 text-white";
       btn.disabled = false;
       btn.onclick = function () { konfirmasiToggleSakelar(false); };
@@ -810,7 +810,9 @@ function tampilkanModalUpdate() {
         }
         semuaUser = res.daftar || [];
         masterKetutup = !!res.masterKetutup;
-        document.getElementById('ku-master-status').textContent = masterKetutup ? "🔒 DITUTUP" : "🔓 DIBUKA";
+        document.getElementById('ku-master-status').innerHTML = masterKetutup
+          ? '<span class="inline-flex items-center gap-1.5 text-red-700"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg><span>DITUTUP</span></span>'
+          : '<span class="inline-flex items-center gap-1.5 text-emerald-700"><svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg><span>DIBUKA</span></span>';
         document.getElementById('ku-master-status').className = masterKetutup
           ? "text-sm font-bold text-red-700 mt-0.5"
           : "text-sm font-bold text-emerald-700 mt-0.5";
@@ -901,21 +903,21 @@ function tampilkanModalUpdate() {
   function renderKartuUser(u) {
     const statusTeks = u.status;
     const sumberTeks = u.sumber === "KHUSUS" ? "Khusus" : "Default (Master)";
-    let warnaBadge, warnaBg, ikon;
+    let warnaBadge, warnaBg, ikonSvg;
     if (u.status === "BUKA") {
-      warnaBadge = u.sumber === "KHUSUS" ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-800 border border-emerald-300";
-      warnaBg = u.sumber === "KHUSUS" ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white";
-      ikon = "🟢";
+      warnaBadge = u.sumber === "KHUSUS" ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-700 border border-emerald-300";
+      warnaBg = u.sumber === "KHUSUS" ? "border-emerald-300 bg-emerald-50/50" : "border-slate-200 bg-white";
+      ikonSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-current inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>';
     } else {
-      warnaBadge = u.sumber === "KHUSUS" ? "bg-red-600 text-white" : "bg-red-100 text-red-800 border border-red-300";
-      warnaBg = u.sumber === "KHUSUS" ? "border-red-300 bg-red-50" : "border-slate-200 bg-white";
-      ikon = "🔴";
+      warnaBadge = u.sumber === "KHUSUS" ? "bg-red-600 text-white" : "bg-red-50 text-red-700 border border-red-300";
+      warnaBg = u.sumber === "KHUSUS" ? "border-red-300 bg-red-50/50" : "border-slate-200 bg-white";
+      ikonSvg = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-current inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>';
     }
 
     const namaTampil = u.nama || u.username;
     const infoKecKemenag = [u.role, u.kecamatan].filter(Boolean).join(" • ");
 
-    return `<div class="border-2 rounded-xl px-3 py-2.5 ${warnaBg}" data-user-id="${esc(u.userId)}">
+    return `<div class="border-2 rounded-xl px-3.5 py-3 ${warnaBg} transition" data-user-id="${esc(u.userId)}">
       <div class="flex items-start justify-between gap-2">
         <div class="flex-1 min-w-0">
           <div class="font-bold text-sm text-slate-800 truncate">${esc(namaTampil)}</div>
@@ -924,14 +926,23 @@ function tampilkanModalUpdate() {
           <div class="text-[10px] text-slate-400 truncate mt-0.5 font-mono">ID: ${esc(u.userId || "(kosong)")}</div>
         </div>
         <div class="flex flex-col items-end gap-1.5 shrink-0">
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${warnaBadge}">${ikon} ${statusTeks}</span>
-          <span class="text-[9px] text-slate-500">${sumberTeks}</span>
+          <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full inline-flex items-center ${warnaBadge}">${ikonSvg}<span>${statusTeks}</span></span>
+          <span class="text-[9px] text-slate-500 font-medium">${sumberTeks}</span>
         </div>
       </div>
-      <div class="mt-2 pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5">
-        <button data-aksi="BUKA" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 text-[11px] font-bold rounded-md transition ${u.status === "BUKA" ? "bg-emerald-200 text-emerald-800 cursor-not-allowed opacity-60" : "bg-emerald-600 hover:bg-emerald-700 text-white"}" ${u.status === "BUKA" ? "disabled" : ""}>🔓 Buka</button>
-        <button data-aksi="TUTUP" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 text-[11px] font-bold rounded-md transition ${u.status === "TUTUP" ? "bg-red-200 text-red-800 cursor-not-allowed opacity-60" : "bg-red-600 hover:bg-red-700 text-white"}" ${u.status === "TUTUP" ? "disabled" : ""}>🔒 Tutup</button>
-        <button data-aksi="RESET" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 text-[11px] font-bold rounded-md transition ${u.sumber === "MASTER" ? "bg-slate-200 text-slate-500 cursor-not-allowed opacity-60" : "bg-slate-600 hover:bg-slate-700 text-white"}" ${u.sumber === "MASTER" ? "disabled" : ""}>⚪ Reset</button>
+      <div class="mt-2.5 pt-2 border-t border-slate-100 grid grid-cols-3 gap-1.5">
+        <button data-aksi="BUKA" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 px-2 text-[11px] font-bold rounded-lg transition flex items-center justify-center gap-1 ${u.status === "BUKA" ? "bg-emerald-100 text-emerald-700 cursor-not-allowed opacity-60" : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"}" ${u.status === "BUKA" ? "disabled" : ""}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-current shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/></svg>
+          <span>Buka</span>
+        </button>
+        <button data-aksi="TUTUP" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 px-2 text-[11px] font-bold rounded-lg transition flex items-center justify-center gap-1 ${u.status === "TUTUP" ? "bg-red-100 text-red-700 cursor-not-allowed opacity-60" : "bg-red-600 hover:bg-red-700 text-white shadow-xs"}" ${u.status === "TUTUP" ? "disabled" : ""}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-current shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span>Tutup</span>
+        </button>
+        <button data-aksi="RESET" data-user-id="${esc(u.userId)}" class="ku-btn-aksi py-1.5 px-2 text-[11px] font-bold rounded-lg transition flex items-center justify-center gap-1 ${u.sumber === "MASTER" ? "bg-slate-100 text-slate-400 cursor-not-allowed opacity-60" : "bg-slate-600 hover:bg-slate-700 text-white shadow-xs"}" ${u.sumber === "MASTER" ? "disabled" : ""}>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-current shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>Reset</span>
+        </button>
       </div>
     </div>`;
   }
@@ -1064,8 +1075,8 @@ function tampilkanModalUpdate() {
       btnEksekusi.disabled = true;
       return;
     }
-    const namaAksi = bkAksiTerpilih === "BUKA" ? "🔓 BUKA" : (bkAksiTerpilih === "TUTUP" ? "🔒 TUTUP" : "⚪ RESET");
-    preview.innerHTML = "Akan " + namaAksi + " untuk <strong>" + jumlah + " user</strong> di <strong>" + esc(kecLabel) + "</strong>.";
+    const namaAksi = bkAksiTerpilih === "BUKA" ? "BUKA" : (bkAksiTerpilih === "TUTUP" ? "TUTUP" : "RESET");
+    preview.innerHTML = "Akan <strong>" + namaAksi + "</strong> untuk <strong>" + jumlah + " user</strong> di <strong>" + esc(kecLabel) + "</strong>.";
     preview.classList.remove('hidden');
     btnEksekusi.disabled = false;
   }
@@ -1093,7 +1104,7 @@ function tampilkanModalUpdate() {
           document.getElementById('bk-eksekusi').textContent = "Eksekusi";
           const pesan = document.getElementById('bk-pesan');
           if (res && res.sukses) {
-            pesan.textContent = "✅ " + res.pesan;
+            pesan.textContent = res.pesan;
             pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-emerald-50 border-emerald-200 text-emerald-700";
             pesan.classList.remove('hidden');
             setTimeout(function () {
@@ -1101,7 +1112,7 @@ function tampilkanModalUpdate() {
               bukaModalKelolaUser(); // reload daftar user
             }, 1500);
           } else {
-            pesan.textContent = "❌ " + (res ? res.pesan : "Unknown error");
+            pesan.textContent = (res ? res.pesan : "Unknown error");
             pesan.className = "text-xs font-medium rounded-lg px-3 py-2 border bg-red-50 border-red-200 text-red-700";
             pesan.classList.remove('hidden');
             document.getElementById('bk-eksekusi').disabled = false;
@@ -1568,7 +1579,7 @@ function openModal(kategori) {
       const pesan = (typeof pesanErrorRamah === 'function') ? pesanErrorRamah(err) : 'Gagal memuat data. Silakan coba lagi.';
       bodyRi.innerHTML =
         '<tr><td colspan="5" class="text-center p-4 text-red-600 text-sm whitespace-pre-line">' + esc(pesan) + '</td></tr>' +
-        '<tr><td colspan="5" class="text-center pb-4"><button type="button" id="btn-retry-modal-ri" class="bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-sky-700">🔄 Coba Lagi</button></td></tr>';
+        '<tr><td colspan="5" class="text-center pb-4"><button type="button" id="btn-retry-modal-ri" class="inline-flex items-center gap-1.5 bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-sky-700 transition"><svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Coba Lagi</span></button></td></tr>';
       const btnRetry = document.getElementById('btn-retry-modal-ri');
       if (btnRetry) btnRetry.addEventListener('click', function () { openModal(kategori); });
     })
@@ -1796,7 +1807,7 @@ function loadDataToModal(sheetName) {
       const pesan = (typeof pesanErrorRamah === 'function') ? pesanErrorRamah(err) : 'Gagal memuat data. Silakan coba lagi.';
       contentArea.innerHTML =
         "<p class='text-center p-4 text-red-600 text-sm whitespace-pre-line'>" + esc(pesan) + "</p>" +
-        "<div class='text-center pb-2'><button type='button' id='btn-retry-modal-kemenag' class='bg-sky-600 text-white px-3 py-1.5 rounded text-xs font-semibold hover:bg-sky-700'>🔄 Coba Lagi</button></div>";
+        "<div class='text-center pb-2'><button type='button' id='btn-retry-modal-kemenag' class='inline-flex items-center gap-1.5 bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-sky-700 transition'><svg xmlns='http://www.w3.org/2000/svg' class='w-3.5 h-3.5' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15'/></svg><span>Coba Lagi</span></button></div>";
       const btnRetry = document.getElementById('btn-retry-modal-kemenag');
       if (btnRetry) btnRetry.addEventListener('click', function () { loadDataToModal(sheetName); });
     })
@@ -1980,10 +1991,21 @@ function renderTabelKelolaUser(list) {
       <td class="px-3 py-2.5 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${roleBadgeColor}">${esc(u.role)}</span></td>
       <td class="px-3 py-2.5 text-xs text-slate-600">${esc(u.kecamatan || '-')}</td>
       <td class="px-3 py-2.5 text-xs text-slate-600 font-mono">${esc(u.nomorHp || '-')}</td>
-      <td class="px-3 py-2.5 text-xs text-center space-x-1 whitespace-nowrap">
-        <button onclick="bukaModalEditUser('${esc(u.username)}')" class="px-2 py-1 bg-sky-50 text-sky-600 hover:bg-sky-100 rounded text-[11px] font-semibold transition" title="Edit Akun">✏️ Edit</button>
-        <button onclick="bukaModalResetSandiUser('${esc(u.username)}')" class="px-2 py-1 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded text-[11px] font-semibold transition" title="Reset Password">🔑 Reset</button>
-        <button onclick="konfirmasiHapusUser('${esc(u.username)}')" class="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-[11px] font-semibold transition" title="Hapus Akun">🗑️ Hapus</button>
+      <td class="px-3 py-2.5 text-xs text-center">
+        <div class="flex items-center justify-center gap-1.5">
+          <button onclick="bukaModalEditUser('${esc(u.username)}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1" title="Edit Akun">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            <span>Edit</span>
+          </button>
+          <button onclick="bukaModalResetSandiUser('${esc(u.username)}')" class="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1" title="Reset Password">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-amber-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+            <span>Reset</span>
+          </button>
+          <button onclick="konfirmasiHapusUser('${esc(u.username)}')" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1" title="Hapus Akun">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>Hapus</span>
+          </button>
+        </div>
       </td>
     </tr>`;
   });

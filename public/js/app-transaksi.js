@@ -69,23 +69,18 @@ function bacaGpsDariFile(file) {
       try {
         const view = new DataView(e.target.result);
         if (view.getUint16(0, false) !== 0xFFD8) { resolve(null); return; }
-
         let offset = 2;
         const length = view.byteLength;
-
         while (offset < length - 4) {
           if (view.getUint8(offset) !== 0xFF) break;
           const marker = view.getUint16(offset, false);
-
           if (marker === 0xFFE1) {
             const exifStart = offset + 4;
             if (view.getUint32(exifStart, false) !== 0x45786966) { resolve(null); return; } // bukan "Exif"
-
             const tiffOffset = exifStart + 6;
             const little = view.getUint16(tiffOffset, false) === 0x4949;
             const firstIFDOffset = view.getUint32(tiffOffset + 4, little);
             const ifdOffset = tiffOffset + firstIFDOffset;
-
             const numEntries = view.getUint16(ifdOffset, little);
             let gpsIFDOffset = null;
             for (let i = 0; i < numEntries; i++) {
@@ -96,14 +91,12 @@ function bacaGpsDariFile(file) {
               }
             }
             if (!gpsIFDOffset) { resolve(null); return; }
-
             const gpsEntries = view.getUint16(gpsIFDOffset, little);
             const gpsTags = {};
             for (let i = 0; i < gpsEntries; i++) {
               const entryOffset = gpsIFDOffset + 2 + i * 12;
               const tag = view.getUint16(entryOffset, little);
               const valueOffset = tiffOffset + view.getUint32(entryOffset + 8, little);
-
               if (tag === 1 || tag === 3) {
                 gpsTags[tag] = String.fromCharCode(view.getUint8(entryOffset + 8));
               } else if (tag === 2 || tag === 4) {
@@ -116,7 +109,6 @@ function bacaGpsDariFile(file) {
                 gpsTags[tag] = vals;
               }
             }
-
             if (gpsTags[2] && gpsTags[4]) {
               let lat = gpsTags[2][0] + gpsTags[2][1] / 60 + gpsTags[2][2] / 3600;
               let lng = gpsTags[4][0] + gpsTags[4][1] / 60 + gpsTags[4][2] / 3600;
@@ -128,7 +120,6 @@ function bacaGpsDariFile(file) {
             }
             return;
           }
-
           const segLength = view.getUint16(offset + 2, false);
           offset += 2 + segLength;
         }
@@ -144,30 +135,8 @@ function bacaGpsDariFile(file) {
 
 // Koordinat Lokasi EXIF
 const KONFIG_KOORDINAT = {
-  plank: {
-    layananList: ["GURU MAGHRIB MENGAJI"],
-    wrapperId: 'wrapper-foto-plank',
-    idHidden: 'hidden-koordinat-link',
-    idCek: 'status-koordinat-cek',
-    idOk: 'status-koordinat-ok',
-    idGagal: 'status-koordinat-gagal',
-    idTeksOk: 'teks-koordinat-ok',
-    idLinkOk: 'link-koordinat-ok',
-    idInputManual: 'input-koordinat-manual',
-    siap: false
-  },
-  ibadah: {
-    layananList: ["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU"],
-    wrapperId: 'wrapper-foto-ibadah',
-    idHidden: 'hidden-koordinat-link-ibadah',
-    idCek: 'status-koordinat-cek-ibadah',
-    idOk: 'status-koordinat-ok-ibadah',
-    idGagal: 'status-koordinat-gagal-ibadah',
-    idTeksOk: 'teks-koordinat-ok-ibadah',
-    idLinkOk: 'link-koordinat-ok-ibadah',
-    idInputManual: 'input-koordinat-manual-ibadah',
-    siap: false
-  }
+  plank: { layananList: ["GURU MAGHRIB MENGAJI"], wrapperId: 'wrapper-foto-plank', idHidden: 'hidden-koordinat-link', idCek: 'status-koordinat-cek', idOk: 'status-koordinat-ok', idGagal: 'status-koordinat-gagal', idTeksOk: 'teks-koordinat-ok', idLinkOk: 'link-koordinat-ok', idInputManual: 'input-koordinat-manual', siap: false },
+  ibadah: { layananList: ["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU"], wrapperId: 'wrapper-foto-ibadah', idHidden: 'hidden-koordinat-link-ibadah', idCek: 'status-koordinat-cek-ibadah', idOk: 'status-koordinat-ok-ibadah', idGagal: 'status-koordinat-gagal-ibadah', idTeksOk: 'teks-koordinat-ok-ibadah', idLinkOk: 'link-koordinat-ok-ibadah', idInputManual: 'input-koordinat-manual-ibadah', siap: false }
 };
 
 function updateStatusTombolSimpan() {
@@ -227,18 +196,14 @@ async function prosesKoordinatDariFoto(file, mode) {
   if (!file) return;
   const cfg = KONFIG_KOORDINAT[mode];
   if (cfg.layananList.indexOf(selectLayanan.value) === -1) return;
-
   document.getElementById(cfg.idCek).classList.remove('hidden');
-
   try {
     const gps = await bacaGpsDariFile(file);
     document.getElementById(cfg.idCek).classList.add('hidden');
-
     if (gps && gps.latitude && gps.longitude) {
       const lat = gps.latitude.toFixed(6);
       const lng = gps.longitude.toFixed(6);
       const mapsLink = 'https://www.google.com/maps?q=' + lat + ',' + lng;
-
       document.getElementById(cfg.idHidden).value = mapsLink;
       document.getElementById(cfg.idTeksOk).innerText = lat + ', ' + lng;
       document.getElementById(cfg.idLinkOk).onclick = function () { window.open(mapsLink, '_blank'); };
@@ -268,7 +233,6 @@ function evaluasiUploadKondisional() {
   wrapperRekomendasiRi.classList.add('hidden');
   filePlank.required = false; fileIbadah.required = false; fileKegiatan.required = false;
   fileRekomendasiBkm.required = false; fileRekomendasiRi.required = false;
-
   const labelBerkasPendukung2 = document.getElementById('label-berkas-pendukung-2');
   if (labelBerkasPendukung2) {
     if (lay === "USTADZ" || lay === "USTADZAH") {
@@ -277,7 +241,6 @@ function evaluasiUploadKondisional() {
       labelBerkasPendukung2.innerHTML = 'Unggah Berkas Pendukung <span class="text-red-500">*</span>';
     }
   }
-
   if (lay !== "GURU MAGHRIB MENGAJI") {
     const hiddenJenis = document.getElementById('jenis-tempat-gmm-hidden');
     if (hiddenJenis) hiddenJenis.value = "";
@@ -287,12 +250,10 @@ function evaluasiUploadKondisional() {
     resetStatusKoordinat('ibadah');
   }
   bukaKunciTempatTugas();
-
   if (instansiAktif === "KEMENAG" && lay !== "") {
     if (lay === "GURU MAGHRIB MENGAJI") {
       wrapperPlank.classList.remove('hidden'); wrapperKegiatan.classList.remove('hidden');
       filePlank.required = true; fileKegiatan.required = true;
-
       const jenisTempat = (document.getElementById('jenis-tempat-gmm-hidden') || {}).value || "";
       if (jenisTempat === "MASJID" || jenisTempat === "MUSHOLLA") {
         wrapperRekomendasiBkm.classList.remove('hidden');
@@ -321,14 +282,12 @@ btnResetForm.addEventListener('click', () => {
     idempotencyFingerprintSimpan = null;
     inputUmur.value = "";
     resetSemuaKuncianForm();
-
     const hiddenJenis = document.getElementById('jenis-tempat-gmm-hidden');
     if (hiddenJenis) hiddenJenis.value = "";
     resetSemuaStatusKoordinat();
     bukaKunciTempatTugas();
     resetKonfirmasiNamaBeda();
     evaluasiUploadKondisional();
-
     sembunyikanPeringatan('peringatan-nik');
     sembunyikanPeringatan('peringatan-rekening');
     sembunyikanPeringatan('peringatan-tempat-tugas');
@@ -354,7 +313,6 @@ function simpanDrafLokalForm() {
     const elNamaRek = document.getElementById('input-nama-rek');
     const elCabang = document.getElementById('input-cabang-bank');
     const elBpjs = document.getElementById('input-bpjs');
-
     const draf = {
       instansiAktif: typeof instansiAktif !== 'undefined' ? instansiAktif : '',
       controlKecamatan: controlKecamatan ? controlKecamatan.value : '',
@@ -377,7 +335,6 @@ function simpanDrafLokalForm() {
       selectBpjs: elBpjs ? elBpjs.value : '',
       waktuSimpan: Date.now()
     };
-
     if (draf.inputNik || draf.inputNama || draf.inputTempatTugas || draf.inputNoRekening) {
       sessionStorage.setItem(KUNCI_DRAF_STORAGE, JSON.stringify(draf));
     }
@@ -410,18 +367,15 @@ function pulihkanDrafLokalForm() {
     if (!raw) return;
     const draf = JSON.parse(raw);
     if (!draf) return;
-
     if (draf.controlKecamatan && controlKecamatan && !controlKecamatan.disabled) {
       controlKecamatan.value = draf.controlKecamatan;
       controlKecamatan.dispatchEvent(new Event('change'));
     }
-
     setTimeout(function () {
       if (draf.selectLayanan && selectLayanan) {
         selectLayanan.value = draf.selectLayanan;
         selectLayanan.dispatchEvent(new Event('change'));
       }
-
       if (draf.inputTempatTugas && inputTempatTugas) inputTempatTugas.value = draf.inputTempatTugas;
       if (draf.inputAlamatTugas && inputAlamatTugas) inputAlamatTugas.value = draf.inputAlamatTugas;
       const elNama = document.getElementById('input-nama');
@@ -444,12 +398,10 @@ function pulihkanDrafLokalForm() {
         elKecDom.value = draf.inputKecamatanDomisili;
         elKecDom.dispatchEvent(new Event('change'));
       }
-
       setTimeout(function () {
         const elKelDom = document.getElementById('input-kelurahan');
         if (draf.controlKelurahan && elKelDom) elKelDom.value = draf.controlKelurahan;
       }, 300);
-
       const elAlamat = document.getElementById('input-alamat');
       if (draf.inputAlamat && elAlamat) elAlamat.value = draf.inputAlamat;
       const elNamaRek = document.getElementById('input-nama-rek');
@@ -460,7 +412,6 @@ function pulihkanDrafLokalForm() {
       if (draf.inputNoKontak && inputKontak) inputKontak.value = draf.inputNoKontak;
       const elBpjs = document.getElementById('input-bpjs');
       if (draf.selectBpjs && elBpjs) elBpjs.value = draf.selectBpjs;
-
       tampilkanToast('Draf formulir berhasil dipulihkan.', 'sukses');
       const banner = document.getElementById('banner-draf-tersimpan');
       if (banner) banner.classList.add('hidden');
@@ -486,16 +437,13 @@ if (typeof formPembayaran !== 'undefined' && formPembayaran) {
     clearTimeout(timerDebounceDraf);
     timerDebounceDraf = setTimeout(simpanDrafLokalForm, 500);
   });
-
   // Pengecekan ukuran instan saat user memilih berkas
   formPembayaran.querySelectorAll('input[type="file"]').forEach(function (input) {
     input.addEventListener('change', function (e) {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-
-
       if (file.size > 25 * 1024 * 1024) {
-        tampilkanToast('⚠️ Berkas "' + file.name + '" melebihi 25 MB. Mohon pilih berkas dengan ukuran lebih kecil.', 'gagal', { durasi: 6000 });
+        tampilkanToast('Berkas "' + file.name + '" melebihi 25 MB. Mohon pilih berkas dengan ukuran lebih kecil.', 'gagal', { durasi: 6000 });
         input.value = '';
         return;
       }
@@ -511,7 +459,6 @@ function kompresGambar(file, maxDim, kualitas) {
       resolve(file); return;
     }
     if (file.size < 400 * 1024) { resolve(file); return; } // sudah kecil, tidak perlu dikompres
-
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = function () {
@@ -757,10 +704,8 @@ function cekStatusSesiUpload(url) {
 async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const kunciListSemua = Object.keys(berkasMap);
   if (kunciListSemua.length === 0) return { sukses: true, link: {} };
-
   const nikKonteks = konteks && konteks.nik;
   const layananKonteks = konteks && konteks.layanan;
-
   const hasilDariCache = [];
   const kunciList = [];
   const sesiPendingDariStorage = {}; // k -> { uploadSessionUri, folderId, sig, waktu } (lihat T4)
@@ -774,7 +719,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     const pending = ambilSesiPendingDariStorage(nikKonteks, layananKonteks, k, berkasMap[k]);
     if (pending) sesiPendingDariStorage[k] = pending;
   });
-
   // Semua berkas sudah pernah sukses terunggah (isi sama persis) -- lompat langsung ke langkah
   // konfirmasi, tidak perlu sentuh Drive API upload sama sekali.
   if (kunciList.length === 0) {
@@ -783,17 +727,14 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     hasilDariCache.forEach(function (r) { daftarFileIdCache[r.k] = r.fileId; });
     return await panggilAksiDenganRetry('konfirmasiUploadBerkasDrive', 2, dataPengguna.token, folderIdDariCache, daftarFileIdCache);
   }
-
   const totalBerkas = kunciListSemua.length;
   let berkasSelesai = hasilDariCache.length; // berkas dari cache sudah "selesai" sejak awal
-
   // Elemen progress bar pada loadingOverlay
   const progressContainer = document.getElementById('loading-progress-container');
   const progressLabel = document.getElementById('loading-progress-label');
   const progressPersen = document.getElementById('loading-progress-persen');
   const progressBar = document.getElementById('loading-progress-bar');
   const progressSub = document.getElementById('loading-progress-sub');
-
   if (progressContainer) {
     progressContainer.classList.remove('hidden');
     if (progressPersen) progressPersen.innerText = '0%';
@@ -801,7 +742,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${totalBerkas})`;
     if (progressSub) progressSub.innerText = 'Menyiapkan pengunggahan berkas ke Google Drive...';
   }
-
   // Langkah 1: minta sesi resumable Drive -- backend resolve/buat rantai folder
   // (Kecamatan/Layanan/Nama(NIK)) SEKALI di sini, baru inisiasi sesi upload per berkas secara
   // paralel. Lihat domains/upload.ts::mintaUrlUploadBerkasDrive.
@@ -814,7 +754,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   // file lama jadi FILE DOBEL YATIM di Drive.
   const metaMap = {};
   kunciList.forEach(function (k) { metaMap[k] = metaSatuBerkas(berkasMap[k]); });
-
   const kunciButuhSesiBaru = kunciList.filter(function (k) { return !sesiPendingDariStorage[k]; });
   let folderId = null;
   let daftarSesi = {};
@@ -843,7 +782,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     if (!folderId) folderId = sesiPendingDariStorage[k].folderId;
   });
   const konteksDenganFolder = Object.assign({}, konteks, { folderId: folderId });
-
   // Progress agregat BYTE-LEVEL (bukan cuma lompat per-file selesai) -- total dihitung dari
   // ukuranByte tiap berkas (sudah dikirim ke backend di langkah 1), lalu tiap berkas melaporkan
   // bytes terkirimnya secara real-time lewat XMLHttpRequest.upload.onprogress (fetch() TIDAK
@@ -853,7 +791,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   }, 0) || 1;
   const bytesTerunggahPerBerkas = {};
   kunciList.forEach(function (k) { bytesTerunggahPerBerkas[k] = 0; });
-
   function updateProgressUI(namaBerkas, sedangUnggah) {
     if (!progressContainer) return;
     const totalTerunggah = Object.keys(bytesTerunggahPerBerkas).reduce(function (acc, k) {
@@ -869,7 +806,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       progressSub.innerText = sedangUnggah ? `Mengunggah: ${namaBerkas}...` : `Selesai: ${namaBerkas}`;
     }
   }
-
   // PUT byte ke Drive lewat XHR (bukan fetch) supaya bisa dapat event progress real-time.
   // resumeFromByte>0 (T5): lanjutkan sesi resumable yg sebagian sudah ter-upload -- kirim HANYA
   // sisa byte yg belum masuk (blob.slice), dgn header Content-Range (BUKAN Content-Type -- protokol
@@ -881,7 +817,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       const mulaiDariByte = resumeFromByte || 0;
       const ukuranTotal = totalBytes || blob.size;
       const bodyDikirim = mulaiDariByte > 0 ? blob.slice(mulaiDariByte) : blob;
-
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', url, true);
       xhr.timeout = 120000; // 2 menit -- generus utk berkas 25MB di koneksi lambat, tapi tetap
@@ -911,7 +846,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       xhr.send(bodyDikirim);
     });
   }
-
   // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan). Attempt pertama pakai
   // sesi yang sudah didapat dari langkah 1 (atau dipulihkan dari storage, lihat T4); retry
   // (attempt>0) ATAU sesi yg dipulihkan dari tab-life sebelumnya SELALU dicek dulu statusnya ke
@@ -923,7 +857,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
     const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
     const labelBerkas = item.label || k;
     const totalByteBerkas = metaMap[k].ukuranByte || (item.file ? item.file.size : 0);
-
     function tandaiSelesai(fileId) {
       bytesTerunggahPerBerkas[k] = totalByteBerkas || bytesTerunggahPerBerkas[k];
       berkasSelesai++;
@@ -932,13 +865,11 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       hapusSesiPendingDariStorage(nikKonteks, layananKonteks, k); // T4: tuntas, jejak sesi pending tidak perlu lagi
       return { k: k, fileId: fileId, gagal: null };
     }
-
     let lastErrorMsg = null;
     let sesiUriAktif = daftarSesi[k] && daftarSesi[k].uploadSessionUri;
     // Sesi yg dipulihkan dari storage (tab-life sebelumnya) belum diketahui progressnya -- WAJIB
     // dicek dulu walau ini baru attempt pertama di run ini.
     let sesiPerluDicekStatusnya = Boolean(daftarSesi[k] && daftarSesi[k].dariPending);
-
     for (let attempt = 0; attempt <= limitRetry; attempt++) {
       bytesTerunggahPerBerkas[k] = 0; // reset progress berkas ini kalau ini percobaan ulang
       if (attempt > 0) {
@@ -948,7 +879,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       } else {
         updateProgressUI(labelBerkas, true);
       }
-
       let resumeFromByte = 0;
       if (sesiUriAktif && sesiPerluDicekStatusnya) {
         const status = await cekStatusSesiUpload(sesiUriAktif);
@@ -959,7 +889,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
           sesiUriAktif = null; // sesi sudah tak valid (gone) -- minta baru di bawah
         }
       }
-
       try {
         let uploadSessionUri = sesiUriAktif;
         if (!uploadSessionUri) {
@@ -975,22 +904,18 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
         sesiUriAktif = uploadSessionUri;
         sesiPerluDicekStatusnya = true; // kalau attempt berikutnya perlu, sesi ini sudah "dipakai"
         simpanSesiPendingKeStorage(nikKonteks, layananKonteks, k, item, uploadSessionUri, folderId);
-
         const dataPut = await putBlobKeDrive(uploadSessionUri, item.file, item.mimeType, function (bytesAbsolut) {
           bytesTerunggahPerBerkas[k] = bytesAbsolut;
           updateProgressUI(labelBerkas, true);
         }, resumeFromByte, totalByteBerkas);
         if (!dataPut || !dataPut.id) throw new Error('Respons upload Drive tidak berisi ID berkas.');
-
         return tandaiSelesai(dataPut.id);
       } catch (eSatu) {
         lastErrorMsg = 'Kendala jaringan (' + pesanErrorRamah(eSatu) + ').';
       }
     }
-
     return { k: k, fileId: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
   }
-
   // Concurrency adaptif: 2 untuk jaringan seluler lemah/save-data agar bebas bufferbloat, 4 untuk wifi/kencang
   const isKoneksiLambat = typeof navigator !== 'undefined' && navigator.connection &&
     (navigator.connection.saveData || navigator.connection.effectiveType === '2g' || navigator.connection.effectiveType === '3g');
@@ -998,7 +923,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const hasilList = [];
   let indexAntrean = 0;
   let adaGagalFatal = false;
-
   async function antreanWorker() {
     while (indexAntrean < kunciList.length && !adaGagalFatal) {
       const idx = indexAntrean++;
@@ -1012,20 +936,17 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
       }
     }
   }
-
   const workerCount = Math.min(CONCURRENCY_LIMIT, kunciList.length);
   const workers = [];
   for (let w = 0; w < workerCount; w++) {
     workers.push(antreanWorker());
   }
   await Promise.all(workers);
-
   const gagalPertama = hasilList.find(function (r) { return r.gagal; });
   if (gagalPertama) {
     if (progressContainer) progressContainer.classList.add('hidden');
     return { sukses: false, pesan: gagalPertama.gagal };
   }
-
   // Langkah 3: konfirmasi -- set izin akses "anyone with link" per berkas & bentuk link tampilan.
   if (progressPersen) progressPersen.innerText = '99%';
   if (progressBar) progressBar.style.width = '99%';
@@ -1033,7 +954,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const daftarFileId = {};
   hasilDariCache.forEach(function (r) { daftarFileId[r.k] = r.fileId; });
   hasilList.forEach(function (r) { if (r.fileId) daftarFileId[r.k] = r.fileId; });
-
   // Retry di sini lebih penting dari langkah 1 -- byte SEMUA berkas sudah sukses terkirim ke
   // Drive di titik ini, tinggal set izin akses. panggilAksiDenganRetry aman dipanggil ulang
   // (permissions.create bersifat idempoten dalam praktik -- lihat _shared/driveApi.ts).
@@ -1047,7 +967,6 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
         ' Silakan coba simpan data sekali lagi.'
     };
   }
-
   if (progressContainer) progressContainer.classList.add('hidden');
   return hasilKonfirmasi;
 }
@@ -1058,9 +977,7 @@ async function kumpulkanDataForm() {
     return el ? el.value : "";
   }
   function fileEl(name) { return formPembayaran.querySelector('input[type="file"][name="' + name + '"]'); }
-
   const namaFileInput = ['fileKtp', 'fileBukuRekening', 'fileSuratPermohon', 'filePernyataan', null, 'fileDomisili', 'fileBerkasPendukung', 'fileBerkasPendukung2', 'fileFotoPlank', 'fileFotoIbadah', 'fileFotoKegiatan', 'fileRekomendasiBkm', 'fileRekomendasiRi'];
-
   const data = {
     selectLayanan: val('selectLayanan'),
     inputTempatTugas: val('inputTempatTugas'),
@@ -1084,7 +1001,6 @@ async function kumpulkanDataForm() {
       ? document.getElementById(KONFIG_KOORDINAT.plank.idHidden).value
       : (KONFIG_KOORDINAT.ibadah.siap ? document.getElementById(KONFIG_KOORDINAT.ibadah.idHidden).value : "")
   };
-
   const berkas = {};
   await Promise.all(namaFileInput.map(async function (nm) {
     if (!nm) return;
@@ -1116,7 +1032,6 @@ function labelBerkasSimpanBaru(layanan) {
 function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   // Sertakan idempotency key agar server bisa mengenali retry dari pengiriman yang sama.
   if (idempotencyKeySimpan) dataObjek.idempotencyKey = idempotencyKeySimpan;
-
   function eksekusiSimpan() {
     google.script.run
       .withSuccessHandler(function (response) {
@@ -1153,7 +1068,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
           // BASI tanpa fetch ulang sama sekali, membuat user salah kira data belum tersimpan.
           if (window.djpmCache) window.djpmCache.invalidate(['penerima', 'dashboard', 'kuota'], true);
           tampilkanToast(
-            '⚠️ Koneksi terputus saat mengirim. Cek menu Lihat Data — jika data sudah ada, maka BERHASIL. ' +
+            'Koneksi terputus saat mengirim. Cek menu Lihat Data — jika data sudah ada, maka BERHASIL. ' +
             'Jika belum ada, tekan Simpan lagi. Data tidak akan dobel.',
             'peringatan',
             { durasi: 12000 }
@@ -1164,16 +1079,13 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
       })
       .simpanDataKeSheet(dataPengguna.token, dataObjek);
   }
-
   const berkasMentah = dataObjek.__berkas || {};
   const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].file; });
-
   if (!adaBerkas) {
     loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
     eksekusiSimpan();
     return;
   }
-
   loadingOverlay.querySelector('h3').innerText = "MENGUNGGAH BERKAS...";
   const label = labelBerkasSimpanBaru(dataObjek.selectLayanan);
   const berkasUntukUpload = {};
@@ -1183,7 +1095,6 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
       berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, ukuranByte: item.ukuranByte, label: label[k] || k };
     }
   });
-
   unggahBerkasLangsungKeStorage(
     { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
     berkasUntukUpload
@@ -1211,17 +1122,14 @@ function prosesValidasiDanSimpan() {
     btnSimpan.disabled = true;
     btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
   }
-
   function pulihkanTombol() {
     if (btnSimpan) {
       btnSimpan.disabled = false;
       btnSimpan.classList.remove('opacity-50', 'cursor-not-allowed');
     }
   }
-
   loadingOverlay.classList.remove('hidden');
   loadingOverlay.querySelector('h3').innerText = "MEMVERIFIKASI DATA...";
-
   google.script.run
     .withSuccessHandler(function (status) {
       if (!status.valid && status.tolakCapil) {
@@ -1235,7 +1143,6 @@ function prosesValidasiDanSimpan() {
         document.getElementById('modal-tolak-capil').classList.remove('hidden');
         return;
       }
-
       if (!status.valid && status.tolakStatus2026) {
         pulihkanTombol();
         loadingOverlay.classList.add('hidden');
@@ -1355,13 +1262,10 @@ function cekKesesuaianNama() {
   const namaLengkap = elNamaLengkap ? elNamaLengkap.value.trim() : '';
   const namaRekening = elNamaRekening ? elNamaRekening.value.trim() : '';
   if (!namaLengkap || !namaRekening) return true; // biar validasi 'required' bawaan yang tangani
-
   const normLengkap = normalisasiNama(namaLengkap);
   const normRekening = normalisasiNama(namaRekening);
-
   if (normLengkap === normRekening) { resetKonfirmasiNamaBeda(); return true; }
   if (namaBerbedaDikonfirmasi) return true; // sudah dikonfirmasi sebelumnya untuk pasangan nama ini
-
   // Tampilkan modal perbandingan
   const kataLengkap = normalisasiNama(namaLengkap).split(/\s+/);
   const kataRekening = normalisasiNama(namaRekening).split(/\s+/);
@@ -1399,7 +1303,6 @@ document.getElementById('input-nama-rek').addEventListener('input', resetKonfirm
 formPembayaran.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!pastikanLogin()) return;
-
   // Wajib ada koordinat lokasi untuk GMM / Guru Sekolah Minggu/Buddha/Hindu sebelum lanjut
   for (const modeKoordinat of Object.keys(KONFIG_KOORDINAT)) {
     const cfgKoordinat = KONFIG_KOORDINAT[modeKoordinat];
@@ -1409,14 +1312,11 @@ formPembayaran.addEventListener('submit', (e) => {
       return;
     }
   }
-
   // Uppercase semua field teks sebelum validasi
   const semuaInputTeks = formPembayaran.querySelectorAll('input[type="text"]');
   semuaInputTeks.forEach(input => { input.value = input.value.trim().toUpperCase(); });
-
   // Cek Kesesuaian Nama Rekening
   if (!cekKesesuaianNama()) return;
-
   // Validasi lokal cepat sebelum tampilkan modal
   const kecVal = document.getElementById('control-kecamatan').value;
   if (!kecVal) { tampilkanToast("Kecamatan lokasi tugas wajib dipilih!", "gagal"); document.getElementById('control-kecamatan').focus(); return; }
@@ -1428,7 +1328,6 @@ formPembayaran.addEventListener('submit', (e) => {
     inputKontak.focus();
     return;
   }
-
   // Periksa apakah ada dokumen PDF yang melebihi batas 3.2 MB gateway upload
   const semuaFileInput = formPembayaran.querySelectorAll('input[type="file"]');
   for (let f = 0; f < semuaFileInput.length; f++) {
@@ -1444,7 +1343,6 @@ formPembayaran.addEventListener('submit', (e) => {
       }
     }
   }
-
   // Tampilkan modal konfirmasi
   document.getElementById('modal-konfirmasi-simpan').classList.remove('hidden');
 });
@@ -1499,7 +1397,6 @@ function inisialisasiMenuLihatData() {
   if (btnVerifMassal) btnVerifMassal.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
   const btnSalinWA = document.getElementById('btn-salin-wa-berkas');
   if (btnSalinWA) btnSalinWA.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
-
   // Optimistic Instant Render: Coba pulihkan dari sessionStorage jika memori masih kosong
   if (!masterDataLihat || masterDataLihat.length === 0) {
     try {
@@ -1518,13 +1415,11 @@ function inisialisasiMenuLihatData() {
       }
     } catch (e) { }
   }
-
   // Tampilkan skeleton hanya jika belum ada baris data sama sekali
   const tbodyLihat = document.getElementById('body-tabel-lihat');
   if (tbodyLihat && (!masterDataLihat || masterDataLihat.length === 0)) {
     tbodyLihat.innerHTML = htmlSkeletonBaris(8, 5);
   }
-
   google.script.run
     .withSuccessHandler(function (jsonResponse) {
       try {
@@ -1564,7 +1459,6 @@ function muatDataDetail(bolehCobaLagi) {
   const timerPenenang = setTimeout(function () {
     if (info) info.innerText = 'Server sedang bersiap, mohon tunggu sebentar lagi...';
   }, 4000);
-
   google.script.run
     .withSuccessHandler(function (res) {
       clearTimeout(timerPenenang);
@@ -1676,13 +1570,11 @@ function membangunOpsiFilter(rows) {
     halamanSekarang = 1;
     saringDanTampilkanTabel();
   });
-
   if (dataPengguna.kecamatan) {
     const cocokKec = Array.from(setKecamatan).some(v => v.toUpperCase().trim() === dataPengguna.kecamatan.toUpperCase().trim());
     if (cocokKec) {
       dKec.value = dataPengguna.kecamatan;
       dKec.dispatchEvent(new Event('change')); // isi ulang daftar Kelurahan sesuai kecamatan ini
-
       if (dataPengguna.kelurahanTerkunci) {
         const cocokKel = Array.from(dKel.options).some(o => o.value.toUpperCase().trim() === dataPengguna.kelurahanTerkunci);
         if (cocokKel) dKel.value = dataPengguna.kelurahanTerkunci;
@@ -1699,7 +1591,6 @@ function resetSemuaFilter() {
   const elKel = document.getElementById('filter-kelurahan');
   const elLay = document.getElementById('filter-layanan');
   const elVerif = document.getElementById('filter-verifikasi');
-
   if (elCari) elCari.value = '';
   if (elKec) {
     if (typeof dataPengguna !== 'undefined' && dataPengguna.role === 'KECAMATAN' && dataPengguna.kecamatan) {
@@ -1717,7 +1608,6 @@ function resetSemuaFilter() {
   }
   if (elLay) elLay.value = '';
   if (elVerif) elVerif.value = '';
-
   halamanSekarang = 1;
   saringDanTampilkanTabel();
   if (typeof tampilkanToast === 'function') {
@@ -1747,10 +1637,8 @@ function saringDanTampilkanTabel() {
     if (window._tampilDataHistoris) window._tampilDataHistoris();
     return;
   }
-
   const thVerif = document.getElementById('th-verifikasi');
   if (thVerif) thVerif.classList.remove('hidden');
-
   const valKec = document.getElementById('filter-kecamatan').value;
   const valKel = document.getElementById('filter-kelurahan').value;
   const valLay = document.getElementById('filter-layanan').value;
@@ -1901,13 +1789,11 @@ window.toolsBuatBatch = function () {
   const jenis = document.getElementById('tools-select-jenis').value;
   if (!bulan) { tampilkanToast('Pilih bulan pembayaran dulu.', 'gagal'); return; }
   if (!jenis) { tampilkanToast('Pilih jenis pembayaran dulu.', 'gagal'); return; }
-
   const btn = document.getElementById('btn-tools-buat-batch');
   const labelAsli = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = 'Memproses...';
   document.getElementById('tools-preview-rekap').innerHTML = '';
-
   google.script.run
     .withSuccessHandler(function (res) {
       btn.disabled = false;
@@ -2009,7 +1895,6 @@ window.toolsSimpanPejabat = function (peran) {
   const nama = document.getElementById('tools-pejabat-nama-' + peran).value.trim();
   const jabatan = document.getElementById('tools-pejabat-jabatan-' + peran).value.trim();
   const nip = document.getElementById('tools-pejabat-nip-' + peran).value.trim();
-
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) {
@@ -2039,7 +1924,6 @@ window.toolsSimpanReferensiSk = function () {
   if (!pastikanLogin()) return;
   const nomorSk = document.getElementById('tools-sk-nomor').value.trim();
   const tanggalSk = document.getElementById('tools-sk-tanggal').value.trim();
-
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) {
@@ -2101,7 +1985,6 @@ window.toolsSimpanSkLayanan = function (layananKode) {
   const input = document.getElementById('tools-sk-jumlah-' + idAman);
   const nilaiTeks = input.value.trim();
   const jumlahSk = nilaiTeks === '' ? null : Number(nilaiTeks);
-
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) {
@@ -2120,7 +2003,6 @@ function perbaruiElemenNavigasi(sekarang, total) {
   const infoHal = document.getElementById('info-halaman');
   const wrap = document.getElementById('pagination-wrap');
   if (!wrap) return;
-
   // Info teks
   if (infoHal) {
     const awal = total === 0 ? 0 : (sekarang - 1) * dataPerHalaman + 1;
@@ -2128,46 +2010,35 @@ function perbaruiElemenNavigasi(sekarang, total) {
       (() => { let t = 0; /* hitung total data dari filter aktif nanti */ return total * dataPerHalaman; })());
     infoHal.textContent = total === 0 ? 'Tidak ada data' : `Halaman ${sekarang} dari ${total}`;
   }
-
   if (total <= 1) { wrap.innerHTML = ''; return; }
-
   // Tentukan range nomor yang ditampilkan (maks 5 nomor)
   const TAMPIL = 5;
   let mulai = Math.max(1, sekarang - Math.floor(TAMPIL / 2));
   let akhirRange = mulai + TAMPIL - 1;
   if (akhirRange > total) { akhirRange = total; mulai = Math.max(1, akhirRange - TAMPIL + 1); }
-
   const BASE = 'px-3 py-1.5 rounded-xl text-xs font-semibold transition min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-center active:scale-95 shadow-2xs';
   const AKTIF = BASE + ' bg-slate-800 text-white shadow-xs';
   const PASIF = BASE + ' bg-white border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 cursor-pointer';
   const NONAKTIF = BASE + ' bg-slate-100/60 border border-slate-200/50 text-slate-300 cursor-not-allowed';
-
   let h = '';
-
   const ikonPrev = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>';
   const ikonNext = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>';
-
   h += `<button onclick="halamanSebelumnya()" ${sekarang === 1 ? 'disabled' : ''} class="${sekarang === 1 ? NONAKTIF : PASIF}" title="Halaman Sebelumnya">${ikonPrev}</button>`;
-
   // Ellipsis kiri
   if (mulai > 1) {
     h += `<button onclick="pindahHalaman(1)" class="${PASIF}">1</button>`;
     if (mulai > 2) h += `<span class="px-1 text-slate-400 text-xs">…</span>`;
   }
-
   // Nomor halaman
   for (let i = mulai; i <= akhirRange; i++) {
     h += `<button onclick="pindahHalaman(${i})" class="${i === sekarang ? AKTIF : PASIF}">${i}</button>`;
   }
-
   // Ellipsis kanan
   if (akhirRange < total) {
     if (akhirRange < total - 1) h += `<span class="px-1 text-slate-400 text-xs">…</span>`;
     h += `<button onclick="pindahHalaman(${total})" class="${PASIF}">${total}</button>`;
   }
-
   h += `<button onclick="halamanBerikutnya()" ${sekarang === total ? 'disabled' : ''} class="${sekarang === total ? NONAKTIF : PASIF}" title="Halaman Berikutnya">${ikonNext}</button>`;
-
   wrap.innerHTML = h;
 }
 
@@ -2183,19 +2054,13 @@ function halamanBerikutnya() {
 
 // Detail & Edit Penerima
 (function () {
-
   const KOLOM_TEKS = {
-    1: { label: "Nama Lengkap", type: "text" },
-    2: { label: "NIK", type: "text" },
+    1: { label: "Nama Lengkap", type: "text" }, 2: { label: "NIK", type: "text" },
     3: { label: "Jenis Kelamin", type: "select", opsi: ["LAKI-LAKI", "PEREMPUAN"] },
-    4: { label: "Tempat Lahir", type: "text" },
-    5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
-    6: { label: "Alamat Domisili", type: "text" },
-    11: { label: "Kelurahan", type: "text" },
-    12: { label: "Nama Rekening", type: "text" },
-    13: { label: "Nomor Rekening", type: "text" },
-    14: { label: "Kantor Cabang", type: "text" },
-    15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
+    4: { label: "Tempat Lahir", type: "text" }, 5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
+    6: { label: "Alamat Domisili", type: "text" }, 11: { label: "Kelurahan", type: "text" },
+    12: { label: "Nama Rekening", type: "text" }, 13: { label: "Nomor Rekening", type: "text" },
+    14: { label: "Kantor Cabang", type: "text" }, 15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
     16: { label: "Status BPJS TK", type: "select", opsi: ["YA", "TIDAK"] },
   };
   const KOLOM_BERKAS = {
@@ -2204,29 +2069,22 @@ function halamanBerikutnya() {
     22: ["Domisili Kelurahan"], 23: ["Formulir Pendataan"], 24: ["Berkas Pendukung"],
     25: ["Foto Plank"], 26: ["Foto Lokasi Ibadah"], 27: ["Foto Kegiatan"],
   };
-
   let nomorBarisAktif = null;
   let dataAktif = null;
   let modeEdit = false;
   let berkasBaruMap = {}; // {idx: {namaFile, mimeType, file}}
-
   const modal = document.getElementById('modal-detail-penerima');
   const isiKonten = document.getElementById('isi-konten-detail');
   const btnEdit = document.getElementById('btn-edit-detail');
   const btnSimpan = document.getElementById('btn-simpan-edit');
   const btnBatal = document.getElementById('btn-batal-edit');
-
   function getBerkasSesuaiLayanan(layanan) {
     const lay = (layanan || "").toString().toUpperCase().trim();
     // Berkas wajib semua layanan
     const dasar = [
-      { idx: 18, label: "KTP" },
-      { idx: 19, label: "Buku Rekening" },
-      { idx: 20, label: "Surat Permohonan" },
-      { idx: 22, label: "Domisili Kelurahan" },
-      { idx: 21, label: "Surat Pernyataan (Satu Jenis & Bukan ASN/BUMN/BUMD/TNI/POLRI)" },
-      { idx: 23, label: "Formulir Pendataan" },
-      { idx: 24, label: (lay === "USTADZ" || lay === "USTADZAH") ? "Rekomendasi MUI" : "Berkas Pendukung" },
+      { idx: 18, label: "KTP" }, { idx: 19, label: "Buku Rekening" }, { idx: 20, label: "Surat Permohonan" },
+      { idx: 22, label: "Domisili Kelurahan" }, { idx: 21, label: "Surat Pernyataan (Satu Jenis & Bukan ASN/BUMN/BUMD/TNI/POLRI)" },
+      { idx: 23, label: "Formulir Pendataan" }, { idx: 24, label: (lay === "USTADZ" || lay === "USTADZAH") ? "Rekomendasi MUI" : "Berkas Pendukung" },
     ];
     // Foto & rekomendasi tambahan berdasarkan layanan
     if (lay === "GURU MAGHRIB MENGAJI") {
@@ -2242,10 +2100,8 @@ function halamanBerikutnya() {
     }
     return dasar;
   }
-
   function renderBaca(d) {
     const labelKolom = ["No. Urut", "Nama Lengkap", "NIK", "Jenis Kelamin", "Tempat Lahir", "Tanggal Lahir", "Alamat Domisili", "Jenis Layanan", "Tempat Tugas", "Alamat Tugas", "Kecamatan", "Kelurahan", "Nama Rekening", "Nomor Rekening", "Kantor Cabang", "No. Kontak", "Status BPJS TK", "Umur"];
-
     const statusVerif = d[32] || "Proses Verifikasi";
     const keteranganVerif = d[33] || "";
     const tglVerif = d[34] || "";
@@ -2262,10 +2118,8 @@ function halamanBerikutnya() {
       </div>`;
     }
     h += `</div>`;
-
     const tglLaporPerbaikan = d[38] || "";
     const dilaporOlehPerbaikan = d[39] || "";
-
     if (isRoleKecKem_(dataPengguna.role) && statusVerif === "Berkas Tidak Lengkap") {
       if (tglLaporPerbaikan) {
         h += `<div class="mb-4 bg-sky-50 border border-sky-200 rounded-lg px-4 py-3">
@@ -2280,7 +2134,6 @@ function halamanBerikutnya() {
         </div>`;
       }
     }
-
     if (dataPengguna.role === "UTAMA") {
       if (statusVerif === "Berkas Tidak Lengkap") {
         h += `<div class="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
@@ -2305,9 +2158,7 @@ function halamanBerikutnya() {
         </div>
       </div>`;
     }
-
     const catatanNamaBeda = d[37] || "";
-
     h += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">`;
     for (let i = 0; i < labelKolom.length; i++) {
       const v = d[i] !== undefined && d[i] !== "" ? d[i] : "-";
@@ -2315,7 +2166,6 @@ function halamanBerikutnya() {
         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">${esc(labelKolom[i])}</p>
         <p class="text-xs sm:text-sm font-semibold text-slate-800 break-words">${esc(String(v))}</p>
       </div>`;
-
       // Nama Rekening ada di index 12 — sisipkan catatan tepat di bawahnya (kalau ada)
       if (i === 12 && catatanNamaBeda) {
         h += `<div class="col-span-1 sm:col-span-2 lg:col-span-3 bg-amber-50/80 border border-amber-200/80 rounded-xl px-4 py-2.5">
@@ -2324,7 +2174,6 @@ function halamanBerikutnya() {
       }
     }
     h += `</div>`;
-
     // Berkas sesuai layanan
     const berkasList = getBerkasSesuaiLayanan(d[7]);
     h += `<div class="mt-5 border-t border-slate-200/80 pt-4">
@@ -2343,7 +2192,6 @@ function halamanBerikutnya() {
     h += `</div></div>`;
     // Riwayat edit
     h += `<div id="riwayat-edit-wrap" class="mt-4 border-t border-slate-200 pt-4"><p class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Riwayat Perubahan</p><div id="riwayat-edit-isi" class="text-xs text-slate-400 italic">Memuat...</div></div>`;
-
     // Info sakelar tutup untuk kecamatan/kemenag
     if (isRoleKecKem_(dataPengguna.role) && inputDitutupGlobal) {
       h += `<div class="mt-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
@@ -2353,19 +2201,15 @@ function halamanBerikutnya() {
         </p>
       </div>`;
     }
-
     isiKonten.innerHTML = h;
-
     function jalankanVerifikasi(statusBaru, tombolAktif, teksAsliTombol) {
       const ket = document.getElementById('input-keterangan-verifikasi').value.trim().toUpperCase();
       if (!ket) { tampilkanToast('Keterangan hasil verifikasi wajib diisi.', 'gagal'); return; }
-
       let batasWaktu = "";
       if (statusBaru === "Berkas Tidak Lengkap") {
         batasWaktu = document.getElementById('input-batas-waktu-verifikasi').value;
         if (!batasWaktu) { tampilkanToast('Batas waktu perbaikan wajib diisi untuk status Berkas Tidak Lengkap.', 'gagal'); return; }
       }
-
       tombolAktif.disabled = true;
       tombolAktif.innerText = 'Menyimpan...';
       google.script.run
@@ -2390,7 +2234,6 @@ function halamanBerikutnya() {
         })
         .verifikasiSatuData(dataPengguna.token, nomorBarisAktif, statusBaru, ket, batasWaktu, dataAktif[32] || "");
     }
-
     const btnTandai = document.getElementById('btn-tandai-tidak-memenuhi');
     if (btnTandai) {
       btnTandai.addEventListener('click', function () {
@@ -2403,7 +2246,6 @@ function halamanBerikutnya() {
         jalankanVerifikasi('Berkas Tidak Lengkap', btnBerkasKurang, 'Tandai Berkas Tidak Lengkap');
       });
     }
-
     const btnLaporPerbaikan = document.getElementById('btn-lapor-perbaikan');
     if (btnLaporPerbaikan) {
       btnLaporPerbaikan.addEventListener('click', function () {
@@ -2427,7 +2269,6 @@ function halamanBerikutnya() {
           .laporkanPerbaikanBerkas(dataPengguna.token, nomorBarisAktif);
       });
     }
-
     const btnSudahDiperbaiki = document.getElementById('btn-tandai-sudah-diperbaiki');
     if (btnSudahDiperbaiki) {
       btnSudahDiperbaiki.addEventListener('click', function () {
@@ -2457,7 +2298,6 @@ function halamanBerikutnya() {
           .tandaiSudahDiperbaiki(dataPengguna.token, nomorBarisAktif);
       });
     }
-
     google.script.run
       .withSuccessHandler(function (res) {
         const el = document.getElementById('riwayat-edit-isi');
@@ -2532,9 +2372,7 @@ function halamanBerikutnya() {
     });
     h += `</div></div>`;
     isiKonten.innerHTML = h;
-
     if (window._pasangOtorSpasiModal) window._pasangOtorSpasiModal(isiKonten);
-
     // Validasi no kontak: hanya angka
     const kontakEl = document.getElementById('edit-15');
     if (kontakEl) {
@@ -2543,7 +2381,6 @@ function halamanBerikutnya() {
       });
     }
   }
-
   window._pilihBerkasEdit = function (inputEl) {
     const idx = inputEl.dataset.berkasIdx;
     const file = inputEl.files[0];
@@ -2553,7 +2390,6 @@ function halamanBerikutnya() {
     berkasBaruMap[idx] = { namaFile: file.name, mimeType: file.type, file: file };
     if (labelEl) labelEl.textContent = file.name;
   };
-
   function aktifkanModeEdit() {
     if (!dataAktif) return;
     modeEdit = true;
@@ -2562,7 +2398,6 @@ function halamanBerikutnya() {
     btnBatal.classList.remove('hidden');
     renderEdit(dataAktif);
   }
-
   function batalkanEdit() {
     modeEdit = false;
     berkasBaruMap = {};
@@ -2571,7 +2406,6 @@ function halamanBerikutnya() {
     btnEdit.classList.remove('hidden');
     renderBaca(dataAktif);
   }
-
   async function simpanEdit() {
     if (!pastikanLogin() || !nomorBarisAktif || !dataAktif) return;
     const teks = {};
@@ -2587,7 +2421,6 @@ function halamanBerikutnya() {
     }
     btnSimpan.disabled = true;
     btnSimpan.textContent = "Menyimpan...";
-
     function eksekusiEdit(berkasUntukDikirim, idFolderBerkasUntukDikirim) {
       google.script.run
         .withSuccessHandler(function (res) {
@@ -2603,14 +2436,12 @@ function halamanBerikutnya() {
             btnEdit.classList.remove('hidden');
             // Reload detail dari server agar data segar
             ambilDanTampilkanDetail(nomorBarisAktif);
-
             // OPTIMISTIC UPDATE: Update data lokal di masterDataLihat agar tabel instan berubah
             const barisTarget = masterDataLihat.find(function (r) { return r[0] == nomorBarisAktif; });
             if (barisTarget) {
               Object.keys(teks).forEach(function (i) { barisTarget[Number(i)] = teks[i]; });
               saringDanTampilkanTabel(); // Render seketika 0ms
             }
-
             // Invalidate cache saja, fetch ulang akan terjadi secara asinkron di belakang
             // layar saat inisialisasiMenuLihatData dipanggil (SWR)
             invalidateCacheDataTransaksi();
@@ -2629,18 +2460,15 @@ function halamanBerikutnya() {
         })
         .editDataPenerima(dataPengguna.token, nomorBarisAktif, { teks: teks, berkas: berkasUntukDikirim, idFolderBerkas: idFolderBerkasUntukDikirim || "" });
     }
-
     const adaBerkasBaru = Object.keys(berkasBaruMap).some(function (k) { return berkasBaruMap[k] && berkasBaruMap[k].file; });
     if (!adaBerkasBaru) {
       eksekusiEdit(berkasBaruMap, "");
       return;
     }
-
     btnSimpan.textContent = "Mengunggah berkas...";
     const labelPerIdx = {};
     getBerkasSesuaiLayanan(dataAktif[7]).forEach(function (b) { labelPerIdx[b.idx] = b.label; });
     const berkasUntukUpload = {};
-
     try {
       const kunciBerkas = Object.keys(berkasBaruMap);
       for (const k of kunciBerkas) {
@@ -2664,7 +2492,6 @@ function halamanBerikutnya() {
       tampilkanToast("Gagal mempersiapkan berkas: " + e.message, "gagal");
       return;
     }
-
     unggahBerkasLangsungKeStorage(
       { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },
       berkasUntukUpload
@@ -2686,7 +2513,6 @@ function halamanBerikutnya() {
       tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), "gagal", { durasi: 6000 });
     });
   }
-
   function ambilDanTampilkanDetail(nomorBaris) {
     isiKonten.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Mengambil data dari server...</p></div>`;
     google.script.run
@@ -2701,9 +2527,7 @@ function halamanBerikutnya() {
           const isUtama = r === "UTAMA";
           const isKecKem = isRoleKecKem_(r);
           const statusVerifData = dataAktif[32] || "Proses Verifikasi";
-
           const bolehEdit = (statusVerifData !== "Tidak Memenuhi Syarat") && (isUtama || (isKecKem && !inputDitutupGlobal));
-
           if (bolehEdit) {
             btnEdit.classList.remove('hidden');
           } else {
@@ -2721,7 +2545,6 @@ function halamanBerikutnya() {
       })
       .ambilDetailPenerimaPerBaris(dataPengguna.token, nomorBaris);
   }
-
   window.tampilkanDetailKeModalOnDemand = function (nomorBaris) {
     if (!pastikanLogin()) return;
     nomorBarisAktif = nomorBaris;
@@ -2740,11 +2563,9 @@ function halamanBerikutnya() {
       btnEdit.classList.add('hidden');
     };
   };
-
   if (btnEdit) btnEdit.addEventListener('click', aktifkanModeEdit);
   if (btnSimpan) btnSimpan.addEventListener('click', simpanEdit);
   if (btnBatal) btnBatal.addEventListener('click', batalkanEdit);
-
 })();
 
 function ambilDataLolosFilter() {
@@ -2809,18 +2630,14 @@ function buatNamaFile() {
   const jam = ("0" + now.getHours()).slice(-2);
   const mnt = ("0" + now.getMinutes()).slice(-2);
   const stempelWaktu = `${tgl}-${bln}-${thn}_${jam}${mnt}`;
-
   function bersihkanNama(teks) {
     return teks.toString().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   }
-
   const elFilterLayanan = document.getElementById('filter-layanan');
   const valLayanan = elFilterLayanan ? elFilterLayanan.value : "";
   const namaWilayah = dataPengguna.kelurahanTerkunci || dataPengguna.kecamatan || "";
   const role = dataPengguna.role;
-
   let bagian = ["REKAP_PENERIMA"];
-
   if (role === "KECAMATAN") {
     // Admin Kecamatan atau Kelurahan
     if (valLayanan) bagian.push(bersihkanNama(valLayanan));   // aturan #2: layanan dipilih
@@ -2829,7 +2646,6 @@ function buatNamaFile() {
     // Admin Kemenag — role-nya sendiri = nama layanan
     bagian.push(bersihkanNama(role)); // aturan #3
   }
-
   bagian.push(stempelWaktu);
   return bagian.join("_");
 }
@@ -2878,7 +2694,6 @@ document.getElementById('btn-verifikasi-massal').addEventListener('click', funct
   }).then(function (setuju) {
     if (!setuju) return;
     setTombolMemuat(btn, "Memproses...");
-
     google.script.run
       .withSuccessHandler(function (res) {
         pulihkanTombol(btn);
@@ -2931,44 +2746,36 @@ if (btnEksekusiLogout) {
   btnEksekusiLogout.addEventListener('click', function () {
     const btn = this;
     setTombolMemuat(btn, 'Keluar...');
-
     const tokenKeluar = dataPengguna.token;
     if (tokenKeluar && window.google && window.google.script && window.google.script.run) {
       try {
         google.script.run.logoutPengguna(tokenKeluar);
       } catch (e) { }
     }
-
     // Bersihkan SWR cache dan session storage secara menyeluruh agar data tidak bocor antar sesi
     if (window.djpmCache && typeof window.djpmCache.clear === 'function') {
       try { window.djpmCache.clear(); } catch (_e) { }
     }
     try { sessionStorage.removeItem('dana_jasa_sesi'); } catch (e) { }
     document.documentElement.classList.remove('is-logged-in', 'role-utama');
-
     dataPengguna = { username: "", role: "", kecamatan: "", token: "", userId: "", kelurahanTerkunci: "" };
     masterDataLihat = [];
     if (typeof cacheDashboardProgres !== 'undefined') {
       cacheDashboardProgres = {};
     }
-
     ['btn-keluar-aplikasi', 'fab-ganti-password', 'btn-panduan', 'btn-retur-kematian']
       .forEach(function (id) {
         const el = document.getElementById(id);
         if (el) el.classList.add('hidden');
       });
-
     const fsContainerEl = document.getElementById('fs-container');
     if (fsContainerEl) { fsContainerEl.disabled = true; fsContainerEl.classList.add('opacity-50', 'pointer-events-none'); }
     const panelRekapEl = document.getElementById('panel-rekap');
     if (panelRekapEl) panelRekapEl.classList.add('hidden');
-
     const elPassLogin = document.getElementById('login-password');
     if (elPassLogin) elPassLogin.value = '';
-
     tutupModalKonfirmasiLogout();
     pulihkanTombol(btn);
-
     // Tampilkan modal login dan toast notifikasi sukses keluar
     const modalLogin = document.getElementById('modal-login');
     if (modalLogin) modalLogin.classList.remove('hidden');
@@ -2992,7 +2799,6 @@ function susunTeksWhatsAppBerkasTidakLengkap(data) {
   const now = new Date();
   const tglSekarang = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) +
     ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
-
   const grup = {};
   data.forEach(function (d) {
     const kec = d.kecamatan || 'TANPA KECAMATAN';
@@ -3000,11 +2806,9 @@ function susunTeksWhatsAppBerkasTidakLengkap(data) {
     grup[kec].push(d);
   });
   const namaKecamatan = Object.keys(grup).sort();
-
   let teks = '📋 *DAFTAR BERKAS TIDAK LENGKAP*\n';
   teks += '_Diperbarui: ' + tglSekarang + '_\n';
   teks += '_Total: ' + data.length + ' data_\n\n';
-
   namaKecamatan.forEach(function (kec) {
     const list = grup[kec];
     teks += '━━━━━━━━━━━━━━━\n';
@@ -3018,10 +2822,8 @@ function susunTeksWhatsAppBerkasTidakLengkap(data) {
       teks += '   ⏰ Batas: ' + formatTanggalIndo(d.batasWaktu) + '\n\n';
     });
   });
-
   teks += '━━━━━━━━━━━━━━━\n';
   teks += '⚠️ *Perhatian:* Mohon perbaikan berkas dilakukan sebelum batas waktu yang tercantum pada masing-masing data. Apabila hingga batas waktu tersebut berkas belum diperbaiki, sistem akan secara otomatis mengubah status data menjadi *Tidak Memenuhi Syarat*.\n';
-
   return teks.trim();
 }
 
@@ -3029,7 +2831,6 @@ document.getElementById('btn-salin-wa-berkas').addEventListener('click', functio
   if (!pastikanLogin()) return;
   const btn = this;
   setTombolMemuat(btn, "Menyiapkan...");
-
   google.script.run
     .withSuccessHandler(function (res) {
       pulihkanTombol(btn);
@@ -3104,15 +2905,12 @@ let cacheDashboardProgres = {}; // { [kecFilter]: { res, waktu } }
 function muatDashboardProgres() {
   const kecFilter = document.getElementById('filter-dashboard-kecamatan').value || "";
   const isi = document.getElementById('isi-dashboard-progres');
-
   const tersimpan = cacheDashboardProgres[kecFilter];
   if (tersimpan && (Date.now() - tersimpan.waktu) < TTL_CACHE_DATA_TRANSAKSI_MS) {
     renderDashboardProgres(tersimpan.res, kecFilter);
     return;
   }
-
   isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Memuat dashboard...</p></div>`;
-
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Gagal memuat: ${res ? esc(res.pesan) : 'tidak diketahui'}</p>`; return; }
@@ -3125,7 +2923,6 @@ function muatDashboardProgres() {
 
 function renderDashboardProgres(res, kecFilter) {
   const isi = document.getElementById('isi-dashboard-progres');
-
   const judulModal = document.getElementById('judul-modal-dashboard');
   if (judulModal) {
     const kecUntukJudul = kecFilter || dataPengguna.kecamatan || '';
@@ -3135,7 +2932,6 @@ function renderDashboardProgres(res, kecFilter) {
     }
     judulModal.innerText = teksJudul;
   }
-
   const filterWrap = document.getElementById('filter-dashboard-wrap');
   if (res.bisaFilterKecamatan) {
     filterWrap.classList.remove('hidden');
@@ -3146,12 +2942,10 @@ function renderDashboardProgres(res, kecFilter) {
       });
     }
   }
-
   if (!res.kartu || res.kartu.length === 0) {
     isi.innerHTML = `<p class="text-slate-400 italic text-sm text-center py-6">Belum ada data untuk ditampilkan.</p>`;
     return;
   }
-
   isi.innerHTML = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">` +
     res.kartu.map(function (k, i) {
       const selesai = k.memenuhiSyarat + k.tidakMemenuhiSyarat;
@@ -3181,7 +2975,6 @@ function renderDashboardProgres(res, kecFilter) {
             <p class="text-[10px] text-slate-400 mt-1">${persen}% sudah diverifikasi</p>
           </div>`;
     }).join('') + `</div>`;
-
   requestAnimationFrame(function () {
     isi.querySelectorAll('.bar-progres-animasi').forEach(function (bar) {
       bar.style.width = bar.dataset.targetWidth + '%';

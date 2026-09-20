@@ -5,7 +5,7 @@ function getFiles(dir, fileList = []) {
   const files = fs.readdirSync(dir);
   for (const file of files) {
     const filePath = path.join(dir, file);
-    if (['node_modules', '.git', 'dist', 'archive'].some(ex => filePath.includes(ex))) continue;
+    if (['node_modules', '.git', 'dist', 'archive', 'package-lock.json'].some(ex => filePath.includes(ex))) continue;
     const stat = fs.statSync(filePath);
     if (stat.isDirectory()) {
       getFiles(filePath, fileList);

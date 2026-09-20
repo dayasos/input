@@ -117,7 +117,7 @@ window.addEventListener('appinstalled', function () {
     btnHeader.classList.remove('flex');
   }
   if (typeof tampilkanToast === 'function') {
-    tampilkanToast('🎉 Aplikasi DJPM 2027 berhasil dipasang di perangkat Anda!', 'sukses', { durasi: 6000 });
+    tampilkanToast('Aplikasi DJPM 2027 berhasil dipasang di perangkat Anda!', 'sukses', { durasi: 6000 });
   }
 });
 
@@ -674,23 +674,23 @@ function togglePw(id, btn) {
 
 function pesanErrorRamah(err) {
   const msg = (err && err.message ? err.message : String(err || "")).toLowerCase();
-  if (msg.includes("lock") || msg.includes("could not obtain")) {
-    return "⏳ Sistem sedang sibuk karena banyak data masuk bersamaan.\n\nSilakan tunggu beberapa saat lalu coba klik Simpan kembali.\nData Anda tidak hilang.";
+  if (msg.includes("lock") || msg.includes("kunci") || msg.includes("conflict")) {
+    return "Sistem sedang sibuk karena banyak data masuk bersamaan.\n\nSilakan tunggu beberapa saat lalu coba klik Simpan kembali.\nData Anda tidak hilang.";
   }
   if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("deadline")) {
-    return "⌛ Koneksi ke server memakan waktu terlalu lama.\n\nSilakan coba kembali. Jika masalah berlanjut, periksa koneksi internet Anda.";
+    return "Koneksi ke server memakan waktu terlalu lama.\n\nSilakan coba kembali. Jika masalah berlanjut, periksa koneksi internet Anda.";
   }
   if (msg.includes("quota") || msg.includes("rate") || msg.includes("too many")) {
-    return "⏳ Server sedang menerima terlalu banyak permintaan.\n\nTunggu 1-2 menit lalu coba kembali.";
+    return "Server sedang menerima terlalu banyak permintaan.\n\nTunggu 1-2 menit lalu coba kembali.";
   }
   if (msg.includes("authorization") || msg.includes("permission") || msg.includes("access")) {
-    return "🔒 Sesi Anda telah berakhir. Silakan muat ulang halaman dan login kembali.";
+    return "Sesi Anda telah berakhir. Silakan muat ulang halaman dan login kembali.";
   }
   if (msg.includes("network") || msg.includes("fetch") || msg.includes("internet")) {
-    return "🌐 Koneksi internet terputus. Periksa koneksi Anda lalu coba kembali.";
+    return "Koneksi internet terputus. Periksa koneksi Anda lalu coba kembali.";
   }
   // Pesan default — tetap tampilkan tapi dengan konteks yang lebih jelas
-  return "❌ Terjadi gangguan saat menghubungi server.\n\nSilakan coba beberapa saat lagi. Jika masalah berlanjut, hubungi administrator.\n\n(Detail teknis: " + (err && err.message ? err.message : String(err)) + ")";
+  return "Terjadi gangguan saat menghubungi server.\n\nSilakan coba beberapa saat lagi. Jika masalah berlanjut, hubungi administrator.\n\n(Detail teknis: " + (err && err.message ? err.message : String(err)) + ")";
 }
 
 const ROLE_KEMENAG_BEBAS = [
@@ -707,7 +707,7 @@ function isRoleKemenag(role) { return isRoleKemenagBebas(role) || isRoleKemenagT
 
 function pastikanLogin() {
   if (!dataPengguna.token) {
-    tampilkanToast("🔒 Sesi Anda berakhir atau belum login. Silakan login ulang.", "gagal");
+    tampilkanToast("Sesi Anda berakhir atau belum login. Silakan login ulang.", "gagal");
     document.getElementById('modal-login').classList.remove('hidden');
     return false;
   }
@@ -1462,7 +1462,8 @@ function resetSemuaKuncianForm() {
 function tampilkanPeringatan(idElemen, pesan) {
   const el = document.getElementById(idElemen);
   if (!el) return;
-  el.innerText = pesan;
+  const cleanMsg = (pesan || '').replace(/^[⚠️\s]+/, '');
+  el.innerHTML = '<span class="inline-flex items-center gap-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-current shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>' + cleanMsg + '</span></span>';
   el.classList.remove('hidden');
 }
 function sembunyikanPeringatan(idElemen) {
@@ -1484,8 +1485,9 @@ function triggerCekNik(force) {
     bukaKunciForm('NIK');
     return;
   }
-  const baruSajaDicek = nik === nikTerakhirDicek && (Date.now() - waktuNikTerakhirDicek) < 30000;
-  if (baruSajaDicek) return;
+  if (!force && nik === nikTerakhirDicek && (Date.now() - waktuNikTerakhirDicek) < 3000) {
+    return;
+  }
   nikTerakhirDicek = nik;
   waktuNikTerakhirDicek = Date.now();
 
@@ -1495,7 +1497,7 @@ function triggerCekNik(force) {
   google.script.run
     .withSuccessHandler(function (res) {
       if (res && res.blokir) {
-        tampilkanPeringatan('peringatan-nik', '⚠️ ' + res.pesan);
+        tampilkanPeringatan('peringatan-nik', res.pesan);
         kunciDariBlokSetelah('NIK', 1, null); // blok Identitas (indeks 0) tetap bebas; mulai Domisili Kec (1) dst dikunci
       }
     })
@@ -1545,7 +1547,7 @@ function triggerCekRekening(force) {
   google.script.run
     .withSuccessHandler(function (res) {
       if (res && res.blokir) {
-        tampilkanPeringatan('peringatan-rekening', '⚠️ ' + res.pesan);
+        tampilkanPeringatan('peringatan-rekening', res.pesan);
         kunciDariBlokSetelah('REKENING', 2, [inputNoRek]); // blok C (indeks 2) dibuka tapi cuma No. Rekening yang bebas
       }
     })
@@ -1629,7 +1631,7 @@ function jalankanCekTempatTugas() {
   google.script.run
     .withSuccessHandler(function (res) {
       if (res && res.blokir) {
-        tampilkanPeringatan('peringatan-tempat-tugas', '⚠️ Sudah ada penerima atas nama ' + res.nama + ' (Kec. ' + res.kecamatan + ') untuk tempat ini.');
+        tampilkanPeringatan('peringatan-tempat-tugas', 'Sudah ada penerima atas nama ' + res.nama + ' (Kec. ' + res.kecamatan + ') untuk tempat ini.');
         kunciDariBlokSetelah('TEMPAT_TUGAS', 0, null); // field ini di luar semua fieldset -> kunci semuanya
       }
     })
@@ -1675,10 +1677,10 @@ function perbaruiTampilanKuotaInput(res, kec, lay) {
     info.classList.add('flex');
     if (isPenuh) {
       info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-bold text-rose-600';
-      info.innerHTML = '<span>⚠️ Kuota layanan untuk ' + kec + ' telah terpenuhi (' + terpakai + '/' + maks + ')</span>';
+      info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>Kuota layanan untuk ' + kec + ' telah terpenuhi (' + terpakai + '/' + maks + ')</span>';
     } else {
       info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-semibold text-emerald-600';
-      info.innerHTML = '<span>🟢 Kuota tersedia: ' + sisa + ' dari ' + maks + ' (Terpakai: ' + terpakai + ')</span>';
+      info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Kuota tersedia: ' + sisa + ' dari ' + maks + ' (Terpakai: ' + terpakai + ')</span>';
     }
   }
 }
