@@ -73,6 +73,9 @@ function cobaTampilkanFloatingBanner() {
     if (btnIos) btnIos.classList.add('hidden');
     if (stepsIos) stepsIos.classList.add('hidden');
 
+    banner.style.opacity = '';
+    banner.style.transform = '';
+    banner.style.transition = '';
     banner.classList.remove('hidden');
     banner.classList.add('banner-pwa-masuk');
   } else if (perangkatIOS()) {
@@ -81,6 +84,9 @@ function cobaTampilkanFloatingBanner() {
     if (btnInstall) btnInstall.classList.add('hidden');
     if (btnIos) btnIos.classList.remove('hidden');
 
+    banner.style.opacity = '';
+    banner.style.transform = '';
+    banner.style.transition = '';
     banner.classList.remove('hidden');
     banner.classList.add('banner-pwa-masuk');
   }
@@ -152,14 +158,14 @@ window.tutupBannerInstall = function () {
   if (banner && !banner.classList.contains('hidden')) {
     banner.classList.remove('banner-pwa-masuk');
     banner.style.opacity = '0';
-    banner.style.transform = 'translate(-50%, -20px)';
-    banner.style.transition = 'all 0.25s ease-in';
+    banner.style.transform = 'translateY(-18px) scale(0.97)';
+    banner.style.transition = 'opacity 0.22s cubic-bezier(0.4, 0, 1, 1), transform 0.22s cubic-bezier(0.4, 0, 1, 1)';
     setTimeout(function () {
       banner.classList.add('hidden');
       banner.style.opacity = '';
       banner.style.transform = '';
       banner.style.transition = '';
-    }, 260);
+    }, 240);
   }
   try { sessionStorage.setItem('djpm_install_prompt_ditutup', '1'); } catch (e) { }
 };
@@ -235,8 +241,8 @@ if ('serviceWorker' in navigator) {
   // context JS-nya diganti total & variabel ini otomatis kembali false utk deploy berikutnya.
   let sudahReload = false;
   let retryTimer = null; // dilacak di luar handler spy tidak dobel timer kalau controllerchange
-                          // sempat terpicu lagi (mis. deploy kedua) selagi retry loop pertama
-                          // masih menunggu modal/aksi selesai.
+  // sempat terpicu lagi (mis. deploy kedua) selagi retry loop pertama
+  // masih menunggu modal/aksi selesai.
   if (navigator.serviceWorker.controller) {
     navigator.serviceWorker.addEventListener('controllerchange', function () {
       if (sudahReload || retryTimer) return;
@@ -746,6 +752,8 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (tabTools) tabTools.classList.toggle('hidden', role !== "UTAMA");
   const btnKelolaUser = document.getElementById('btn-kelola-user');
   if (btnKelolaUser) btnKelolaUser.classList.toggle('hidden', role !== "UTAMA");
+  const btnKelolaRumahIbadah = document.getElementById('btn-kelola-rumah-ibadah');
+  if (btnKelolaRumahIbadah) btnKelolaRumahIbadah.classList.toggle('hidden', role !== "UTAMA");
   const btnDashboardProgres = document.getElementById('btn-dashboard-progres');
   if (btnDashboardProgres) btnDashboardProgres.classList.remove('hidden');
 
@@ -916,6 +924,22 @@ if (btnKelolaUserNav) {
       muatDaftarUserLengkap();
     } else if (typeof window.muatDaftarUserLengkap === "function") {
       window.muatDaftarUserLengkap();
+    }
+  });
+}
+
+const btnKelolaRiNav = document.getElementById('btn-kelola-rumah-ibadah');
+if (btnKelolaRiNav) {
+  btnKelolaRiNav.addEventListener('click', function () {
+    if (!pastikanLogin()) return;
+    if (dataPengguna.role !== "UTAMA") {
+      tampilkanToast("Fitur Manajemen Rumah Ibadah hanya dapat diakses oleh Admin Utama.", "gagal");
+      return;
+    }
+    if (typeof bukaModalKelolaRumahIbadah === "function") {
+      bukaModalKelolaRumahIbadah();
+    } else if (typeof window.bukaModalKelolaRumahIbadah === "function") {
+      window.bukaModalKelolaRumahIbadah();
     }
   });
 }

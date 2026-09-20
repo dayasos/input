@@ -69,17 +69,20 @@
     @keyframes slideDownTopCenter {
       from {
         opacity: 0;
-        transform: translate(-50%, -24px) scale(0.96);
+        transform: translateY(-20px) scale(0.97);
       }
 
       to {
         opacity: 1;
-        transform: translate(-50%, 0) scale(1);
+        transform: translateY(0) scale(1);
       }
     }
 
     .banner-pwa-masuk {
-      animation: slideDownTopCenter 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      animation: slideDownTopCenter 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: transform, opacity;
+      -webkit-font-smoothing: antialiased;
+      backface-visibility: hidden;
     }
 
     body {
@@ -379,6 +382,16 @@
                 d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
             <span>Kelola User</span>
+          </button>
+          <button id="btn-kelola-rumah-ibadah"
+            class="utama-show bg-emerald-600/80 hover:bg-emerald-600 active:scale-95 border border-emerald-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
+            title="Kelola Data Rumah Ibadah (Admin Utama)">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-200" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+            <span>Data Ibadah</span>
           </button>
           <button id="fab-ganti-password"
             class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-9 h-9 sm:w-10 sm:h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
@@ -1667,26 +1680,28 @@
   <!-- NOTIFIKASI BANNER INSTALASI PWA (ATAS TENGAH - PROFESIONAL & PROPORSIONAL) -->
   <!-- ========================================================================= -->
   <aside id="banner-install-pwa" role="region" aria-label="Notifikasi Instalasi Aplikasi"
-    class="hidden fixed top-3 sm:top-4 left-1/2 -translate-x-1/2 z-[650] w-[94%] max-w-md sm:max-w-lg bg-white/95 backdrop-blur-md border border-sky-200/90 shadow-2xl shadow-slate-900/15 rounded-2xl p-3 sm:p-3.5 transition-all duration-300 pointer-events-auto">
-    <div class="flex items-center gap-3">
+    style="top: max(0.75rem, env(safe-area-inset-top, 0.75rem)); left: 0; right: 0; margin-left: auto; margin-right: auto;"
+    class="hidden fixed inset-x-0 mx-auto z-[650] w-[calc(100%-1.25rem)] sm:w-[92%] max-w-md sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto bg-white/95 backdrop-blur-md border border-sky-200/90 shadow-2xl shadow-slate-900/15 rounded-2xl p-2.5 sm:p-3.5 transition-all duration-300 pointer-events-auto">
+    <div class="flex items-center gap-2.5 sm:gap-3">
       <!-- Logo / Icon Miniatur -->
       <div class="relative shrink-0">
         <img src="/icons/icon-192.png" alt="DJPM 2027"
-          class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain shadow-xs border border-sky-100 bg-white p-0.5">
-        <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
+          class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl object-contain shadow-xs border border-sky-100 bg-white p-0.5">
+        <span class="absolute -bottom-1 -right-1 flex h-2.5 w-2.5 sm:h-3 sm:w-3">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+          <span class="relative inline-flex rounded-full h-2.5 w-2.5 sm:h-3 sm:w-3 bg-sky-500"></span>
         </span>
       </div>
 
       <!-- Teks Informasi -->
-      <div class="flex-1 min-w-0 pr-1">
-        <div class="flex items-center gap-1.5 flex-wrap">
-          <h4 id="banner-pwa-judul" class="text-xs sm:text-sm font-bold text-slate-800 tracking-tight leading-tight">
+      <div class="flex-1 min-w-0 pr-0.5">
+        <div class="flex items-center gap-1.5 flex-nowrap">
+          <h4 id="banner-pwa-judul"
+            class="text-xs sm:text-sm font-bold text-slate-800 tracking-tight leading-tight truncate sm:overflow-visible">
             Instal Aplikasi DJPM 2027
           </h4>
           <span
-            class="px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md">
+            class="px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider bg-sky-100 text-sky-700 rounded-md shrink-0">
             PWA
           </span>
         </div>
@@ -1696,9 +1711,9 @@
       </div>
 
       <!-- Tombol Aksi -->
-      <div class="flex items-center gap-1.5 shrink-0">
+      <div class="flex items-center gap-1 sm:gap-1.5 shrink-0">
         <button type="button" id="btn-banner-install" onclick="window.installAplikasi()"
-          class="px-3.5 py-2 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 active:scale-95 text-white font-bold text-xs rounded-xl shadow-sm hover:shadow transition flex items-center gap-1.5">
+          class="px-3 py-1.5 sm:px-3.5 sm:py-2 bg-gradient-to-r from-sky-600 to-sky-700 hover:from-sky-700 hover:to-sky-800 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs hover:shadow transition flex items-center gap-1 sm:gap-1.5 shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24"
             stroke="currentColor" stroke-width="2.2">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -1708,7 +1723,7 @@
         </button>
 
         <button type="button" id="btn-banner-petunjuk-ios" onclick="window.togglePetunjukIos()"
-          class="hidden px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-xs rounded-xl transition items-center gap-1">
+          class="hidden px-2.5 py-1.5 sm:px-3 sm:py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 font-bold text-xs rounded-xl transition items-center gap-1 shrink-0">
           <span>Petunjuk</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
             <path fill-rule="evenodd"
@@ -1718,7 +1733,7 @@
         </button>
 
         <button type="button" onclick="window.tutupBannerInstall()" aria-label="Tutup notifikasi instalasi"
-          class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-95 rounded-lg transition"
+          class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-95 rounded-lg transition shrink-0"
           title="Nanti Saja">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"
             stroke-width="2.2">
@@ -2957,6 +2972,8 @@
     </div>
   </div>
 
+  <!-- Kontainer Dinamis Modal Manajemen Rumah Ibadah (Diinjeksi oleh app-admin.js) -->
+  <div id="container-modal-rumah-ibadah"></div>
 
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->

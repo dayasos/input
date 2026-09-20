@@ -275,3 +275,200 @@ export async function getVersiAplikasi() {
   }
 }
 
+// =========================================================================
+// CRUD DATA RUMAH IBADAH KHUSUS ADMIN UTAMA (SUPERADMIN / DINAS SOSIAL)
+// =========================================================================
+
+export interface FilterRumahIbadahAdmin {
+  cari?: string;
+  jenis?: string;
+  kecamatan?: string;
+  page?: number;
+  limit?: number;
+}
+
+export async function ambilDaftarRumahIbadahAdmin(
+  token: string,
+  params?: FilterRumahIbadahAdmin,
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if (sesi.role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: Hanya Admin Utama yang dapat mengelola data rumah ibadah." };
+  }
+
+  const cari = String(params?.cari || "").trim();
+  const jenis = String(params?.jenis || "").trim().toUpperCase();
+  const kecamatan = String(params?.kecamatan || "").trim().toUpperCase();
+  const page = Math.max(1, Number(params?.page || 1));
+  const limit = Math.min(100, Math.max(5, Number(params?.limit || 25)));
+  const offset = (page - 1) * limit;
+
+  try {
+    const cariPattern = cari ? `%${cari}%` : "";
+
+    const countResult = await sql`
+      select count(*)::int as total
+      from rumah_ibadah
+      where 1=1
+        ${jenis ? sql`and jenis = ${jenis}` : sql``}
+        ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
+        ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
+    `;
+    const total = Number(countResult[0]?.total || 0);
+
+    const rows = await sql`
+      select id, jenis, kecamatan, kelurahan, nama, alamat
+      from rumah_ibadah
+      where 1=1
+        ${jenis ? sql`and jenis = ${jenis}` : sql``}
+        ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
+        ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
+      order by kecamatan asc, kelurahan asc, nama asc
+      limit ${limit} offset ${offset}
+    `;
+
+    return {
+      sukses: true,
+      total,
+      halaman: page,
+      totalHalaman: Math.ceil(total / limit) || 1,
+      limit,
+      daftar: rows.map((r: { id: unknown; jenis: unknown; kecamatan: unknown; kelurahan: unknown; nama: unknown; alamat: unknown }) => ({
+        id: Number(r.id),
+        jenis: String(r.jenis || ""),
+        kecamatan: String(r.kecamatan || ""),
+        kelurahan: String(r.kelurahan || ""),
+        nama: String(r.nama || ""),
+        alamat: String(r.alamat || ""),
+      })),
+    };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal mengambil data rumah ibadah: " + (err instanceof Error ? err.message : String(err)) };
+  }
+}
+
+export async function tambahRumahIbadah(
+  token: string,
+  payload: { jenis: string; kecamatan: string; kelurahan: string; nama: string; alamat?: string },
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if (sesi.role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: Hanya Admin Utama yang dapat menambah data rumah ibadah." };
+  }
+
+  const jenis = String(payload?.jenis || "").trim().toUpperCase();
+  const kecamatan = String(payload?.kecamatan || "").trim().toUpperCase();
+  const kelurahan = String(payload?.kelurahan || "").trim().toUpperCase();
+  const nama = String(payload?.nama || "").trim().toUpperCase();
+  const alamat = String(payload?.alamat || "").trim().toUpperCase();
+
+  const VALID_JENIS = ["MASJID", "MUSHOLLA", "GEREJA", "PGK", "VIHARA", "KUIL", "VIHARA_KLENTENG_KUIL"];
+  if (!VALID_JENIS.includes(jenis)) {
+    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${VALID_JENIS.join(", ")}` };
+  }
+  if (!kecamatan) return { sukses: false, pesan: "Kecamatan wajib dipilih." };
+  if (!kelurahan) return { sukses: false, pesan: "Kelurahan wajib dipilih." };
+  if (!nama || nama.length < 3) return { sukses: false, pesan: "Nama tempat ibadah wajib diisi minimal 3 karakter." };
+
+  try {
+    const inserted = await sql`
+      insert into rumah_ibadah (jenis, kecamatan, kelurahan, nama, alamat)
+      values (${jenis}, ${kecamatan}, ${kelurahan}, ${nama}, ${alamat})
+      returning id
+    `;
+    return {
+      sukses: true,
+      pesan: `Data rumah ibadah "${nama}" berhasil ditambahkan.`,
+      id: Number(inserted[0]?.id),
+    };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal menambah rumah ibadah: " + (err instanceof Error ? err.message : String(err)) };
+  }
+}
+
+export async function ubahRumahIbadah(
+  token: string,
+  payload: { id: number; jenis: string; kecamatan: string; kelurahan: string; nama: string; alamat?: string },
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if (sesi.role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: Hanya Admin Utama yang dapat mengubah data rumah ibadah." };
+  }
+
+  const id = Number(payload?.id);
+  if (!id || id <= 0) return { sukses: false, pesan: "ID rumah ibadah tidak valid." };
+
+  const jenis = String(payload?.jenis || "").trim().toUpperCase();
+  const kecamatan = String(payload?.kecamatan || "").trim().toUpperCase();
+  const kelurahan = String(payload?.kelurahan || "").trim().toUpperCase();
+  const nama = String(payload?.nama || "").trim().toUpperCase();
+  const alamat = String(payload?.alamat || "").trim().toUpperCase();
+
+  const VALID_JENIS = ["MASJID", "MUSHOLLA", "GEREJA", "PGK", "VIHARA", "KUIL", "VIHARA_KLENTENG_KUIL"];
+  if (!VALID_JENIS.includes(jenis)) {
+    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${VALID_JENIS.join(", ")}` };
+  }
+  if (!kecamatan) return { sukses: false, pesan: "Kecamatan wajib dipilih." };
+  if (!kelurahan) return { sukses: false, pesan: "Kelurahan wajib dipilih." };
+  if (!nama || nama.length < 3) return { sukses: false, pesan: "Nama tempat ibadah wajib diisi minimal 3 karakter." };
+
+  try {
+    const updated = await sql`
+      update rumah_ibadah
+      set jenis = ${jenis}, kecamatan = ${kecamatan}, kelurahan = ${kelurahan}, nama = ${nama}, alamat = ${alamat}
+      where id = ${id}
+      returning id
+    `;
+    if (updated.length === 0) {
+      return { sukses: false, pesan: "Data rumah ibadah tidak ditemukan atau sudah dihapus." };
+    }
+    return { sukses: true, pesan: `Data rumah ibadah "${nama}" berhasil diperbarui.` };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal memperbarui rumah ibadah: " + (err instanceof Error ? err.message : String(err)) };
+  }
+}
+
+export async function hapusRumahIbadah(token: string, idRumahIbadah: number) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+  if (sesi.role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: Hanya Admin Utama yang dapat menghapus data rumah ibadah." };
+  }
+
+  const id = Number(idRumahIbadah);
+  if (!id || id <= 0) return { sukses: false, pesan: "ID rumah ibadah tidak valid." };
+
+  try {
+    const deleted = await sql`
+      delete from rumah_ibadah
+      where id = ${id}
+      returning id, nama
+    `;
+    if (deleted.length === 0) {
+      return { sukses: false, pesan: "Data rumah ibadah tidak ditemukan atau sudah dihapus sebelumnya." };
+    }
+    return { sukses: true, pesan: `Data rumah ibadah "${deleted[0]?.nama || ""}" berhasil dihapus.` };
+  } catch (err) {
+    return { sukses: false, pesan: "Gagal menghapus data rumah ibadah: " + (err instanceof Error ? err.message : String(err)) };
+  }
+}
+

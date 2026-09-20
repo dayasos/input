@@ -2,12 +2,16 @@
 import { loginPengguna, logoutPengguna, pulihkanSesi } from "./domains/auth.ts";
 import { ambilSesi } from "./_shared/sesi.ts";
 import {
+  ambilDaftarRumahIbadahAdmin,
   getDataRumahIbadah,
   getKelurahanByKecamatan,
   getKemenagData,
   getMasterLayanan,
   getSheetName,
   getVersiAplikasi,
+  hapusRumahIbadah,
+  tambahRumahIbadah,
+  ubahRumahIbadah,
 } from "./domains/master.ts";
 import {
   cekKuotaRealtime,
@@ -87,6 +91,10 @@ const ALLOWED: Record<string, Handler> = {
   getMasterLayanan,
   getKelurahanByKecamatan,
   getDataRumahIbadah,
+  ambilDaftarRumahIbadahAdmin,
+  tambahRumahIbadah,
+  ubahRumahIbadah,
+  hapusRumahIbadah,
   getKemenagData,
   getSheetName,
   getVersiAplikasi,

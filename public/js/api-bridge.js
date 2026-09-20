@@ -187,6 +187,7 @@ const SWR_CONFIG = {
 
   // Rumah Ibadah & Kemenag: TTL 15 menit
   getDataRumahIbadah: { ttl: 15 * 60 * 1000, domain: 'rumah_ibadah' },
+  ambilDaftarRumahIbadahAdmin: { ttl: 2 * 60 * 1000, domain: 'rumah_ibadah' },
   getKemenagData: { ttl: 15 * 60 * 1000, domain: 'rumah_ibadah' },
 
   // Data Transaksi Penerima & Dashboard: TTL 3 menit (revalidasi di latar belakang)
@@ -263,6 +264,10 @@ const MUTATION_INVALIDATIONS = {
   simpanPejabatTtd: ['tools_pejabat'],
   simpanReferensiSkWalikota: ['tools_referensi_sk'],
   simpanSkLayanan: ['tools_sk_layanan'],
+
+  tambahRumahIbadah: ['rumah_ibadah', 'master'],
+  ubahRumahIbadah: ['rumah_ibadah', 'master'],
+  hapusRumahIbadah: ['rumah_ibadah', 'master'],
 };
 
 // Daftar PUTIH (whitelist) aksi baca murni yang aman diulang otomatis kalau koneksi timeout/putus
