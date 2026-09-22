@@ -28,6 +28,19 @@ import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB } from "../_shared/tanggal
 // fallback ke TAHUN_AKTIF kalau tidak dikirim (kompatibel dengan pemanggil lama). Butuh partisi
 // data_detail_<tahun> sudah ada (lihat migrasi 20260922090000_partisi_data_detail_2026.sql) —
 // kalau belum, insert sinkronisasi di bawah akan gagal dengan error partisi dari Postgres.
+//
+// Status kelayakan `IN ('Memenuhi Syarat', 'AKTIF')` (2026-09-22): tahun arsip yang di-backfill
+// dari sheet db_<tahun> lama (mis. 2026, lihat scripts/backfill/steps/06_arsip_tahun_lalu.js)
+// TIDAK PERNAH punya status_verifikasi = 'Memenuhi Syarat' — kosakata arsip pakai 'AKTIF' sebagai
+// status "lolos"-nya, digabung jadi satu (beda dari alur verifikasi tahun berjalan yang punya
+// tahap terpisah Proses Verifikasi/Memenuhi Syarat/dst). SENGAJA bukan cabang "kalau tahun aktif
+// pakai X, kalau bukan pakai Y" — itu akan rusak begitu TAHUN_AKTIF sekarang (mis. 2027) nanti
+// pensiun jadi arsip: baris-barisnya TETAP berlabel 'Memenuhi Syarat' apa adanya (tidak ada proses
+// yang menulis ulang label saat pergantian tahun), jadi tetap harus dicek juga. Daftar IN() ini
+// aman untuk semua tahun tanpa perlu direvisi lagi tiap pergantian TAHUN_AKTIF — tidak berisiko ke
+// proses Pembayaran karena buatBatchPembayaran() (pembayaran.ts) selalu hardcode ke TAHUN_AKTIF,
+// tidak pernah baca tahun yang sedang dilihat di sini.
+const STATUS_LOLOS_DATA_DETAIL = ["Memenuhi Syarat", "AKTIF"];
 export async function ambilDataDetail(token: string, tahun?: number) {
   let sesi;
   try {
@@ -54,7 +67,7 @@ export async function ambilDataDetail(token: string, tahun?: number) {
         p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
         p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur
       from penerima p
-      where p.tahun = ${tahunDiminta} and p.status_verifikasi = 'Memenuhi Syarat'
+      where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
       on conflict (tahun, penerima_id) do nothing
     `;
 
