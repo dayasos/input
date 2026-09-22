@@ -17,6 +17,24 @@ const log = require("../lib/log");
 // nik/nama/layanan/status_verifikasi (lihat supabase/functions/api/domains/validasi.ts).
 const POLA_NAMA_SHEET_ARSIP = /^db_(\d{4})$/;
 
+const SQL_INSERT_PENERIMA = `insert into penerima (
+    tahun, nomor_urut, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
+    layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
+    nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi
+  ) values (
+    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
+  )
+  on conflict (tahun, nik) do update set
+    nomor_urut = excluded.nomor_urut, nama = excluded.nama,
+    jenis_kelamin = excluded.jenis_kelamin, tempat_lahir = excluded.tempat_lahir,
+    tanggal_lahir = excluded.tanggal_lahir, alamat = excluded.alamat,
+    layanan = excluded.layanan, tempat_tugas = excluded.tempat_tugas,
+    alamat_tugas = excluded.alamat_tugas, kecamatan = excluded.kecamatan,
+    kelurahan = excluded.kelurahan, nama_rekening = excluded.nama_rekening,
+    nomor_rekening = excluded.nomor_rekening, kantor_cabang = excluded.kantor_cabang,
+    no_kontak = excluded.no_kontak, status_bpjs_tk = excluded.status_bpjs_tk,
+    umur = excluded.umur, status_verifikasi = excluded.status_verifikasi`;
+
 async function pastikanPartisiAda(pool, tahun) {
   const res = await pool.query(
     `select 1 from pg_inherits
@@ -48,6 +66,7 @@ async function jalankan({ sheetsClient, pool, env, mode, tahunAktif }) {
   let totalDibaca = 0;
   let totalDitulis = 0;
   let totalDilewati = 0;
+  let totalKonflikRekening = 0;
 
   for (const { nama: namaSheet, tahun } of sheetArsip) {
     if (mode === "write") await pastikanPartisiAda(pool, tahun);
@@ -55,11 +74,13 @@ async function jalankan({ sheetsClient, pool, env, mode, tahunAktif }) {
     const baris = await bacaSheet(sheetsClient, env.ssIdMasterDropdown, namaSheet, "A2:S");
     let ditulis = 0;
     let dilewati = 0;
+    let konflikRekening = 0;
 
     const client = mode === "write" ? await pool.connect() : null;
     try {
       for (let i = 0; i < baris.length; i++) {
         const r = baris[i];
+        const nomorBarisSheet = i + 2;
         const nik = (r[2] || "").toString().trim();
         if (!nik) {
           dilewati++;
@@ -91,26 +112,46 @@ async function jalankan({ sheetsClient, pool, env, mode, tahunAktif }) {
         };
 
         if (mode === "write") {
-          await client.query(
-            `insert into penerima (
-               tahun, nomor_urut, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat,
-               layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
-               nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi
-             ) values (
-               $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20
-             )
-             on conflict (tahun, nik) do update set
-               nomor_urut = excluded.nomor_urut, nama = excluded.nama,
-               jenis_kelamin = excluded.jenis_kelamin, tempat_lahir = excluded.tempat_lahir,
-               tanggal_lahir = excluded.tanggal_lahir, alamat = excluded.alamat,
-               layanan = excluded.layanan, tempat_tugas = excluded.tempat_tugas,
-               alamat_tugas = excluded.alamat_tugas, kecamatan = excluded.kecamatan,
-               kelurahan = excluded.kelurahan, nama_rekening = excluded.nama_rekening,
-               nomor_rekening = excluded.nomor_rekening, kantor_cabang = excluded.kantor_cabang,
-               no_kontak = excluded.no_kontak, status_bpjs_tk = excluded.status_bpjs_tk,
-               umur = excluded.umur, status_verifikasi = excluded.status_verifikasi`,
-            Object.values(data),
-          );
+          // Setiap baris di-INSERT satu per satu TANPA transaksi pembungkus (sengaja, supaya baris
+          // yang berhasil sebelum satu baris bermasalah tetap tersimpan) -- tapi itu berarti error
+          // yang tidak ditangkap akan MENGHENTIKAN seluruh proses di tengah jalan, meninggalkan
+          // backfill setengah-selesai tanpa peringatan jelas. Ditemukan saat code review: 2 baris
+          // db_2026 berbagi nomor_rekening yang sama (constraint uq_penerima_rekening, BEDA dari
+          // target ON CONFLICT di atas yang cuma (tahun, nik)) -- tanpa try/catch ini, --write akan
+          // crash persis di baris itu dan menyisakan ribuan baris berikutnya tidak pernah masuk.
+          try {
+            await client.query(SQL_INSERT_PENERIMA, Object.values(data));
+          } catch (err) {
+            if (err.code === "23505" && (err.constraint || "").includes("rekening")) {
+              // Konflik HANYA di nomor rekening: simpan tetap baris ini tapi rekening dikosongkan
+              // (bukan didrop total) -- konsisten dengan desain uq_penerima_rekening sendiri yang
+              // sengaja tidak mengindeks rekening kosong (lihat komentar di migrasi
+              // 20260907090200_penerima_partitioned.sql), jadi ini bukan hack, memang jalur yang
+              // sudah disediakan skema untuk data belum lengkap/perlu dicek ulang manual.
+              const dataTanpaRekening = { ...data, nomor_rekening: "" };
+              try {
+                await client.query(SQL_INSERT_PENERIMA, Object.values(dataTanpaRekening));
+                log.info(
+                  `  [KONFLIK REKENING] baris sheet ${nomorBarisSheet} (NIK ${nik}): nomor rekening ` +
+                    `"${data.nomor_rekening}" sudah dipakai baris lain -> disimpan TANPA rekening, ` +
+                    `perlu dicek & diisi ulang manual.`,
+                );
+                konflikRekening++;
+                ditulis++;
+              } catch (err2) {
+                log.info(`  [GAGAL] baris sheet ${nomorBarisSheet} (NIK ${nik}) tetap gagal setelah rekening dikosongkan: ${err2.message}`);
+                dilewati++;
+              }
+            } else if (err.code === "23505") {
+              log.info(`  [GAGAL - KONFLIK] baris sheet ${nomorBarisSheet} (NIK ${nik}): ${err.constraint || err.message} -- dilewati, cek manual.`);
+              dilewati++;
+            } else {
+              // Error di luar pelanggaran constraint unik (mis. koneksi putus) TETAP menghentikan
+              // proses -- itu bukan masalah kualitas data yang aman ditangani otomatis.
+              throw err;
+            }
+            continue;
+          }
         }
         ditulis++;
       }
@@ -118,14 +159,23 @@ async function jalankan({ sheetsClient, pool, env, mode, tahunAktif }) {
       if (client) client.release();
     }
 
-    log.info(`${namaSheet} -> penerima_${tahun}: ${baris.length} baris sheet, ${ditulis} ditulis, ${dilewati} dilewati`);
+    log.info(
+      `${namaSheet} -> penerima_${tahun}: ${baris.length} baris sheet, ${ditulis} ditulis, ${dilewati} dilewati` +
+        (konflikRekening > 0 ? `, ${konflikRekening} konflik rekening (disimpan tanpa rekening)` : ""),
+    );
     totalDibaca += baris.length;
     totalDitulis += ditulis;
     totalDilewati += dilewati;
+    totalKonflikRekening += konflikRekening;
   }
 
   log.ringkasan({ sheetDibaca: totalDibaca, ditulis: totalDitulis, dilewati: totalDilewati, mode });
-  return { sheetDibaca: totalDibaca, ditulis: totalDitulis, dilewati: totalDilewati };
+  if (totalKonflikRekening > 0) {
+    log.info(
+      `${totalKonflikRekening} baris tersimpan TANPA nomor rekening karena bentrok dengan baris lain -- cek log [KONFLIK REKENING] di atas, lalu perbaiki manual (isi ulang rekening yang benar) setelah backfill selesai.`,
+    );
+  }
+  return { sheetDibaca: totalDibaca, ditulis: totalDitulis, dilewati: totalDilewati, konflikRekening: totalKonflikRekening };
 }
 
 module.exports = { nama: "arsip-tahun-lalu", jalankan };
