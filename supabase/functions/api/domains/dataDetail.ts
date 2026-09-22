@@ -19,14 +19,24 @@ import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB } from "../_shared/tanggal
 // `status`/`tgl_status` pada tabel `data_detail` SENGAJA tidak pernah ditulis di sini setelah
 // baris dibuat (selalu default 'AKTIF') — itu wewenang Aplikasi Retur begitu nanti tersambung
 // ke database yang sama.
-// ---------------------------------------------------------------------------
-export async function ambilDataDetail(token: string) {
+//
+// Parameter `tahun` (2026-09-22): awalnya fungsi ini SELALU terkunci ke TAHUN_AKTIF, tidak
+// peduli tahun yang sedang dipilih user di dropdown "Lihat Data" — akibatnya tombol "Data Detail"
+// diam-diam menampilkan rekap tahun aktif (dan waktu itu masih kosong) walau user sedang melihat
+// tahun historis (mis. 2026), tanpa pesan error apa pun ("Belum ada data Memenuhi Syarat" padahal
+// tahun yang dilihat sebenarnya punya data). Sekarang menerima tahun eksplisit dari frontend,
+// fallback ke TAHUN_AKTIF kalau tidak dikirim (kompatibel dengan pemanggil lama). Butuh partisi
+// data_detail_<tahun> sudah ada (lihat migrasi 20260922090000_partisi_data_detail_2026.sql) —
+// kalau belum, insert sinkronisasi di bawah akan gagal dengan error partisi dari Postgres.
+export async function ambilDataDetail(token: string, tahun?: number) {
   let sesi;
   try {
     sesi = await wajibSesi(token);
   } catch (e) {
     return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
   }
+
+  const tahunDiminta = Number(tahun) || TAHUN_AKTIF;
 
   try {
     // Sinkron dulu: baris `penerima` yang sudah "Memenuhi Syarat" tapi belum ada di
@@ -44,7 +54,7 @@ export async function ambilDataDetail(token: string) {
         p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
         p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur
       from penerima p
-      where p.tahun = ${TAHUN_AKTIF} and p.status_verifikasi = 'Memenuhi Syarat'
+      where p.tahun = ${tahunDiminta} and p.status_verifikasi = 'Memenuhi Syarat'
       on conflict (tahun, penerima_id) do nothing
     `;
 
@@ -66,7 +76,7 @@ export async function ambilDataDetail(token: string) {
              tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
              kantor_cabang, no_kontak, status_bpjs_tk, umur, status, tgl_status
       from data_detail
-      where tahun = ${TAHUN_AKTIF}
+      where tahun = ${tahunDiminta}
       order by id
     `;
 
@@ -115,7 +125,7 @@ export async function ambilDataDetail(token: string) {
       });
     }
 
-    return { sukses: true, rows: hasil };
+    return { sukses: true, rows: hasil, tahun: tahunDiminta };
   } catch (error) {
     return { sukses: false, pesan: String(error) };
   }

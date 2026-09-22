@@ -1454,8 +1454,30 @@ window.tampilkanDataDetail = function () {
   muatDataDetail(true);
 };
 
+// Ikuti tahun yang sedang dipilih user di dropdown "Lihat Data" (bisa tahun historis, mis. 2026),
+// bukan selalu tahun aktif -- sebelumnya "Data Detail" diam-diam mengabaikan pilihan tahun ini dan
+// selalu menampilkan rekap TAHUN_AKTIF, sehingga tampak kosong/salah saat user melihat tahun lain
+// (lihat catatan di ambilDataDetail(), supabase/functions/api/domains/dataDetail.ts).
+function _tahunUntukDataDetail() {
+  if (window._tahunDipilihGetter) {
+    const t = window._tahunDipilihGetter();
+    if (t) return t;
+  }
+  return window._tahunAktifGetter ? window._tahunAktifGetter() : undefined;
+}
+
+function _perbaruiSubjudulDataDetail(tahun) {
+  const subjudul = document.getElementById('subjudul-data-detail');
+  if (!subjudul) return;
+  subjudul.textContent = tahun
+    ? 'Rekap penerima Memenuhi Syarat tahun ' + tahun + ' sesuai hak akses Anda.'
+    : 'Rekap penerima Memenuhi Syarat sesuai hak akses Anda.';
+}
+
 function muatDataDetail(bolehCobaLagi) {
   const info = document.getElementById('info-total-data-detail');
+  const tahun = _tahunUntukDataDetail();
+  _perbaruiSubjudulDataDetail(tahun);
   const timerPenenang = setTimeout(function () {
     if (info) info.innerText = 'Server sedang bersiap, mohon tunggu sebentar lagi...';
   }, 4000);
@@ -1468,6 +1490,7 @@ function muatDataDetail(bolehCobaLagi) {
         if (info) info.innerText = '';
         return;
       }
+      _perbaruiSubjudulDataDetail(res.tahun || tahun);
       renderTabelDataDetail(res.rows);
     })
     .withFailureHandler(function (err) {
@@ -1481,7 +1504,7 @@ function muatDataDetail(bolehCobaLagi) {
         '<tr><td colspan="20" class="px-4 py-6 text-center text-red-500">' + esc(pesanErrorRamah(err)) + '</td></tr>';
       if (info) info.innerText = '';
     })
-    .ambilDataDetail(dataPengguna.token);
+    .ambilDataDetail(dataPengguna.token, tahun);
 }
 
 function renderTabelDataDetail(rows) {
