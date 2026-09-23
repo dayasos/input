@@ -317,6 +317,7 @@ let masterLayanan = {
   kemenag: [
     "GURU SEKOLAH BUDDHA",
     "GURU SEKOLAH HINDU",
+    "GURU SEKOLAH KONG HU CHU",
     "GURU SEKOLAH MINGGU",
     "PENATUA GEREJA",
     "GURU MAGHRIB MENGAJI"
@@ -696,6 +697,7 @@ function pesanErrorRamah(err) {
 const ROLE_KEMENAG_BEBAS = [
   "GURU SEKOLAH BUDDHA",
   "GURU SEKOLAH HINDU",
+  "GURU SEKOLAH KONG HU CHU",
   "GURU SEKOLAH MINGGU",
   "PENATUA GEREJA"
 ];
@@ -754,6 +756,8 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (btnKelolaUser) btnKelolaUser.classList.toggle('hidden', role !== "UTAMA");
   const btnKelolaRumahIbadah = document.getElementById('btn-kelola-rumah-ibadah');
   if (btnKelolaRumahIbadah) btnKelolaRumahIbadah.classList.toggle('hidden', role !== "UTAMA");
+  const btnSync2026Hak = document.getElementById('btn-sync-sheet-2026');
+  if (btnSync2026Hak) btnSync2026Hak.classList.toggle('hidden', role !== "UTAMA" || String(typeof tahunDipilih !== 'undefined' ? tahunDipilih : '') !== "2026");
   if (role !== "UTAMA") {
     const mKelolaRi = document.getElementById('modal-kelola-rumah-ibadah');
     if (mKelolaRi) mKelolaRi.classList.add('hidden');
@@ -1172,6 +1176,12 @@ tabTools.addEventListener('click', () => {
     const thAksiEl = document.getElementById('th-aksi-lihat');
     if (thAksiEl) thAksiEl.classList.toggle('hidden', tahunDipilih !== tahunAktif);
 
+    const btnSync2026 = document.getElementById('btn-sync-sheet-2026');
+    if (btnSync2026) {
+      const isUtama = typeof dataPengguna !== 'undefined' && dataPengguna.role === 'UTAMA';
+      btnSync2026.classList.toggle('hidden', !isUtama || String(tahunDipilih) !== '2026');
+    }
+
     if (tahunDipilih === tahunAktif) {
       masterDataLihat = [];
       inisialisasiMenuLihatData();
@@ -1316,6 +1326,18 @@ tabTools.addEventListener('click', () => {
   window._tampilDataHistoris = tampilDataHistoris;
   window._tahunDipilihGetter = function () { return tahunDipilih; };
   window._tahunAktifGetter = function () { return tahunAktif; };
+  window.segarkanDataTahunHistoris = function (tahun) {
+    if (tahun) {
+      delete masterDataTahun[tahun];
+    } else {
+      masterDataTahun = {};
+    }
+    if (tahunDipilih && tahunDipilih !== tahunAktif) {
+      if (!tahun || String(tahun) === String(tahunDipilih)) {
+        muatDataTahunHistoris(tahunDipilih);
+      }
+    }
+  };
 })();
 
 btnKec.addEventListener('click', () => { murniGantiInstansi("KECAMATAN", btnKec, btnKem); });

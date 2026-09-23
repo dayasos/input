@@ -8,6 +8,14 @@
  */
 function keTanggalIso(nilai) {
   if (!nilai) return null;
+  if (typeof nilai === "number" || (typeof nilai === "string" && /^\d{4,6}$/.test(nilai.trim()))) {
+    const num = Number(nilai);
+    if (!isNaN(num) && num > 0) {
+      const ms = Math.round((num - 25569) * 86400 * 1000);
+      const d = new Date(ms);
+      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+    }
+  }
   const str = nilai.toString().trim();
   if (!str) return null;
 

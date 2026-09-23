@@ -8,11 +8,15 @@ const SHEET_KE_JENIS_RUMAH_IBADAH = {
   db_masjid: "MASJID",
   db_musholla: "MUSHOLLA",
   db_gereja: "GEREJA",
-  db_pgk: "PGK",
-  db_vihara_klenteng_kuil: "VIHARA_KLENTENG_KUIL",
+  db_pgk: "GEREJA_KATOLIK",
   db_vihara: "VIHARA",
+  db_klenteng: "KLENTENG",
   db_kuil: "KUIL",
 };
+
+// Sheet gabungan lama tidak dapat dipisah otomatis menjadi Vihara, Klenteng, atau Kuil.
+// Sengaja tidak diimpor agar backfill baru tidak lagi menciptakan data berjenis gabungan.
+const SHEET_RUMAH_IBADAH_PERLU_KLASIFIKASI = ["db_vihara_klenteng_kuil"];
 
 // db_layanan kolom A=daftar layanan Kecamatan, B=daftar layanan Kemenag (DUA LIST INDEPENDEN,
 // bukan baris berpasangan — dikonfirmasi dari getMasterLayanan() Kode.gs baris 374-379).
@@ -105,7 +109,7 @@ async function backfillKuota(ctx, sheetName, table) {
   return { sheetDibaca: baris.length, ditulis, dilewati };
 }
 
-// 5 sheet rumah ibadah, kolom A=Kecamatan B=Kelurahan C=Nama D=Alamat (dikonfirmasi dari
+// Sheet rumah ibadah resmi, kolom A=Kecamatan B=Kelurahan C=Nama D=Alamat (dikonfirmasi dari
 // renderTable() di index.html baris 6587-6593: r[0]=kecamatan, r[1]=kelurahan, r[2]=nama, r[3]=alamat).
 async function backfillRumahIbadah(ctx, sheetName) {
   const jenis = SHEET_KE_JENIS_RUMAH_IBADAH[sheetName];
@@ -157,6 +161,9 @@ async function jalankan({ sheetsClient, pool, env, mode }) {
   hasil.push(await backfillKuota(ctx, "db_kuotakatolik", "kuota_katolik"));
   for (const sheetName of Object.keys(SHEET_KE_JENIS_RUMAH_IBADAH)) {
     hasil.push(await backfillRumahIbadah(ctx, sheetName));
+  }
+  for (const sheetName of SHEET_RUMAH_IBADAH_PERLU_KLASIFIKASI) {
+    log.info(`${sheetName} dilewati: data harus diklasifikasikan sebagai Vihara, Klenteng, atau Kuil sebelum diimpor.`);
   }
 
   const total = hasil.reduce(

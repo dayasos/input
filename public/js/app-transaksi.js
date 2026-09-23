@@ -136,7 +136,7 @@ function bacaGpsDariFile(file) {
 // Koordinat Lokasi EXIF
 const KONFIG_KOORDINAT = {
   plank: { layananList: ["GURU MAGHRIB MENGAJI"], wrapperId: 'wrapper-foto-plank', idHidden: 'hidden-koordinat-link', idCek: 'status-koordinat-cek', idOk: 'status-koordinat-ok', idGagal: 'status-koordinat-gagal', idTeksOk: 'teks-koordinat-ok', idLinkOk: 'link-koordinat-ok', idInputManual: 'input-koordinat-manual', siap: false },
-  ibadah: { layananList: ["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU"], wrapperId: 'wrapper-foto-ibadah', idHidden: 'hidden-koordinat-link-ibadah', idCek: 'status-koordinat-cek-ibadah', idOk: 'status-koordinat-ok-ibadah', idGagal: 'status-koordinat-gagal-ibadah', idTeksOk: 'teks-koordinat-ok-ibadah', idLinkOk: 'link-koordinat-ok-ibadah', idInputManual: 'input-koordinat-manual-ibadah', siap: false }
+  ibadah: { layananList: ["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH KONG HU CHU"], wrapperId: 'wrapper-foto-ibadah', idHidden: 'hidden-koordinat-link-ibadah', idCek: 'status-koordinat-cek-ibadah', idOk: 'status-koordinat-ok-ibadah', idGagal: 'status-koordinat-gagal-ibadah', idTeksOk: 'teks-koordinat-ok-ibadah', idLinkOk: 'link-koordinat-ok-ibadah', idInputManual: 'input-koordinat-manual-ibadah', siap: false }
 };
 
 function updateStatusTombolSimpan() {
@@ -246,7 +246,7 @@ function evaluasiUploadKondisional() {
     if (hiddenJenis) hiddenJenis.value = "";
     resetStatusKoordinat('plank');
   }
-  if (["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU"].indexOf(lay) === -1) {
+  if (["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH KONG HU CHU"].indexOf(lay) === -1) {
     resetStatusKoordinat('ibadah');
   }
   bukaKunciTempatTugas();
@@ -260,7 +260,7 @@ function evaluasiUploadKondisional() {
         fileRekomendasiBkm.required = true;
       }
     }
-    if (["GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH MINGGU"].includes(lay)) {
+    if (["GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH MINGGU", "GURU SEKOLAH KONG HU CHU"].includes(lay)) {
       wrapperIbadah.classList.remove('hidden'); wrapperKegiatan.classList.remove('hidden');
       fileIbadah.required = true; fileKegiatan.required = true;
     }
@@ -1454,6 +1454,52 @@ window.tampilkanDataDetail = function () {
   muatDataDetail(true);
 };
 
+window.sinkronDataSheet2026Manual = function () {
+  if (!pastikanLogin()) return;
+  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
+    tampilkanToast('Akses ditolak: Menu sinkronisasi hanya dapat diakses oleh Admin Utama.', 'gagal', { durasi: 5000 });
+    return;
+  }
+  const btn = document.getElementById('btn-sync-sheet-2026');
+  konfirmasiAksi({
+    judul: "Sinkronisasi Google Sheets 2026",
+    pesan: "Sistem akan menarik dan menyelaraskan 12.000+ data penerima terbaru dari Google Sheets (tab db_2026) ke database Supabase.\n\nProses ini membutuhkan waktu beberapa detik. Lanjutkan sinkronisasi?",
+    tipe: "info",
+    teksBatal: "Batal",
+    teksKonfirmasi: "Ya, Sinkronkan Data"
+  }).then(function (setuju) {
+    if (!setuju) return;
+    setTombolMemuat(btn, "Menyinkronkan...");
+    const idToastProses = tampilkanToast("Sedang menarik pembaruan data dari Google Sheets db_2026, mohon tunggu...", "proses");
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        pulihkanTombol(btn);
+        if (idToastProses) tutupToast(idToastProses);
+        if (!res || !res.sukses) {
+          tampilkanToast(res ? res.pesan : 'Gagal sinkronisasi dari Google Sheets', 'gagal', { durasi: 6000 });
+          return;
+        }
+        tampilkanToast(res.pesan || 'Data 2026 berhasil disinkronkan!', 'sukses', { durasi: 5000 });
+        const cacheMgr = window.djpmCache || window.swrCache;
+        if (cacheMgr && typeof cacheMgr.invalidate === 'function') {
+          cacheMgr.invalidate(['arsip_tahun', 'data_detail', 'penerima']);
+        }
+        if (typeof window.segarkanDataTahunHistoris === 'function') {
+          window.segarkanDataTahunHistoris('2026');
+        } else if (typeof window.gantTahunData === 'function') {
+          window.gantTahunData();
+        }
+      })
+      .withFailureHandler(function (err) {
+        pulihkanTombol(btn);
+        if (idToastProses) tutupToast(idToastProses);
+        tampilkanToast('Gagal sinkronisasi: ' + pesanErrorRamah(err), 'gagal', { durasi: 6000 });
+      })
+      .sinkronDataSheet2026(dataPengguna.token);
+  });
+};
+
 // Ikuti tahun yang sedang dipilih user di dropdown "Lihat Data" (bisa tahun historis, mis. 2026),
 // bukan selalu tahun aktif -- sebelumnya "Data Detail" diam-diam mengabaikan pilihan tahun ini dan
 // selalu menampilkan rekap TAHUN_AKTIF, sehingga tampak kosong/salah saat user melihat tahun lain
@@ -2114,7 +2160,7 @@ function halamanBerikutnya() {
       dasar.push({ idx: 25, label: "Foto Plank Guru Maghrib Mengaji" });
       dasar.push({ idx: 27, label: "Foto Kegiatan Mengajar" });
       dasar.push({ idx: 28, label: "Rekomendasi BKM" }); // kosong jika tempat tugas Rumah/Lainnya
-    } else if (["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU"].includes(lay)) {
+    } else if (["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH KONG HU CHU"].includes(lay)) {
       dasar.push({ idx: 26, label: "Foto Rumah Ibadah Lokasi Tugas" });
       dasar.push({ idx: 27, label: "Foto Kegiatan Mengajar" });
       dasar.push({ idx: 29, label: "Rekomendasi Pengurus Rumah Ibadah" });
@@ -2901,6 +2947,14 @@ document.getElementById('btn-refresh-data').addEventListener('click', function (
     document.getElementById('filter-kelurahan').value = "";
     document.getElementById('filter-layanan').value = "";
     document.getElementById('input-cari-global').value = "";
+    const tahunSekarang = (window._tahunDipilihGetter && window._tahunDipilihGetter()) || '2027';
+    const tahunAktif = (window._tahunAktifGetter && window._tahunAktifGetter()) || '2027';
+    if (tahunSekarang !== tahunAktif) {
+      if (typeof window.segarkanDataTahunHistoris === 'function') {
+        window.segarkanDataTahunHistoris(tahunSekarang);
+      }
+      return;
+    }
     masterDataLihat = [];
     const infoTotal = document.getElementById('info-total-penerima');
     if (infoTotal) infoTotal.innerText = "Total Data: Memuat...";

@@ -1,6 +1,31 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
 
+const JENIS_RUMAH_IBADAH_VALID = [
+  "MASJID", "MUSHOLLA", "GEREJA", "GEREJA_KATOLIK", "VIHARA", "KLENTENG", "KUIL",
+];
+const JENIS_LEGACY_GABUNGAN = "VIHARA_KLENTENG_KUIL";
+const JENIS_PER_ROLE: Record<string, string[]> = {
+  UTAMA: JENIS_RUMAH_IBADAH_VALID,
+  KECAMATAN: JENIS_RUMAH_IBADAH_VALID,
+  "GURU SEKOLAH BUDDHA": ["VIHARA"],
+  "GURU SEKOLAH HINDU": ["KUIL"],
+  "GURU SEKOLAH KONG HU CHU": ["KLENTENG"],
+  "GURU SEKOLAH MINGGU": ["GEREJA", "GEREJA_KATOLIK"],
+  "PENATUA GEREJA": ["GEREJA"],
+  "GURU MAGHRIB MENGAJI": ["MASJID", "MUSHOLLA"],
+};
+
+function jenisDiizinkanUntukSesi(sesi: { role: string }, jenis: string): boolean {
+  const role = String(sesi.role || "").trim().toUpperCase();
+  return (JENIS_PER_ROLE[role] || []).includes(jenis);
+}
+
+function sesiTerikatKecamatan(sesi: { role: string }): boolean {
+  const role = String(sesi.role || "").trim().toUpperCase();
+  return role === "KECAMATAN" || role === "GURU MAGHRIB MENGAJI";
+}
+
 // Port 1:1 dari getSheetName() di Kode.gs. Dipertahankan meski tampaknya tidak lagi dipanggil
 // langsung dari index.html (tidak ditemukan referensinya di frontend) — tetap diekspos untuk
 // paritas penuh dengan daftar ALLOWED lama.
@@ -20,6 +45,8 @@ export function getSheetName(kategori: string): string | null {
       return "db_vihara";
     case "GURU SEKOLAH HINDU":
       return "db_kuil";
+    case "GURU SEKOLAH KONG HU CHU":
+      return "db_klenteng";
     case "PETUGAS GEREJA KATOLIK":
       return "db_pgk";
     default:
@@ -27,8 +54,7 @@ export function getSheetName(kategori: string): string | null {
   }
 }
 
-// Turunan dari getSheetName() - dipakai internal untuk query kolom `jenis` di tabel rumah_ibadah
-// (yang mengunifikasi sheet db_masjid/db_musholla/db_gereja/db_pgk/db_vihara_klenteng_kuil/db_vihara/db_kuil).
+// Turunan dari getSheetName() - dipakai internal untuk query kolom `jenis` di tabel rumah_ibadah.
 function jenisDariSheetName(sheetName: string | null): string | null {
   switch (sheetName) {
     case "db_masjid":
@@ -41,10 +67,12 @@ function jenisDariSheetName(sheetName: string | null): string | null {
       return "VIHARA_KLENTENG_KUIL";
     case "db_vihara":
       return "VIHARA";
+    case "db_klenteng":
+      return "KLENTENG";
     case "db_kuil":
       return "KUIL";
     case "db_pgk":
-      return "PGK";
+      return "GEREJA_KATOLIK";
     default:
       return null;
   }
@@ -103,55 +131,25 @@ type BarisRumahIbadah = {
 // nama, alamat] (bukan objek) karena index.html membaca lewat row[0]/row[1]/row[2]/row[3]
 // (lihat renderTable() di index.html) — mengubah bentuk ini akan merusak modal pilih rumah ibadah.
 export async function getDataRumahIbadah(token: string, kategori: string) {
+  let sesi;
   try {
-    await wajibSesi(token);
+    sesi = await wajibSesi(token);
   } catch (_e) {
     return [] as string[][];
   }
 
   const jenis = jenisDariSheetName(getSheetName(kategori));
-  if (!jenis) return [] as string[][];
+  if (!jenis || !jenisDiizinkanUntukSesi(sesi, jenis)) return [] as string[][];
 
   let rows: BarisRumahIbadah[];
-  if (jenis === "VIHARA") {
+  if (sesiTerikatKecamatan(sesi)) {
+    const kecamatan = String(sesi.kecamatan || "").trim().toUpperCase();
+    if (!kecamatan) return [] as string[][];
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
       from rumah_ibadah
-      where jenis = 'VIHARA'
+      where jenis = ${jenis} and upper(kecamatan) = ${kecamatan}
     `;
-    if (rows.length === 0) {
-      rows = await sql`
-        select kecamatan, kelurahan, nama, alamat
-        from rumah_ibadah
-        where jenis = 'VIHARA_KLENTENG_KUIL'
-      `;
-    }
-  } else if (jenis === "KUIL") {
-    rows = await sql`
-      select kecamatan, kelurahan, nama, alamat
-      from rumah_ibadah
-      where jenis = 'KUIL'
-    `;
-    if (rows.length === 0) {
-      rows = await sql`
-        select kecamatan, kelurahan, nama, alamat
-        from rumah_ibadah
-        where jenis = 'VIHARA_KLENTENG_KUIL'
-      `;
-    }
-  } else if (jenis === "VIHARA_KLENTENG_KUIL") {
-    rows = await sql`
-      select kecamatan, kelurahan, nama, alamat
-      from rumah_ibadah
-      where jenis = 'VIHARA_KLENTENG_KUIL'
-    `;
-    if (rows.length === 0) {
-      rows = await sql`
-        select kecamatan, kelurahan, nama, alamat
-        from rumah_ibadah
-        where jenis in ('VIHARA', 'KUIL')
-      `;
-    }
   } else {
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
@@ -174,14 +172,15 @@ const SHEET_KEMENAG_DIIZINKAN = [
   "db_pgk",
   "db_masjid",
   "db_musholla",
-  "db_vihara_klenteng_kuil",
   "db_vihara",
+  "db_klenteng",
   "db_kuil",
 ];
 
 export async function getKemenagData(token: string, sheetName: string) {
+  let sesi;
   try {
-    await wajibSesi(token);
+    sesi = await wajibSesi(token);
   } catch (_e) {
     return { error: "Sesi tidak sah. Silakan login ulang." };
   }
@@ -189,37 +188,17 @@ export async function getKemenagData(token: string, sheetName: string) {
   if (!SHEET_KEMENAG_DIIZINKAN.includes(sheetName)) return { error: "Akses ditolak" };
 
   const jenis = jenisDariSheetName(sheetName);
-  if (!jenis) return { error: "Akses ditolak" };
+  if (!jenis || !jenisDiizinkanUntukSesi(sesi, jenis)) return { error: "Akses ditolak" };
 
   let rows: BarisRumahIbadah[];
-  if (sheetName === "db_vihara") {
+  if (sesiTerikatKecamatan(sesi)) {
+    const kecamatan = String(sesi.kecamatan || "").trim().toUpperCase();
+    if (!kecamatan) return { error: "Akses ditolak" };
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
       from rumah_ibadah
-      where jenis = 'VIHARA'
+      where jenis = ${jenis} and upper(kecamatan) = ${kecamatan}
     `;
-    // Fallback jika belum ada data jenis 'VIHARA' tapi ada 'VIHARA_KLENTENG_KUIL'
-    if (rows.length === 0) {
-      rows = await sql`
-        select kecamatan, kelurahan, nama, alamat
-        from rumah_ibadah
-        where jenis = 'VIHARA_KLENTENG_KUIL'
-      `;
-    }
-  } else if (sheetName === "db_kuil") {
-    rows = await sql`
-      select kecamatan, kelurahan, nama, alamat
-      from rumah_ibadah
-      where jenis = 'KUIL'
-    `;
-    // Fallback jika belum ada data jenis 'KUIL' tapi ada 'VIHARA_KLENTENG_KUIL'
-    if (rows.length === 0) {
-      rows = await sql`
-        select kecamatan, kelurahan, nama, alamat
-        from rumah_ibadah
-        where jenis = 'VIHARA_KLENTENG_KUIL'
-      `;
-    }
   } else {
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
@@ -283,6 +262,7 @@ export interface FilterRumahIbadahAdmin {
   cari?: string;
   jenis?: string;
   kecamatan?: string;
+  statusKlasifikasi?: "PERLU_KLASIFIKASI" | "SELESAI";
   page?: number;
   limit?: number;
 }
@@ -304,9 +284,17 @@ export async function ambilDaftarRumahIbadahAdmin(
   const cari = String(params?.cari || "").trim();
   const jenis = String(params?.jenis || "").trim().toUpperCase();
   const kecamatan = String(params?.kecamatan || "").trim().toUpperCase();
+  const statusKlasifikasi = String(params?.statusKlasifikasi || "").trim().toUpperCase();
   const page = Math.max(1, Number(params?.page || 1));
   const limit = Math.min(100, Math.max(5, Number(params?.limit || 25)));
   const offset = (page - 1) * limit;
+
+  if (jenis && !JENIS_RUMAH_IBADAH_VALID.includes(jenis)) {
+    return { sukses: false, pesan: "Filter jenis rumah ibadah tidak valid." };
+  }
+  if (statusKlasifikasi && statusKlasifikasi !== "PERLU_KLASIFIKASI" && statusKlasifikasi !== "SELESAI") {
+    return { sukses: false, pesan: "Filter status klasifikasi tidak valid." };
+  }
 
   try {
     const cariPattern = cari ? `%${cari}%` : "";
@@ -317,6 +305,8 @@ export async function ambilDaftarRumahIbadahAdmin(
       where 1=1
         ${jenis ? sql`and jenis = ${jenis}` : sql``}
         ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
+        ${statusKlasifikasi === "PERLU_KLASIFIKASI" ? sql`and jenis = ${JENIS_LEGACY_GABUNGAN}` : sql``}
+        ${statusKlasifikasi === "SELESAI" ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'GEREJA', 'GEREJA_KATOLIK', 'VIHARA', 'KLENTENG', 'KUIL')` : sql``}
         ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
     `;
     const total = Number(countResult[0]?.total || 0);
@@ -327,6 +317,8 @@ export async function ambilDaftarRumahIbadahAdmin(
       where 1=1
         ${jenis ? sql`and jenis = ${jenis}` : sql``}
         ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
+        ${statusKlasifikasi === "PERLU_KLASIFIKASI" ? sql`and jenis = ${JENIS_LEGACY_GABUNGAN}` : sql``}
+        ${statusKlasifikasi === "SELESAI" ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'GEREJA', 'GEREJA_KATOLIK', 'VIHARA', 'KLENTENG', 'KUIL')` : sql``}
         ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
       order by kecamatan asc, kelurahan asc, nama asc
       limit ${limit} offset ${offset}
@@ -372,9 +364,8 @@ export async function tambahRumahIbadah(
   const nama = String(payload?.nama || "").trim().toUpperCase();
   const alamat = String(payload?.alamat || "").trim().toUpperCase();
 
-  const VALID_JENIS = ["MASJID", "MUSHOLLA", "GEREJA", "PGK", "VIHARA", "KUIL", "VIHARA_KLENTENG_KUIL"];
-  if (!VALID_JENIS.includes(jenis)) {
-    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${VALID_JENIS.join(", ")}` };
+  if (!JENIS_RUMAH_IBADAH_VALID.includes(jenis)) {
+    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${JENIS_RUMAH_IBADAH_VALID.join(", ")}` };
   }
   if (!kecamatan) return { sukses: false, pesan: "Kecamatan wajib dipilih." };
   if (!kelurahan) return { sukses: false, pesan: "Kelurahan wajib dipilih." };
@@ -419,9 +410,8 @@ export async function ubahRumahIbadah(
   const nama = String(payload?.nama || "").trim().toUpperCase();
   const alamat = String(payload?.alamat || "").trim().toUpperCase();
 
-  const VALID_JENIS = ["MASJID", "MUSHOLLA", "GEREJA", "PGK", "VIHARA", "KUIL", "VIHARA_KLENTENG_KUIL"];
-  if (!VALID_JENIS.includes(jenis)) {
-    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${VALID_JENIS.join(", ")}` };
+  if (!JENIS_RUMAH_IBADAH_VALID.includes(jenis)) {
+    return { sukses: false, pesan: `Jenis tempat ibadah tidak valid. Pilihan: ${JENIS_RUMAH_IBADAH_VALID.join(", ")}` };
   }
   if (!kecamatan) return { sukses: false, pesan: "Kecamatan wajib dipilih." };
   if (!kelurahan) return { sukses: false, pesan: "Kelurahan wajib dipilih." };
@@ -471,4 +461,3 @@ export async function hapusRumahIbadah(token: string, idRumahIbadah: number) {
     return { sukses: false, pesan: "Gagal menghapus data rumah ibadah: " + (err instanceof Error ? err.message : String(err)) };
   }
 }
-

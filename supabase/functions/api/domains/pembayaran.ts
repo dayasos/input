@@ -41,6 +41,7 @@ const MAP_LAYANAN_KODE: Record<string, string> = {
   "GURU SEKOLAH MINGGU": "GSM",
   "GURU SEKOLAH BUDDHA": "GSB",
   "GURU SEKOLAH HINDU": "GSH",
+  "GURU SEKOLAH KONG HU CHU": "GSK",
   "PENATUA GEREJA": "PENATUA",
   "PENGURUS GEREJA": "P. GEREJA",
   "PENGURUS VIHARA/KLENTENG/KUIL": "P. KUIL",
@@ -230,7 +231,7 @@ export async function ambilDaftarBatchPembayaran(token: string) {
       group by b.id
     `;
 
-    const daftar = rows.map((r) => ({
+    const daftar = rows.map((r: any) => ({
       id: r.id,
       tahun: r.tahun,
       bulan: r.bulan,
@@ -243,7 +244,7 @@ export async function ambilDaftarBatchPembayaran(token: string) {
 
     // Urutkan Jan->Des lalu DJPM/BPJS -- diurut di JS (bukan SQL) supaya tidak perlu CASE WHEN
     // 12 baris hanya untuk urutan bulan.
-    daftar.sort((a, b) => {
+    daftar.sort((a: any, b: any) => {
       const urutBulan = BULAN_VALID.indexOf(a.bulan) - BULAN_VALID.indexOf(b.bulan);
       if (urutBulan !== 0) return urutBulan;
       return a.jenis.localeCompare(b.jenis);
@@ -299,7 +300,7 @@ export async function ambilDetailBatchPembayaran(token: string, batchId: number)
         dibuatAt: batch.dibuat_at, diperbaruiAt: batch.diperbarui_at,
       },
       rekap: Object.values(rekap),
-      baris: baris.map((b) => ({
+      baris: baris.map((b: any) => ({
         nama: b.nama, nik: b.nik, layanan: b.layanan, layananKode: b.layanan_kode,
         nomorRekening: b.nomor_rekening, kecamatan: b.kecamatan, kelurahan: b.kelurahan, umur: b.umur,
         jumlahKotor: b.jumlah_kotor, jkm: b.jkm, jkk: b.jkk,
@@ -364,7 +365,7 @@ function bangunBlokTtdRekap(
 // yang tidak alfabetis). Sama persis urutan baris 5-20 REKAP di kode Kode.gs asli
 // (mappingRekap: BILAL=5 ... USTADZAH=20).
 const URUTAN_LAYANAN_REKAP = [
-  "BILAL", "GMM", "GSB", "GSH", "GSM", "IMAM", "KHATIB", "N. MASJID", "N. MUSHOLLA",
+  "BILAL", "GMM", "GSB", "GSH", "GSK", "GSM", "IMAM", "KHATIB", "N. MASJID", "N. MUSHOLLA",
   "PENATUA", "P. KUBUR", "P. GEREJA", "P. KUIL", "PGK", "USTADZ", "USTADZAH",
 ];
 
@@ -457,7 +458,7 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         [teksHeader],
         [],
         ["NO", "NAMA", "NIK", "LAYANAN", "KECAMATAN", "KELURAHAN", "USIA"],
-        ...baris.map((b, i) => [i + 1, b.nama, b.nik, b.layanan, b.kecamatan, b.kelurahan, b.umur]),
+        ...baris.map((b: any, i: number) => [i + 1, b.nama, b.nik, b.layanan, b.kecamatan, b.kelurahan, b.umur]),
       ];
       const barisHeaderBpjs = 3;
       const ws = wb.addWorksheet("BPJS TK");
@@ -504,11 +505,11 @@ export async function unduhExcelBatch(token: string, batchId: number) {
       const barisDataAwalRekap = barisHeaderRekap + 1; // baris 5
       const rekapAoa: unknown[][] = [...rekapAoaAwal];
       let totSk = 0, totBayar = 0, totBwh = 0, totAts = 0, totUang = 0;
-      URUTAN_LAYANAN_REKAP.forEach((kode, idx) => {
+      URUTAN_LAYANAN_REKAP.forEach((kode: string, idx: number) => {
         const rows = grup[kode] || [];
-        const bwh65 = rows.filter((r) => r.umur < 65).length;
+        const bwh65 = rows.filter((r: any) => r.umur < 65).length;
         const ats65 = rows.length - bwh65;
-        const uang = rows.reduce((s, r) => s + r.jumlah_diterima, 0);
+        const uang = rows.reduce((s: number, r: any) => s + r.jumlah_diterima, 0);
         const sk = skMap[kode] ?? null;
         rekapAoa.push([
           idx + 1, NAMA_LAYANAN_DARI_KODE[kode] || kode, sk === null ? "-" : sk,
@@ -546,16 +547,16 @@ export async function unduhExcelBatch(token: string, batchId: number) {
         const rows = grup[kode];
         if (!rows || rows.length === 0) continue;
 
-        const dataRows = rows.map((b, i) => [
+        const dataRows = rows.map((b: any, i: number) => [
           i + 1, b.nama, b.nik, b.layanan, b.nomor_rekening,
           b.jumlah_kotor, b.jkm, b.jkk, b.jumlah_potongan, b.jumlah_diterima,
         ]);
         const totalBaris = ["JUMLAH TOTAL", "", "", "", "",
-          rows.reduce((s, r) => s + r.jumlah_kotor, 0),
-          rows.reduce((s, r) => s + r.jkm, 0),
-          rows.reduce((s, r) => s + r.jkk, 0),
-          rows.reduce((s, r) => s + r.jumlah_potongan, 0),
-          rows.reduce((s, r) => s + r.jumlah_diterima, 0)];
+          rows.reduce((s: number, r: any) => s + r.jumlah_kotor, 0),
+          rows.reduce((s: number, r: any) => s + r.jkm, 0),
+          rows.reduce((s: number, r: any) => s + r.jkk, 0),
+          rows.reduce((s: number, r: any) => s + r.jumlah_potongan, 0),
+          rows.reduce((s: number, r: any) => s + r.jumlah_diterima, 0)];
 
         const aoaAwal: unknown[][] = [
           [judulSheetLayanan],
@@ -682,9 +683,9 @@ export async function ambilSkLayanan(token: string) {
     // Urutkan sesuai URUTAN_LAYANAN_REKAP (bukan alfabetis) supaya form di frontend konsisten
     // dengan urutan yang dipakai di dokumen Excel.
     const urut = URUTAN_LAYANAN_REKAP
-      .map((kode) => rows.find((r) => r.layanan_kode === kode))
+      .map((kode: string) => rows.find((r: any) => r.layanan_kode === kode))
       .filter(Boolean)
-      .map((r) => ({ layananKode: r!.layanan_kode, namaLengkap: NAMA_LAYANAN_DARI_KODE[r!.layanan_kode] || r!.layanan_kode, jumlahSk: r!.jumlah_sk }));
+      .map((r: any) => ({ layananKode: r!.layanan_kode, namaLengkap: NAMA_LAYANAN_DARI_KODE[r!.layanan_kode] || r!.layanan_kode, jumlahSk: r!.jumlah_sk }));
     return { sukses: true, daftar: urut };
   } catch (error) {
     return { sukses: false, pesan: String(error) };

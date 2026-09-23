@@ -14,6 +14,9 @@ export const TAHUN_AKTIF = Number(Deno.env.get("TAHUN_AKTIF")) || 2027;
 // backfill), aman hardcode dengan fallback env var kalau suatu saat perlu dialihkan ke salinan lain.
 export const SS_ID_PENYIMPANAN = Deno.env.get("SS_ID_PENYIMPANAN") || "1FqXYvce8wvFtWgDmMgXlWhX3AQ_9teHCa_WpftTrJSU";
 
+// ID spreadsheet Master Dropdown & Arsip (SS_ID_MASTER_DROPDOWN di Kode.gs baris 4) — memuat db_2026
+export const SS_ID_MASTER_DROPDOWN = Deno.env.get("SS_ID_MASTER_DROPDOWN") || "1wB2xHthdlMzZWG80jkmIPDNkCwtu_9p1zplF8yePGk4";
+
 // ID folder induk Google Drive tempat seluruh berkas penerima diupload (sama persis
 // FOLDER_ID_INDUK di Kode.gs/kode_gas.js) -- sejak migrasi upload dari GAS ke Drive API v3
 // langsung (2026-09-18), folder ini WAJIB sudah di-share ke client_email Service Account

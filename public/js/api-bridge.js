@@ -212,6 +212,7 @@ const SWR_CONFIG = {
   // tahun lampau tidak pernah bisa diedit lagi (lihat _shared/config.ts TAHUN_AKTIF -- semua
   // query tulis dikunci ke tahun aktif), jadi aman di-cache lama tanpa risiko data usang.
   ambilDataTahunHakAkses: { ttl: 60 * 60 * 1000, domain: 'arsip_tahun' },
+  sinkronDataSheet2026: { ttl: 0, domain: 'arsip_tahun' },
 
   // Halaman Tools (khusus UTAMA): data berubah jarang (diisi manual), TTL 10 menit.
   // Domain dipisah per-bagian supaya menyimpan 1 pejabat tidak ikut membuang cache
@@ -512,6 +513,7 @@ class SWRCacheManager {
 const swrCache = new SWRCacheManager();
 if (typeof window !== 'undefined') {
   window.djpmCache = swrCache;
+  window.swrCache = swrCache;
 }
 
 class GoogleScriptRunProxy {

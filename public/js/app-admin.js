@@ -1722,6 +1722,10 @@ function openKemenagModal(layanan) {
       subPilihan.innerHTML = "";
       loadDataToModal("db_kuil");
     }
+    else if (layanan === "GURU SEKOLAH KONG HU CHU") {
+      subPilihan.innerHTML = "";
+      loadDataToModal("db_klenteng");
+    }
     else if (layanan === "PENATUA GEREJA") {
       subPilihan.innerHTML = "";
       loadDataToModal("db_gereja");
@@ -1947,7 +1951,47 @@ function submitManual() {
 // CRUD User UI
 // Memungkinkan Admin Utama mengelola akun langsung dari UI tanpa buka Supabase
 
+const PILIHAN_ROLE_PENGGUNA = [
+  { nilai: 'UTAMA', label: 'Utama' },
+  { nilai: 'KECAMATAN', label: 'Kecamatan' },
+  { nilai: 'GURU SEKOLAH BUDDHA', label: 'Guru Sekolah Buddha' },
+  { nilai: 'GURU SEKOLAH HINDU', label: 'Guru Sekolah Hindu' },
+  { nilai: 'GURU SEKOLAH KONG HU CHU', label: 'Guru Sekolah Kong Hu Chu' },
+  { nilai: 'GURU SEKOLAH MINGGU', label: 'Guru Sekolah Minggu' },
+  { nilai: 'PENATUA GEREJA', label: 'Penatua Gereja' },
+  { nilai: 'GURU MAGHRIB MENGAJI', label: 'Guru Maghrib Mengaji' }
+];
+const ROLE_DENGAN_KECAMATAN = new Set(['KECAMATAN', 'GURU MAGHRIB MENGAJI']);
+
+function opsiRolePenggunaHtml() {
+  return PILIHAN_ROLE_PENGGUNA.map(function (role) {
+    return '<option value="' + role.nilai + '">' + role.label + '</option>';
+  }).join('');
+}
+
+function isiPilihanRoleKelolaPengguna() {
+  const opsi = opsiRolePenggunaHtml();
+  const filter = document.getElementById('filter-role-kelola-user');
+  const tambah = document.getElementById('tu-role');
+  const edit = document.getElementById('eu-role');
+  if (filter) filter.innerHTML = '<option value="">Semua Role</option>' + opsi;
+  if (tambah) tambah.innerHTML = '<option value="">-- Pilih Role --</option>' + opsi;
+  if (edit) edit.innerHTML = '<option value="">-- Pilih Role --</option>' + opsi;
+}
+
+function roleMemerlukanKecamatan(role) {
+  return ROLE_DENGAN_KECAMATAN.has(String(role || '').trim().toUpperCase());
+}
+
+function labelRolePengguna(role) {
+  const nilai = String(role || '').trim().toUpperCase();
+  const ditemukan = PILIHAN_ROLE_PENGGUNA.find(function (pilihan) { return pilihan.nilai === nilai; });
+  return ditemukan ? ditemukan.label : nilai;
+}
+
 let daftarAkunLengkapCache = [];
+
+isiPilihanRoleKelolaPengguna();
 
 function muatDaftarUserLengkap() {
   const tbody = document.getElementById('tbody-kelola-user');
@@ -1988,7 +2032,7 @@ function renderTabelKelolaUser(list) {
       <td class="px-3 py-2.5 text-xs text-slate-500 text-center">${idx + 1}</td>
       <td class="px-3 py-2.5 text-xs font-bold text-slate-800">${esc(u.username)}</td>
       <td class="px-3 py-2.5 text-xs text-slate-700 font-medium">${esc(u.namaLengkap || '-')}</td>
-      <td class="px-3 py-2.5 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${roleBadgeColor}">${esc(u.role)}</span></td>
+      <td class="px-3 py-2.5 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${roleBadgeColor}">${esc(labelRolePengguna(u.role))}</span></td>
       <td class="px-3 py-2.5 text-xs text-slate-600">${esc(u.kecamatan || '-')}</td>
       <td class="px-3 py-2.5 text-xs text-slate-600 font-mono">${esc(u.nomorHp || '-')}</td>
       <td class="px-3 py-2.5 text-xs text-center">
@@ -2040,7 +2084,7 @@ function handleRoleTambahUserChange() {
   const selKec = document.getElementById('tu-kecamatan');
   if (!selRole || !divKec) return;
 
-  if (selRole.value === 'KECAMATAN') {
+  if (roleMemerlukanKecamatan(selRole.value)) {
     divKec.classList.remove('hidden');
     if (selKec) selKec.required = true;
   } else {
@@ -2065,8 +2109,8 @@ function simpanPenggunaBaru(e) {
     tampilkanToast('Mohon lengkapi username, password, dan role!', 'gagal');
     return;
   }
-  if (role === 'KECAMATAN' && !kec) {
-    tampilkanToast('Kecamatan wajib dipilih untuk akun role Kecamatan!', 'gagal');
+  if (roleMemerlukanKecamatan(role) && !kec) {
+    tampilkanToast('Kecamatan wajib dipilih untuk role yang dipilih!', 'gagal');
     return;
   }
 
@@ -2102,23 +2146,47 @@ function bukaModalEditUser(username) {
 
   document.getElementById('eu-username-target').value = u.username;
   document.getElementById('eu-username-display').textContent = u.username;
-  document.getElementById('eu-role').value = u.role;
+  const selRole = document.getElementById('eu-role');
+  const roleResmi = PILIHAN_ROLE_PENGGUNA.some(function (role) { return role.nilai === u.role; });
+  if (selRole) selRole.value = roleResmi ? u.role : '';
   document.getElementById('eu-nama').value = u.namaLengkap || '';
   document.getElementById('eu-hp').value = u.nomorHp || '';
   document.getElementById('eu-jabatan').value = u.jabatan || '';
 
   const divKec = document.getElementById('eu-div-kecamatan');
   const selKec = document.getElementById('eu-kecamatan');
-  if (u.role === 'KECAMATAN') {
+  if (roleMemerlukanKecamatan(u.role)) {
     divKec.classList.remove('hidden');
-    if (selKec) selKec.value = u.kecamatan || '';
+    if (selKec) { selKec.required = true; selKec.value = u.kecamatan || ''; }
   } else {
     divKec.classList.add('hidden');
-    if (selKec) selKec.value = '';
+    if (selKec) { selKec.required = false; selKec.value = ''; }
   }
 
-  document.getElementById('eu-pesan')?.classList.add('hidden');
+  const pesanEl = document.getElementById('eu-pesan');
+  if (roleResmi) {
+    pesanEl?.classList.add('hidden');
+  } else if (pesanEl) {
+    pesanEl.textContent = 'Akun ini masih memakai role lama "' + (u.role || '-') + '". Pilih salah satu dari tujuh role resmi sebelum menyimpan perubahan.';
+    pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200';
+    pesanEl.classList.remove('hidden');
+  }
   modal.classList.remove('hidden');
+}
+
+function handleRoleEditUserChange() {
+  const selRole = document.getElementById('eu-role');
+  const divKec = document.getElementById('eu-div-kecamatan');
+  const selKec = document.getElementById('eu-kecamatan');
+  if (!selRole || !divKec) return;
+
+  if (roleMemerlukanKecamatan(selRole.value)) {
+    divKec.classList.remove('hidden');
+    if (selKec) selKec.required = true;
+  } else {
+    divKec.classList.add('hidden');
+    if (selKec) { selKec.required = false; selKec.value = ''; }
+  }
 }
 
 function simpanPerubahanUser(e) {
@@ -2131,6 +2199,15 @@ function simpanPerubahanUser(e) {
   const jbt = document.getElementById('eu-jabatan')?.value;
   const btn = document.getElementById('btn-simpan-edit-user');
   const pesanEl = document.getElementById('eu-pesan');
+
+  if (!role) {
+    tampilkanToast('Pilih salah satu role resmi sebelum menyimpan perubahan.', 'gagal');
+    return;
+  }
+  if (roleMemerlukanKecamatan(role) && !kec) {
+    tampilkanToast('Kecamatan wajib dipilih untuk role yang dipilih!', 'gagal');
+    return;
+  }
 
   if (btn) { btn.disabled = true; btn.textContent = 'MENYIMPAN...'; }
 
@@ -2246,6 +2323,12 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       }
     }
 
+    if (isAll || domains.includes('arsip_tahun')) {
+      if (typeof window.segarkanDataTahunHistoris === 'function') {
+        window.segarkanDataTahunHistoris('2026');
+      }
+    }
+
     if (isAll || domains.includes('kuota')) {
       const modalKuota = document.getElementById('modal-kelola-kuota');
       if (modalKuota && !modalKuota.classList.contains('hidden') && typeof muatDaftarKuota === 'function') {
@@ -2357,6 +2440,8 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
               window.djpmCache.invalidate(['penerima_detail', 'dashboard', 'data_detail'], false);
             } else if (domain === 'kuota') {
               window.djpmCache.invalidate(['kuota', 'dashboard'], false);
+            } else if (domain === 'arsip_tahun') {
+              window.djpmCache.invalidate(['arsip_tahun', 'data_detail', 'penerima'], false);
             } else {
               window.djpmCache.invalidate([domain], false);
             }
@@ -2416,13 +2501,13 @@ var _LIST_KECAMATAN_MEDAN = (typeof DAFTAR_KECAMATAN_MEDAN !== 'undefined' && Ar
   ];
 
 var DAFTAR_JENIS_IBADAH_ADMIN = [
-  { val: 'MASJID', label: 'MASJID' },
-  { val: 'MUSHOLLA', label: 'MUSHOLLA' },
-  { val: 'GEREJA', label: 'GEREJA' },
-  { val: 'PGK', label: 'PETUGAS GEREJA KATOLIK (PGK)' },
-  { val: 'VIHARA', label: 'VIHARA' },
-  { val: 'KUIL', label: 'KUIL' },
-  { val: 'VIHARA_KLENTENG_KUIL', label: 'VIHARA / KLENTENG / KUIL' }
+  { val: 'MASJID', label: 'Masjid' },
+  { val: 'MUSHOLLA', label: 'Musholla' },
+  { val: 'GEREJA', label: 'Gereja' },
+  { val: 'GEREJA_KATOLIK', label: 'Gereja Katolik' },
+  { val: 'VIHARA', label: 'Vihara' },
+  { val: 'KLENTENG', label: 'Klenteng' },
+  { val: 'KUIL', label: 'Kuil' }
 ];
 
 let _halamanRiAktif = 1;
@@ -2435,9 +2520,11 @@ function badgeJenisRumahIbadah(jenis) {
   if (j === 'MASJID') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">MASJID</span>';
   if (j === 'MUSHOLLA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-700 border border-teal-200">MUSHOLLA</span>';
   if (j === 'GEREJA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-sky-50 text-sky-700 border border-sky-200">GEREJA</span>';
-  if (j === 'PGK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">GEREJA KATOLIK</span>';
+  if (j === 'GEREJA_KATOLIK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">GEREJA KATOLIK</span>';
   if (j === 'VIHARA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">VIHARA</span>';
+  if (j === 'KLENTENG') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-50 text-rose-700 border border-rose-200">KLENTENG</span>';
   if (j === 'KUIL') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">KUIL</span>';
+  if (j === 'VIHARA_KLENTENG_KUIL' || j === 'PGK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-800 border border-amber-300">PERLU KLASIFIKASI</span>';
   return `<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700 border border-slate-200">${typeof esc === 'function' ? esc(j) : j}</span>`;
 }
 
@@ -2488,6 +2575,12 @@ function pastikanModalRumahIbadahSiap() {
                 class="w-full sm:w-auto px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
                 <option value="">Semua Kecamatan</option>
                 ${optKec}
+              </select>
+              <select id="filter-status-klasifikasi-ri" onchange="filterTabelRumahIbadah()"
+                class="w-full sm:w-auto px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
+                <option value="">Semua Status</option>
+                <option value="PERLU_KLASIFIKASI">Perlu Klasifikasi</option>
+                <option value="SELESAI">Sudah Diklasifikasi</option>
               </select>
             </div>
           </div>
@@ -2588,6 +2681,7 @@ function pastikanModalRumahIbadahSiap() {
               ${optJenis}
             </select>
           </div>
+          <div id="mri-pesan" class="hidden text-xs font-semibold p-2.5 rounded-lg"></div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kecamatan <span class="text-red-500">*</span></label>
@@ -2672,6 +2766,7 @@ function muatDaftarRumahIbadahAdmin(page) {
   const cari = (document.getElementById('cari-kelola-ri')?.value || '').trim();
   const jenis = (document.getElementById('filter-jenis-kelola-ri')?.value || '').trim();
   const kecamatan = (document.getElementById('filter-kecamatan-kelola-ri')?.value || '').trim();
+  const statusKlasifikasi = (document.getElementById('filter-status-klasifikasi-ri')?.value || '').trim();
 
   if (loader) loader.classList.remove('hidden');
 
@@ -2737,7 +2832,7 @@ function muatDaftarRumahIbadahAdmin(page) {
       if (loader) loader.classList.add('hidden');
       if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-500 font-medium">Error: ${typeof esc === 'function' ? esc(err && err.message ? err.message : err) : 'Error'}</td></tr>`;
     })
-    .ambilDaftarRumahIbadahAdmin(dataPengguna.token, { cari, jenis, kecamatan, page: _halamanRiAktif, limit: 20 });
+    .ambilDaftarRumahIbadahAdmin(dataPengguna.token, { cari, jenis, kecamatan, statusKlasifikasi, page: _halamanRiAktif, limit: 20 });
 }
 
 function bukaModalTambahRumahIbadah() {
@@ -2748,6 +2843,7 @@ function bukaModalTambahRumahIbadah() {
   pastikanModalRumahIbadahSiap();
   const form = document.getElementById('form-modal-ri');
   if (form) form.reset();
+  document.getElementById('mri-pesan')?.classList.add('hidden');
 
   const idEl = document.getElementById('mri-id');
   if (idEl) idEl.value = '';
@@ -2809,10 +2905,20 @@ function bukaModalEditRumahIbadah(id) {
 
   if (judul) judul.textContent = 'Edit Data Rumah Ibadah';
   if (idEl) idEl.value = row.id;
-  if (jenisEl) jenisEl.value = row.jenis;
+  const jenisResmi = DAFTAR_JENIS_IBADAH_ADMIN.some(jenis => jenis.val === row.jenis);
+  if (jenisEl) jenisEl.value = jenisResmi ? row.jenis : '';
   if (kecEl) kecEl.value = row.kecamatan;
   if (namaEl) namaEl.value = row.nama;
   if (alamatEl) alamatEl.value = row.alamat;
+
+  const pesanEl = document.getElementById('mri-pesan');
+  if (jenisResmi) {
+    pesanEl?.classList.add('hidden');
+  } else if (pesanEl) {
+    pesanEl.textContent = 'Data ini memakai jenis lama "' + (row.jenis || '-') + '". Pilih salah satu dari tujuh jenis resmi sebelum menyimpan perubahan.';
+    pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200';
+    pesanEl.classList.remove('hidden');
+  }
 
   handleKecamatanFormRiChange(function () {
     if (kelEl && row.kelurahan) kelEl.value = row.kelurahan;

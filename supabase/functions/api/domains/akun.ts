@@ -2,6 +2,33 @@ import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
 import { hashString } from "../_shared/hash.ts";
 import { formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
+import { KECAMATAN_MEDAN_URUT } from "../_shared/config.ts";
+
+const ROLE_PENGGUNA_VALID = new Set([
+  "UTAMA",
+  "KECAMATAN",
+  "GURU SEKOLAH BUDDHA",
+  "GURU SEKOLAH HINDU",
+  "GURU SEKOLAH KONG HU CHU",
+  "GURU SEKOLAH MINGGU",
+  "PENATUA GEREJA",
+  "GURU MAGHRIB MENGAJI",
+]);
+const ROLE_DENGAN_KECAMATAN = new Set(["KECAMATAN", "GURU MAGHRIB MENGAJI"]);
+const KECAMATAN_VALID = new Set(KECAMATAN_MEDAN_URUT);
+
+function validasiRoleDanKecamatan(role: string, kecamatan: string) {
+  if (!ROLE_PENGGUNA_VALID.has(role)) {
+    return "Role tidak valid. Pilih salah satu role resmi Manajemen Pengguna.";
+  }
+  if (ROLE_DENGAN_KECAMATAN.has(role) && !kecamatan) {
+    return `Kecamatan wajib dipilih untuk akun role ${role}.`;
+  }
+  if (kecamatan && !KECAMATAN_VALID.has(kecamatan)) {
+    return "Kecamatan yang dipilih tidak valid.";
+  }
+  return null;
+}
 
 // Port 1:1 dari ubahAkunSendiri() (Kode.gs baris 2246-2365) — user ganti username/password sendiri.
 export async function ubahAkunSendiri(
@@ -303,9 +330,9 @@ export async function tambahUserBaru(token: string, userObj: UserBaruInput) {
   if (!role) {
     return { sukses: false, pesan: "Role pengguna wajib dipilih." };
   }
-  if (role === "KECAMATAN" && !kec) {
-    return { sukses: false, pesan: "Wilayah kecamatan wajib dipilih untuk akun role Kecamatan." };
-  }
+  const pesanValidasiRole = validasiRoleDanKecamatan(role, kec);
+  if (pesanValidasiRole) return { sukses: false, pesan: pesanValidasiRole };
+  const kecamatanSimpan = ROLE_DENGAN_KECAMATAN.has(role) ? kec : "";
 
   try {
     const existing = await sql`select id from akun where lower(username) = lower(${uName}) limit 1`;
@@ -316,7 +343,7 @@ export async function tambahUserBaru(token: string, userObj: UserBaruInput) {
     const hash = await hashString(pass);
     await sql`
       insert into akun (username, password_hash, role, kecamatan, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at, diperbarui_at)
-      values (${uName}, ${hash}, ${role}, ${kec || null}, ${nama || null}, ${hp || null}, ${jbt || null}, true, now(), now())
+      values (${uName}, ${hash}, ${role}, ${kecamatanSimpan || null}, ${nama || null}, ${hp || null}, ${jbt || null}, true, now(), now())
     `;
 
     return { sukses: true, pesan: `Pengguna "${uName}" (${role}) berhasil ditambahkan.` };
@@ -385,8 +412,8 @@ export async function ubahDataUserOlehAdmin(
   const target = String(usernameTarget || "").trim();
   if (!target) return { sukses: false, pesan: "Target username tidak valid." };
 
-  const role = dataEdit.role ? String(dataEdit.role).trim().toUpperCase() : null;
-  const kec = dataEdit.kecamatan ? String(dataEdit.kecamatan).trim().toUpperCase() : null;
+  const role = dataEdit.role !== undefined ? String(dataEdit.role).trim().toUpperCase() : null;
+  const kec = dataEdit.kecamatan !== undefined ? String(dataEdit.kecamatan).trim().toUpperCase() : null;
   const nama = dataEdit.namaLengkap ? String(dataEdit.namaLengkap).trim().toUpperCase() : null;
   const hp = dataEdit.nomorHp ? bersihkanNomorHp(dataEdit.nomorHp) : null;
   const jbt = dataEdit.jabatan ? String(dataEdit.jabatan).trim().toUpperCase() : null;
@@ -395,10 +422,16 @@ export async function ubahDataUserOlehAdmin(
     const existing = await sql`select id, role, kecamatan from akun where username = ${target} limit 1`;
     if (existing.length === 0) return { sukses: false, pesan: `Akun "${target}" tidak ditemukan.` };
 
+    const roleAkhir = role === null ? String(existing[0].role || "").trim().toUpperCase() : role;
+    const kecamatanAkhir = kec === null ? String(existing[0].kecamatan || "").trim().toUpperCase() : kec;
+    const pesanValidasiRole = validasiRoleDanKecamatan(roleAkhir, kecamatanAkhir);
+    if (pesanValidasiRole) return { sukses: false, pesan: pesanValidasiRole };
+    const kecamatanSimpan = ROLE_DENGAN_KECAMATAN.has(roleAkhir) ? kecamatanAkhir : "";
+
     await sql`
       update akun set
-        role = coalesce(${role}, role),
-        kecamatan = ${kec !== null ? (kec || null) : existing[0].kecamatan},
+        role = ${roleAkhir},
+        kecamatan = ${kecamatanSimpan || null},
         nama_lengkap = coalesce(${nama}, nama_lengkap),
         nomor_hp = coalesce(${hp}, nomor_hp),
         jabatan = coalesce(${jbt}, jabatan),
@@ -448,4 +481,3 @@ export async function hapusUser(token: string, usernameTarget: string) {
     return { sukses: false, pesan: "Gagal menghapus akun: " + String(err) };
   }
 }
-

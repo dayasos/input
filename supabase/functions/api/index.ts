@@ -79,12 +79,14 @@ import {
   ubahAkunSendiri,
   ubahProfilUser,
 } from "./domains/akun.ts";
+import { sinkronDataSheet2026 } from "./domains/sinkronSheet2026.ts";
 import { tanganiProxyUploadDrive } from "./_shared/driveProxy.ts";
 
 // deno-lint-ignore no-explicit-any
 type Handler = (...args: any[]) => unknown | Promise<unknown>;
 
 const ALLOWED: Record<string, Handler> = {
+  sinkronDataSheet2026,
   loginPengguna,
   logoutPengguna,
   pulihkanSesi,
