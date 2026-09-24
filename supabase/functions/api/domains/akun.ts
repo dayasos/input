@@ -3,6 +3,7 @@ import { wajibSesi } from "../_shared/sesi.ts";
 import { hashString } from "../_shared/hash.ts";
 import { formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
 import { KECAMATAN_MEDAN_URUT } from "../_shared/config.ts";
+import { kelurahanDariUserId } from "../_shared/akses.ts";
 
 const ROLE_PENGGUNA_VALID = new Set([
   "UTAMA",
@@ -14,20 +15,68 @@ const ROLE_PENGGUNA_VALID = new Set([
   "PENATUA GEREJA",
   "GURU MAGHRIB MENGAJI",
 ]);
+// Role yang BOLEH punya kecamatan. KECAMATAN wajib; GURU MAGHRIB MENGAJI opsional — GMM tanpa
+// kecamatan berlaku se-Kota Medan (akun lama "BIMAS ISLAM").
 const ROLE_DENGAN_KECAMATAN = new Set(["KECAMATAN", "GURU MAGHRIB MENGAJI"]);
+const ROLE_WAJIB_KECAMATAN = new Set(["KECAMATAN"]);
 const KECAMATAN_VALID = new Set(KECAMATAN_MEDAN_URUT);
+const PREFIX_USER_ID_KELURAHAN = "KELURAHAN ";
 
 function validasiRoleDanKecamatan(role: string, kecamatan: string) {
   if (!ROLE_PENGGUNA_VALID.has(role)) {
     return "Role tidak valid. Pilih salah satu role resmi Manajemen Pengguna.";
   }
-  if (ROLE_DENGAN_KECAMATAN.has(role) && !kecamatan) {
+  if (ROLE_WAJIB_KECAMATAN.has(role) && !kecamatan) {
     return `Kecamatan wajib dipilih untuk akun role ${role}.`;
   }
   if (kecamatan && !KECAMATAN_VALID.has(kecamatan)) {
     return "Kecamatan yang dipilih tidak valid.";
   }
   return null;
+}
+
+async function kelurahanAdaDiKecamatan(kecamatan: string, kelurahan: string): Promise<boolean> {
+  const rows = await sql`
+    select 1 from wilayah
+    where upper(trim(kecamatan)) = ${kecamatan} and upper(trim(kelurahan)) = ${kelurahan}
+    limit 1
+  `;
+  return rows.length > 0;
+}
+
+// Nama kelurahan kembar di >1 kecamatan (mis. SEI MATI di Medan Labuhan & Medan Maimun) diberi
+// sufiks kecamatan pada user_id, mengikuti data lama "KELURAHAN SEI MATI_MAIMUN" -- supaya kunci
+// sakelar per-user tidak bentrok. Sufiks dibuang lagi oleh kelurahanDariUserId (akses.ts).
+async function userIdKelurahan(kecamatan: string, kelurahan: string): Promise<string> {
+  const rows = await sql`
+    select count(distinct upper(trim(kecamatan)))::int as jumlah
+    from wilayah where upper(trim(kelurahan)) = ${kelurahan}
+  `;
+  const kembar = Number(rows[0]?.jumlah || 0) > 1;
+  return PREFIX_USER_ID_KELURAHAN + kelurahan + (kembar ? "_" + kecamatan.replace(/^MEDAN\s+/, "") : "");
+}
+
+// `akun.user_id` = kunci sakelar input per-user (setelan.ts) sekaligus penanda kelurahan-terkunci
+// (akses.ts kelurahanTerkunciDari). Mengikuti konvensi data lama: "KECAMATAN <kec>",
+// "KELURAHAN <kel>[_<kec>]", "GMM <kec>", GMM se-kota = "BIMAS ISLAM". Role lain -> null (tidak
+// dikelola otomatis; mis. BIMAS KATOLIK/KRISTEN dipakai sebagai sub-filter GSM, jangan ditimpa).
+async function userIdOtomatis(role: string, kecamatan: string, kelurahan: string): Promise<string | null> {
+  if (role === "KECAMATAN") return kelurahan ? await userIdKelurahan(kecamatan, kelurahan) : "KECAMATAN " + kecamatan;
+  if (role === "GURU MAGHRIB MENGAJI") return kecamatan ? "GMM " + kecamatan : "BIMAS ISLAM";
+  return null;
+}
+
+function userIdBerpolaOtomatis(userId: string): boolean {
+  const u = String(userId || "").trim().toUpperCase();
+  return u.startsWith("KECAMATAN ") || u.startsWith(PREFIX_USER_ID_KELURAHAN) || u.startsWith("GMM ") || u === "BIMAS ISLAM";
+}
+
+// Sesi login menyimpan salinan role/kecamatan/user_id saat login (lihat _shared/sesi.ts), jadi
+// setelah password atau penugasan diubah admin, sesi lama WAJIB dicabut agar hak akses lama tidak
+// tetap berlaku sampai 6 jam. Dipanggil di dalam transaksi yang sama dengan perubahan akunnya.
+// deno-lint-ignore no-explicit-any
+async function cabutSemuaSesiAkun(trx: any, akunId: string) {
+  await trx`delete from sesi_login where akun_id = ${akunId}`;
 }
 
 // Port 1:1 dari ubahAkunSendiri() (Kode.gs baris 2246-2365) — user ganti username/password sendiri.
@@ -163,6 +212,9 @@ export async function resetPasswordUser(token: string, usernameTarget: string, p
   const target = String(usernameTarget || "").trim();
   const passBaru = String(passwordSementara || "").trim();
   if (!target) return { sukses: false, pesan: "Pilih user yang akan direset." };
+  if (target.toLowerCase() === String(sesi.username || "").trim().toLowerCase()) {
+    return { sukses: false, pesan: "Tidak bisa mereset password akun Anda sendiri dari sini. Gunakan menu Akun Saya." };
+  }
   if (passBaru.length < 6) return { sukses: false, pesan: "Password sementara minimal 6 karakter." };
   if (!/[A-Za-z]/.test(passBaru) || !/[0-9]/.test(passBaru)) {
     return { sukses: false, pesan: "Password sementara harus mengandung huruf dan angka." };
@@ -170,10 +222,16 @@ export async function resetPasswordUser(token: string, usernameTarget: string, p
 
   try {
     const hash = await hashString(passBaru);
-    const rows = await sql`
-      update akun set password_hash = ${hash}, diperbarui_at = now() where username = ${target} returning id
-    `;
-    if (rows.length === 0) return { sukses: false, pesan: "User tidak ditemukan." };
+    // deno-lint-ignore no-explicit-any
+    const ditemukan = await sql.begin(async (trx: any) => {
+      const rows = await trx`
+        update akun set password_hash = ${hash}, diperbarui_at = now() where username = ${target} returning id
+      `;
+      if (rows.length === 0) return false;
+      await cabutSemuaSesiAkun(trx, rows[0].id);
+      return true;
+    });
+    if (!ditemukan) return { sukses: false, pesan: "User tidak ditemukan." };
     return {
       sukses: true,
       pesan: `Password untuk "${target}" berhasil direset. Sampaikan password sementara ini ke user, lalu minta mereka menggantinya lewat menu Akun Saya.`,
@@ -291,6 +349,7 @@ interface UserBaruInput {
   password: string;
   role: string;
   kecamatan?: string;
+  kelurahan?: string;
   namaLengkap?: string;
   nomorHp?: string;
   jabatan?: string;
@@ -333,17 +392,25 @@ export async function tambahUserBaru(token: string, userObj: UserBaruInput) {
   const pesanValidasiRole = validasiRoleDanKecamatan(role, kec);
   if (pesanValidasiRole) return { sukses: false, pesan: pesanValidasiRole };
   const kecamatanSimpan = ROLE_DENGAN_KECAMATAN.has(role) ? kec : "";
+  // Kelurahan hanya berlaku untuk role KECAMATAN; kosong = seluruh kelurahan di kecamatan itu.
+  const kelurahanSimpan = role === "KECAMATAN" ? String(userObj?.kelurahan || "").trim().toUpperCase() : "";
 
   try {
+    if (kelurahanSimpan && !(await kelurahanAdaDiKecamatan(kecamatanSimpan, kelurahanSimpan))) {
+      return { sukses: false, pesan: `Kelurahan "${kelurahanSimpan}" tidak terdaftar di Kecamatan ${kecamatanSimpan}.` };
+    }
+
     const existing = await sql`select id from akun where lower(username) = lower(${uName}) limit 1`;
     if (existing.length > 0) {
       return { sukses: false, pesan: `Username "${uName}" sudah digunakan oleh akun lain.` };
     }
 
     const hash = await hashString(pass);
+    const userIdSimpan = (await userIdOtomatis(role, kecamatanSimpan, kelurahanSimpan)) ?? "";
+    // Kolom kecamatan/nama_lengkap/nomor_hp/jabatan/user_id bertipe NOT NULL default '' — kirim '' bukan null.
     await sql`
-      insert into akun (username, password_hash, role, kecamatan, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at, diperbarui_at)
-      values (${uName}, ${hash}, ${role}, ${kecamatanSimpan || null}, ${nama || null}, ${hp || null}, ${jbt || null}, true, now(), now())
+      insert into akun (username, password_hash, role, kecamatan, user_id, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at, diperbarui_at)
+      values (${uName}, ${hash}, ${role}, ${kecamatanSimpan}, ${userIdSimpan}, ${nama}, ${hp}, ${jbt}, true, now(), now())
     `;
 
     return { sukses: true, pesan: `Pengguna "${uName}" (${role}) berhasil ditambahkan.` };
@@ -365,7 +432,7 @@ export async function ambilDaftarAkunLengkap(token: string) {
 
   try {
     const rows = await sql`
-      select id, username, role, kecamatan, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at
+      select id, username, role, kecamatan, user_id, nama_lengkap, nomor_hp, jabatan, aktif, dibuat_at
       from akun
       order by role asc, kecamatan asc, username asc
     `;
@@ -375,6 +442,7 @@ export async function ambilDaftarAkunLengkap(token: string) {
       username: String(r.username || ""),
       role: (r.role || "").toString().trim().toUpperCase(),
       kecamatan: (r.kecamatan || "").toString().trim().toUpperCase(),
+      kelurahan: kelurahanDariUserId(String(r.user_id || "")),
       namaLengkap: String(r.nama_lengkap || ""),
       nomorHp: String(r.nomor_hp || ""),
       jabatan: String(r.jabatan || ""),
@@ -394,6 +462,7 @@ export async function ubahDataUserOlehAdmin(
   dataEdit: {
     role?: string;
     kecamatan?: string;
+    kelurahan?: string;
     namaLengkap?: string;
     nomorHp?: string;
     jabatan?: string;
@@ -414,32 +483,64 @@ export async function ubahDataUserOlehAdmin(
 
   const role = dataEdit.role !== undefined ? String(dataEdit.role).trim().toUpperCase() : null;
   const kec = dataEdit.kecamatan !== undefined ? String(dataEdit.kecamatan).trim().toUpperCase() : null;
+  const kel = dataEdit.kelurahan !== undefined ? String(dataEdit.kelurahan).trim().toUpperCase() : null;
   const nama = dataEdit.namaLengkap ? String(dataEdit.namaLengkap).trim().toUpperCase() : null;
   const hp = dataEdit.nomorHp ? bersihkanNomorHp(dataEdit.nomorHp) : null;
   const jbt = dataEdit.jabatan ? String(dataEdit.jabatan).trim().toUpperCase() : null;
 
   try {
-    const existing = await sql`select id, role, kecamatan from akun where username = ${target} limit 1`;
+    const existing = await sql`select id, role, kecamatan, user_id from akun where username = ${target} limit 1`;
     if (existing.length === 0) return { sukses: false, pesan: `Akun "${target}" tidak ditemukan.` };
+    const lama = existing[0];
+    const roleLama = String(lama.role || "").trim().toUpperCase();
+    const kecamatanLama = String(lama.kecamatan || "").trim().toUpperCase();
+    const userIdLama = String(lama.user_id || "");
+    const kelurahanLama = kelurahanDariUserId(userIdLama);
 
-    const roleAkhir = role === null ? String(existing[0].role || "").trim().toUpperCase() : role;
-    const kecamatanAkhir = kec === null ? String(existing[0].kecamatan || "").trim().toUpperCase() : kec;
+    const roleAkhir = role === null ? roleLama : role;
+    const akunSendiri = target.toLowerCase() === String(sesi.username || "").trim().toLowerCase();
+    if (akunSendiri && roleAkhir !== "UTAMA") {
+      return { sukses: false, pesan: "Anda tidak dapat mengubah role akun Anda sendiri yang sedang aktif." };
+    }
+    const kecamatanAkhir = kec === null ? kecamatanLama : kec;
     const pesanValidasiRole = validasiRoleDanKecamatan(roleAkhir, kecamatanAkhir);
     if (pesanValidasiRole) return { sukses: false, pesan: pesanValidasiRole };
     const kecamatanSimpan = ROLE_DENGAN_KECAMATAN.has(roleAkhir) ? kecamatanAkhir : "";
+    const kelurahanAkhir = roleAkhir === "KECAMATAN" ? (kel === null ? kelurahanLama : kel) : "";
 
-    await sql`
-      update akun set
-        role = ${roleAkhir},
-        kecamatan = ${kecamatanSimpan || null},
-        nama_lengkap = coalesce(${nama}, nama_lengkap),
-        nomor_hp = coalesce(${hp}, nomor_hp),
-        jabatan = coalesce(${jbt}, jabatan),
-        diperbarui_at = now()
-      where username = ${target}
-    `;
+    // Penugasan (role/kecamatan/kelurahan) tidak berubah -> user_id lama dipertahankan apa adanya,
+    // supaya menyimpan profil saja tidak mengganti kunci sakelar per-user akun tersebut.
+    const penugasanBerubah = roleAkhir !== roleLama || kecamatanSimpan !== kecamatanLama || kelurahanAkhir !== kelurahanLama;
+    let userIdAkhir = userIdLama;
+    if (penugasanBerubah) {
+      if (kelurahanAkhir && !(await kelurahanAdaDiKecamatan(kecamatanSimpan, kelurahanAkhir))) {
+        return { sukses: false, pesan: `Kelurahan "${kelurahanAkhir}" tidak terdaftar di Kecamatan ${kecamatanSimpan}.` };
+      }
+      const otomatis = await userIdOtomatis(roleAkhir, kecamatanSimpan, kelurahanAkhir);
+      // Role tanpa pola otomatis: buang user_id wilayah lama (supaya kunci kelurahan/sakelar
+      // kecamatan tidak terbawa ke role baru), tapi pertahankan user_id khusus lain (mis. BIMAS KATOLIK).
+      userIdAkhir = otomatis ?? (userIdBerpolaOtomatis(userIdLama) ? "" : userIdLama);
+    }
 
-    return { sukses: true, pesan: `Data pengguna "${target}" berhasil diperbarui.` };
+    // deno-lint-ignore no-explicit-any
+    await sql.begin(async (trx: any) => {
+      await trx`
+        update akun set
+          role = ${roleAkhir},
+          kecamatan = ${kecamatanSimpan},
+          user_id = ${userIdAkhir},
+          nama_lengkap = coalesce(${nama}, nama_lengkap),
+          nomor_hp = coalesce(${hp}, nomor_hp),
+          jabatan = coalesce(${jbt}, jabatan),
+          diperbarui_at = now()
+        where id = ${lama.id}
+      `;
+      if (penugasanBerubah) await cabutSemuaSesiAkun(trx, lama.id);
+    });
+
+    let pesan = `Data pengguna "${target}" berhasil diperbarui.`;
+    if (penugasanBerubah) pesan += " Hak akses berubah — user tersebut perlu login ulang.";
+    return { sukses: true, pesan };
   } catch (err) {
     return { sukses: false, pesan: "Gagal memperbarui data user: " + String(err) };
   }
@@ -470,11 +571,13 @@ export async function hapusUser(token: string, usernameTarget: string) {
 
     const akunId = existing[0].id;
 
-    // Hapus sesi aktif user tersebut
-    await sql`delete from sesi where akun_id = ${akunId}`.catch(() => { });
-
-    // Hapus akun dari tabel akun
-    await sql`delete from akun where id = ${akunId}`;
+    // Sesi aktif (sesi_login) ikut terhapus lewat FK on delete cascade; dihapus eksplisit juga
+    // dalam transaksi yang sama supaya tidak bergantung pada definisi FK saja.
+    // deno-lint-ignore no-explicit-any
+    await sql.begin(async (trx: any) => {
+      await cabutSemuaSesiAkun(trx, akunId);
+      await trx`delete from akun where id = ${akunId}`;
+    });
 
     return { sukses: true, pesan: `Akun pengguna "${target}" berhasil dihapus.` };
   } catch (err) {

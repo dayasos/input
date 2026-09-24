@@ -21,9 +21,14 @@ function jenisDiizinkanUntukSesi(sesi: { role: string }, jenis: string): boolean
   return (JENIS_PER_ROLE[role] || []).includes(jenis);
 }
 
-function sesiTerikatKecamatan(sesi: { role: string }): boolean {
+// KECAMATAN selalu terikat kecamatan (tanpa kecamatan -> tidak dapat data sama sekali).
+// GURU MAGHRIB MENGAJI terikat hanya kalau akunnya memang punya kecamatan; GMM tanpa kecamatan
+// (akun "BIMAS ISLAM") berlaku se-Kota Medan.
+function sesiTerikatKecamatan(sesi: { role: string; kecamatan?: string }): boolean {
   const role = String(sesi.role || "").trim().toUpperCase();
-  return role === "KECAMATAN" || role === "GURU MAGHRIB MENGAJI";
+  if (role === "KECAMATAN") return true;
+  if (role === "GURU MAGHRIB MENGAJI") return String(sesi.kecamatan || "").trim() !== "";
+  return false;
 }
 
 // Port 1:1 dari getSheetName() di Kode.gs. Dipertahankan meski tampaknya tidak lagi dipanggil

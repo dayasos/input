@@ -324,6 +324,15 @@ let masterLayanan = {
   ]
 };
 
+// Nama kelurahan dari user_id "KELURAHAN <nama>[_<penanda kecamatan>]". Sufiks "_..." hanya pembeda
+// kunci sakelar utk nama kelurahan kembar (mis. "KELURAHAN SEI MATI_MAIMUN"), bukan bagian nama
+// kelurahan di data -- selaras dengan kelurahanDariUserId di supabase/functions/api/_shared/akses.ts.
+function kelurahanDariUserId(userId) {
+  const uid = String(userId || "").toUpperCase().trim();
+  if (uid.indexOf("KELURAHAN ") !== 0) return "";
+  return uid.substring("KELURAHAN ".length).split("_")[0].trim();
+}
+
 // Sistem Login & Sesi
 let dataPengguna = { username: "", role: "", kecamatan: "", token: "", userId: "", kelurahanTerkunci: "" };
 let panelAktif = "input"; // "input", "rekap"
@@ -354,10 +363,7 @@ let inputDitutupGlobal = false; // status sakelar tutup input, diisi saat login
     dataPengguna.userId = sesiTersimpan.userId || "";
     dataPengguna.kelurahanTerkunci = "";
 
-    const uid = (dataPengguna.userId || "").toUpperCase().trim();
-    if (uid.indexOf("KELURAHAN ") === 0) {
-      dataPengguna.kelurahanTerkunci = uid.substring("KELURAHAN ".length).trim();
-    }
+    dataPengguna.kelurahanTerkunci = kelurahanDariUserId(dataPengguna.userId);
 
     if (dataPengguna.username) {
       renderAdminSubtitle(sesiTersimpan.namaLengkap || dataPengguna.username, dataPengguna.kelurahanTerkunci);
@@ -804,6 +810,11 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
       controlKec.classList.add('bg-slate-100', 'cursor-not-allowed');
       controlKec.classList.remove('bg-white');
       controlKec.dispatchEvent(new Event('change'));
+    } else if (controlKec) {
+      // GMM tanpa kecamatan (se-Kota Medan): kecamatan dipilih bebas saat input.
+      controlKec.disabled = false;
+      controlKec.classList.remove('bg-slate-100', 'cursor-not-allowed');
+      controlKec.classList.add('bg-white');
     }
     renderDropdownLayananTunggal(role);
   }
@@ -1094,6 +1105,11 @@ tabInput.addEventListener('click', () => {
       controlKecamatan.classList.add('bg-slate-100', 'cursor-not-allowed');
       controlKecamatan.classList.remove('bg-white');
       controlKecamatan.dispatchEvent(new Event('change'));
+    } else if (controlKecamatan) {
+      // GMM tanpa kecamatan (se-Kota Medan): kecamatan dipilih bebas saat input.
+      controlKecamatan.disabled = false;
+      controlKecamatan.classList.remove('bg-slate-100', 'cursor-not-allowed');
+      controlKecamatan.classList.add('bg-white');
     }
     fsContainer.disabled = false;
     fsContainer.classList.remove('opacity-50', 'pointer-events-none');

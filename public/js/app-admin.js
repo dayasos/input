@@ -524,11 +524,19 @@ function tampilkanModalUpdate() {
       .withSuccessHandler(function (res) {
         if (!res || !res.sukses) { sel.innerHTML = '<option value="">-- Gagal memuat --</option>'; return; }
         let html = '<option value="">-- Pilih user --</option>';
+        const pilihanSebelumnya = sel.value;
+        const saya = String(dataPengguna.username || '').toLowerCase();
         (res.daftar || []).forEach(function (u) {
+          // Akun sendiri tidak ditawarkan untuk reset — ganti password sendiri lewat form di atas.
+          if (String(u.username || '').toLowerCase() === saya) return;
           const ket = u.role === "KECAMATAN" && u.kecamatan ? (u.role + " " + u.kecamatan) : u.role;
           html += '<option value="' + esc(u.username) + '">' + esc(u.username) + ' (' + esc(ket) + ')</option>';
         });
         sel.innerHTML = html;
+        // Handler bisa terpanggil 2x (cache SWR lalu revalidasi) — jangan hilangkan pilihan admin.
+        if (pilihanSebelumnya && Array.from(sel.options).some(function (o) { return o.value === pilihanSebelumnya; })) {
+          sel.value = pilihanSebelumnya;
+        }
         // Isi juga dropdown ubah profil user
         document.dispatchEvent(new CustomEvent('daftarUserDimuat', { detail: res.daftar }));
       })
@@ -629,6 +637,7 @@ function tampilkanModalUpdate() {
       .ubahAkunSendiri(dataPengguna.token, verif, userBaru, baru, konfirm);
   }
 
+  window.muatDaftarUser = muatDaftarUser;
   if (fab) fab.addEventListener('click', bukaModal);
   if (btnSimpan) btnSimpan.addEventListener('click', simpan);
   if (elKonfirm) elKonfirm.addEventListener('keydown', function (e) { if (e.key === 'Enter') simpan(); });
@@ -1149,11 +1158,7 @@ function masukSetelahAuth(res, usernameFallback) {
   dataPengguna.token = res.token;
   dataPengguna.userId = res.userId || "";
 
-  dataPengguna.kelurahanTerkunci = "";
-  const userIdUpper = dataPengguna.userId.toUpperCase().trim();
-  if (userIdUpper.indexOf("KELURAHAN ") === 0) {
-    dataPengguna.kelurahanTerkunci = userIdUpper.substring("KELURAHAN ".length).trim();
-  }
+  dataPengguna.kelurahanTerkunci = kelurahanDariUserId(dataPengguna.userId);
 
   renderAdminSubtitle(namaLengkapFinal || usernameFinal, dataPengguna.kelurahanTerkunci);
 
@@ -1961,7 +1966,11 @@ const PILIHAN_ROLE_PENGGUNA = [
   { nilai: 'PENATUA GEREJA', label: 'Penatua Gereja' },
   { nilai: 'GURU MAGHRIB MENGAJI', label: 'Guru Maghrib Mengaji' }
 ];
+// KECAMATAN wajib kecamatan (+ kelurahan opsional); GURU MAGHRIB MENGAJI kecamatan opsional
+// (kosong = se-Kota Medan). Harus selaras dengan supabase/functions/api/domains/akun.ts.
 const ROLE_DENGAN_KECAMATAN = new Set(['KECAMATAN', 'GURU MAGHRIB MENGAJI']);
+const ROLE_WAJIB_KECAMATAN = new Set(['KECAMATAN']);
+const ROLE_DENGAN_KELURAHAN = new Set(['KECAMATAN']);
 
 function opsiRolePenggunaHtml() {
   return PILIHAN_ROLE_PENGGUNA.map(function (role) {
@@ -1983,6 +1992,96 @@ function roleMemerlukanKecamatan(role) {
   return ROLE_DENGAN_KECAMATAN.has(String(role || '').trim().toUpperCase());
 }
 
+function roleWajibKecamatan(role) {
+  return ROLE_WAJIB_KECAMATAN.has(String(role || '').trim().toUpperCase());
+}
+
+function roleMemakaiKelurahan(role) {
+  return ROLE_DENGAN_KELURAHAN.has(String(role || '').trim().toUpperCase());
+}
+
+// Isi dropdown kelurahan sesuai kecamatan. Aman terhadap:
+// - respons usang (kecamatan sudah diganti sebelum respons datang) -> diabaikan;
+// - success handler SWR yang terpanggil 2x (cache lalu revalidasi) -> pilihan user dipertahankan;
+// - kelurahan tersimpan yang (sudah) tidak ada di tabel wilayah -> tetap ditampilkan sebagai
+//   "(data lama)" supaya menyimpan profil tidak diam-diam melebarkan akses akun.
+function muatOpsiKelurahanAkun(selKel, kecamatan, nilaiAwal) {
+  if (!selKel) return;
+  const kec = String(kecamatan || '').trim().toUpperCase();
+  const awal = String(nilaiAwal || '').trim().toUpperCase();
+  selKel.dataset.kecamatan = kec;
+  selKel.dataset.terisi = '';
+
+  if (!kec) {
+    selKel.innerHTML = '<option value="">-- Pilih kecamatan dulu --</option>';
+    selKel.disabled = true;
+    return;
+  }
+
+  function isi(daftar, gagal) {
+    if (selKel.dataset.kecamatan !== kec) return; // respons untuk kecamatan lama
+    const pilihan = selKel.dataset.terisi === kec ? selKel.value : awal;
+    const nama = [];
+    (daftar || []).forEach(function (k) {
+      const v = String(k || '').trim().toUpperCase();
+      if (v && nama.indexOf(v) === -1) nama.push(v);
+    });
+    let html = '<option value="">' + (gagal ? '-- Semua Kelurahan (daftar gagal dimuat) --' : '-- Semua Kelurahan (tingkat kecamatan) --') + '</option>';
+    if (pilihan && nama.indexOf(pilihan) === -1) {
+      html += '<option value="' + esc(pilihan) + '">' + esc(pilihan) + ' (data lama)</option>';
+    }
+    nama.forEach(function (v) { html += '<option value="' + esc(v) + '">' + esc(v) + '</option>'; });
+    selKel.innerHTML = html;
+    selKel.value = pilihan;
+    selKel.disabled = false;
+    selKel.dataset.terisi = kec;
+  }
+
+  selKel.disabled = true;
+  selKel.innerHTML = '<option value="' + esc(awal) + '">Memuat kelurahan...</option>';
+  google.script.run
+    .withSuccessHandler(function (daftar) { isi(Array.isArray(daftar) ? daftar : [], false); })
+    .withFailureHandler(function () {
+      // Data cache sudah tampil lalu revalidasi gagal -> pertahankan daftar yang ada.
+      if (selKel.dataset.kecamatan !== kec || selKel.dataset.terisi === kec) return;
+      isi([], true);
+      tampilkanToast('Daftar kelurahan gagal dimuat. Coba pilih ulang kecamatan.', 'gagal');
+    })
+    .getKelurahanByKecamatan(dataPengguna.token, kec);
+}
+
+// Atur tampilan field kecamatan/kelurahan sesuai role — dipakai modal Tambah (prefix 'tu') & Edit ('eu').
+function aturFieldWilayahAkun(prefix, role, kecamatanAwal, kelurahanAwal) {
+  const divKec = document.getElementById(prefix + '-div-kecamatan');
+  const selKec = document.getElementById(prefix + '-kecamatan');
+  const tandaWajib = document.getElementById(prefix + '-wajib-kecamatan');
+  const info = document.getElementById(prefix + '-info-kecamatan');
+  const divKel = document.getElementById(prefix + '-div-kelurahan');
+  const selKel = document.getElementById(prefix + '-kelurahan');
+  if (!divKec || !selKec) return;
+
+  const pakaiKec = roleMemerlukanKecamatan(role);
+  const wajibKec = roleWajibKecamatan(role);
+  divKec.classList.toggle('hidden', !pakaiKec);
+  selKec.required = wajibKec;
+  if (tandaWajib) tandaWajib.classList.toggle('hidden', !wajibKec);
+  if (info) info.classList.toggle('hidden', !pakaiKec || wajibKec);
+  const opsiKosong = selKec.querySelector('option[value=""]');
+  if (opsiKosong) opsiKosong.textContent = wajibKec ? '-- Pilih Kecamatan --' : '-- Tidak ada (se-Kota Medan) --';
+  if (kecamatanAwal !== undefined) selKec.value = pakaiKec ? (kecamatanAwal || '') : '';
+  if (!pakaiKec) selKec.value = '';
+
+  const pakaiKel = roleMemakaiKelurahan(role);
+  if (divKel) divKel.classList.toggle('hidden', !pakaiKel);
+  if (selKel) {
+    if (pakaiKel) {
+      muatOpsiKelurahanAkun(selKel, selKec.value, kelurahanAwal);
+    } else {
+      muatOpsiKelurahanAkun(selKel, '', '');
+    }
+  }
+}
+
 function labelRolePengguna(role) {
   const nilai = String(role || '').trim().toUpperCase();
   const ditemukan = PILIHAN_ROLE_PENGGUNA.find(function (pilihan) { return pilihan.nilai === nilai; });
@@ -1993,25 +2092,35 @@ let daftarAkunLengkapCache = [];
 
 isiPilihanRoleKelolaPengguna();
 
-function muatDaftarUserLengkap() {
+let nomorPermintaanDaftarAkun = 0;
+
+// senyap=true dipakai refresh realtime: tabel lama tetap tampil (tidak berkedip "Memuat...") dan
+// kegagalan tidak menimpa tabel yang sudah ada.
+function muatDaftarUserLengkap(senyap) {
   const tbody = document.getElementById('tbody-kelola-user');
   const loader = document.getElementById('loader-kelola-user');
-  if (loader) loader.classList.remove('hidden');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400 italic">Memuat data pengguna...</td></tr>';
+  const nomor = ++nomorPermintaanDaftarAkun;
+  clearTimeout(window.__timerSegarKelolaAkun);
+  if (!senyap) {
+    if (loader) loader.classList.remove('hidden');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400 italic">Memuat data pengguna...</td></tr>';
+  }
 
   google.script.run
     .withSuccessHandler(function (res) {
+      if (nomor !== nomorPermintaanDaftarAkun) return; // sudah ada permintaan yang lebih baru
       if (loader) loader.classList.add('hidden');
       if (!res || !res.sukses) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-red-500 font-semibold">' + (res ? res.pesan : 'Gagal memuat') + '</td></tr>';
+        if (!senyap && tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-red-500 font-semibold">' + esc(res ? res.pesan : 'Gagal memuat') + '</td></tr>';
         return;
       }
       daftarAkunLengkapCache = res.daftar || [];
-      renderTabelKelolaUser(daftarAkunLengkapCache);
+      filterTabelKelolaUser(); // hormati kata kunci & filter role yang sedang aktif
     })
     .withFailureHandler(function (err) {
+      if (nomor !== nomorPermintaanDaftarAkun) return;
       if (loader) loader.classList.add('hidden');
-      if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-red-500 font-semibold">Error: ' + (err && err.message ? err.message : err) + '</td></tr>';
+      if (!senyap && tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-red-500 font-semibold">Error: ' + esc(err && err.message ? err.message : err) + '</td></tr>';
     })
     .ambilDaftarAkunLengkap(dataPengguna.token);
 }
@@ -2033,7 +2142,7 @@ function renderTabelKelolaUser(list) {
       <td class="px-3 py-2.5 text-xs font-bold text-slate-800">${esc(u.username)}</td>
       <td class="px-3 py-2.5 text-xs text-slate-700 font-medium">${esc(u.namaLengkap || '-')}</td>
       <td class="px-3 py-2.5 text-xs"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${roleBadgeColor}">${esc(labelRolePengguna(u.role))}</span></td>
-      <td class="px-3 py-2.5 text-xs text-slate-600">${esc(u.kecamatan || '-')}</td>
+      <td class="px-3 py-2.5 text-xs text-slate-600">${esc(u.kecamatan || '-')}${u.kelurahan ? '<div class="text-[10px] text-slate-500">Kel. ' + esc(u.kelurahan) + '</div>' : ''}</td>
       <td class="px-3 py-2.5 text-xs text-slate-600 font-mono">${esc(u.nomorHp || '-')}</td>
       <td class="px-3 py-2.5 text-xs text-center">
         <div class="flex items-center justify-center gap-1.5 whitespace-nowrap">
@@ -2062,7 +2171,7 @@ function filterTabelKelolaUser() {
 
   const filtered = daftarAkunLengkapCache.filter(function (u) {
     const matchRole = !r || (u.role || '').toUpperCase() === r;
-    const matchQuery = !q || (u.username || '').toLowerCase().includes(q) || (u.namaLengkap || '').toLowerCase().includes(q) || (u.kecamatan || '').toLowerCase().includes(q);
+    const matchQuery = !q || (u.username || '').toLowerCase().includes(q) || (u.namaLengkap || '').toLowerCase().includes(q) || (u.kecamatan || '').toLowerCase().includes(q) || (u.kelurahan || '').toLowerCase().includes(q);
     return matchRole && matchQuery;
   });
 
@@ -2080,17 +2189,22 @@ function bukaModalTambahUser() {
 
 function handleRoleTambahUserChange() {
   const selRole = document.getElementById('tu-role');
-  const divKec = document.getElementById('tu-div-kecamatan');
-  const selKec = document.getElementById('tu-kecamatan');
-  if (!selRole || !divKec) return;
+  if (!selRole) return;
+  aturFieldWilayahAkun('tu', selRole.value, undefined, '');
+}
 
-  if (roleMemerlukanKecamatan(selRole.value)) {
-    divKec.classList.remove('hidden');
-    if (selKec) selKec.required = true;
-  } else {
-    divKec.classList.add('hidden');
-    if (selKec) { selKec.required = false; selKec.value = ''; }
-  }
+function handleKecamatanTambahUserChange() {
+  const selRole = document.getElementById('tu-role');
+  const selKec = document.getElementById('tu-kecamatan');
+  if (!selRole || !selKec || !roleMemakaiKelurahan(selRole.value)) return;
+  muatOpsiKelurahanAkun(document.getElementById('tu-kelurahan'), selKec.value, '');
+}
+
+// Kelurahan masih dimuat untuk kecamatan terpilih -> jangan kirim dulu (nilainya belum pasti).
+function kelurahanAkunBelumSiap(prefix, role, kecamatan) {
+  if (!roleMemakaiKelurahan(role) || !kecamatan) return false;
+  const selKel = document.getElementById(prefix + '-kelurahan');
+  return !!selKel && selKel.dataset.terisi !== String(kecamatan).trim().toUpperCase();
 }
 
 function simpanPenggunaBaru(e) {
@@ -2098,7 +2212,8 @@ function simpanPenggunaBaru(e) {
   const uName = (document.getElementById('tu-username')?.value || '').trim();
   const pass = (document.getElementById('tu-password')?.value || '').trim();
   const role = (document.getElementById('tu-role')?.value || '').trim();
-  const kec = (document.getElementById('tu-kecamatan')?.value || '').trim();
+  const kec = roleMemerlukanKecamatan(role) ? (document.getElementById('tu-kecamatan')?.value || '').trim() : '';
+  const kel = roleMemakaiKelurahan(role) ? (document.getElementById('tu-kelurahan')?.value || '').trim() : '';
   const nama = (document.getElementById('tu-nama')?.value || '').trim();
   const hp = (document.getElementById('tu-hp')?.value || '').trim();
   const jbt = (document.getElementById('tu-jabatan')?.value || '').trim();
@@ -2109,29 +2224,34 @@ function simpanPenggunaBaru(e) {
     tampilkanToast('Mohon lengkapi username, password, dan role!', 'gagal');
     return;
   }
-  if (roleMemerlukanKecamatan(role) && !kec) {
+  if (roleWajibKecamatan(role) && !kec) {
     tampilkanToast('Kecamatan wajib dipilih untuk role yang dipilih!', 'gagal');
     return;
   }
+  if (kelurahanAkunBelumSiap('tu', role, kec)) {
+    tampilkanToast('Daftar kelurahan masih dimuat, tunggu sebentar.', 'gagal');
+    return;
+  }
 
+  const labelTombol = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.textContent = 'MENYIMPAN...'; }
+  if (pesanEl) pesanEl.classList.add('hidden');
 
-  const payload = { username: uName, password: pass, role: role, kecamatan: kec, namaLengkap: nama, nomorHp: hp, jabatan: jbt };
+  const payload = { username: uName, password: pass, role: role, kecamatan: kec, kelurahan: kel, namaLengkap: nama, nomorHp: hp, jabatan: jbt };
 
   google.script.run
     .withSuccessHandler(function (res) {
-      if (btn) { btn.disabled = false; btn.textContent = 'SIMPAN PENGGUNA BARU'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = labelTombol; }
       if (res && res.sukses) {
         tampilkanToast(res.pesan, 'sukses');
         document.getElementById('modal-tambah-user')?.classList.add('hidden');
-        muatDaftarUserLengkap();
-        muatDaftarUser();
+        segarkanDaftarAkunSetelahMutasi();
       } else {
         if (pesanEl) { pesanEl.textContent = res ? res.pesan : 'Gagal menambah user.'; pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg bg-red-50 text-red-600 border border-red-200'; pesanEl.classList.remove('hidden'); }
       }
     })
     .withFailureHandler(function (err) {
-      if (btn) { btn.disabled = false; btn.textContent = 'SIMPAN PENGGUNA BARU'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = labelTombol; }
       tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
     })
     .tambahUserBaru(dataPengguna.token, payload);
@@ -2153,15 +2273,7 @@ function bukaModalEditUser(username) {
   document.getElementById('eu-hp').value = u.nomorHp || '';
   document.getElementById('eu-jabatan').value = u.jabatan || '';
 
-  const divKec = document.getElementById('eu-div-kecamatan');
-  const selKec = document.getElementById('eu-kecamatan');
-  if (roleMemerlukanKecamatan(u.role)) {
-    divKec.classList.remove('hidden');
-    if (selKec) { selKec.required = true; selKec.value = u.kecamatan || ''; }
-  } else {
-    divKec.classList.add('hidden');
-    if (selKec) { selKec.required = false; selKec.value = ''; }
-  }
+  aturFieldWilayahAkun('eu', roleResmi ? u.role : '', u.kecamatan || '', u.kelurahan || '');
 
   const pesanEl = document.getElementById('eu-pesan');
   if (roleResmi) {
@@ -2176,24 +2288,26 @@ function bukaModalEditUser(username) {
 
 function handleRoleEditUserChange() {
   const selRole = document.getElementById('eu-role');
-  const divKec = document.getElementById('eu-div-kecamatan');
   const selKec = document.getElementById('eu-kecamatan');
-  if (!selRole || !divKec) return;
+  const selKel = document.getElementById('eu-kelurahan');
+  if (!selRole) return;
+  // Pertahankan kecamatan/kelurahan yang sudah terpilih saat role diganti bolak-balik.
+  aturFieldWilayahAkun('eu', selRole.value, selKec ? selKec.value : '', selKel ? selKel.value : '');
+}
 
-  if (roleMemerlukanKecamatan(selRole.value)) {
-    divKec.classList.remove('hidden');
-    if (selKec) selKec.required = true;
-  } else {
-    divKec.classList.add('hidden');
-    if (selKec) { selKec.required = false; selKec.value = ''; }
-  }
+function handleKecamatanEditUserChange() {
+  const selRole = document.getElementById('eu-role');
+  const selKec = document.getElementById('eu-kecamatan');
+  if (!selRole || !selKec || !roleMemakaiKelurahan(selRole.value)) return;
+  muatOpsiKelurahanAkun(document.getElementById('eu-kelurahan'), selKec.value, '');
 }
 
 function simpanPerubahanUser(e) {
   if (e) e.preventDefault();
   const target = document.getElementById('eu-username-target')?.value;
   const role = document.getElementById('eu-role')?.value;
-  const kec = document.getElementById('eu-kecamatan')?.value;
+  const kec = roleMemerlukanKecamatan(role) ? (document.getElementById('eu-kecamatan')?.value || '') : '';
+  const kel = roleMemakaiKelurahan(role) ? (document.getElementById('eu-kelurahan')?.value || '') : '';
   const nama = document.getElementById('eu-nama')?.value;
   const hp = document.getElementById('eu-hp')?.value;
   const jbt = document.getElementById('eu-jabatan')?.value;
@@ -2204,44 +2318,121 @@ function simpanPerubahanUser(e) {
     tampilkanToast('Pilih salah satu role resmi sebelum menyimpan perubahan.', 'gagal');
     return;
   }
-  if (roleMemerlukanKecamatan(role) && !kec) {
+  if (roleWajibKecamatan(role) && !kec) {
     tampilkanToast('Kecamatan wajib dipilih untuk role yang dipilih!', 'gagal');
     return;
   }
+  if (kelurahanAkunBelumSiap('eu', role, kec)) {
+    tampilkanToast('Daftar kelurahan masih dimuat, tunggu sebentar.', 'gagal');
+    return;
+  }
 
+  const labelTombol = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.textContent = 'MENYIMPAN...'; }
 
-  const payload = { role: role, kecamatan: kec, namaLengkap: nama, nomorHp: hp, jabatan: jbt };
+  const payload = { role: role, kecamatan: kec, kelurahan: kel, namaLengkap: nama, nomorHp: hp, jabatan: jbt };
 
   google.script.run
     .withSuccessHandler(function (res) {
-      if (btn) { btn.disabled = false; btn.textContent = 'SIMPAN PERUBAHAN'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = labelTombol; }
       if (res && res.sukses) {
         tampilkanToast(res.pesan, 'sukses');
         document.getElementById('modal-edit-user')?.classList.add('hidden');
-        muatDaftarUserLengkap();
-        muatDaftarUser();
+        segarkanDaftarAkunSetelahMutasi();
       } else {
         if (pesanEl) { pesanEl.textContent = res ? res.pesan : 'Gagal mengubah user.'; pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg bg-red-50 text-red-600 border border-red-200'; pesanEl.classList.remove('hidden'); }
       }
     })
     .withFailureHandler(function (err) {
-      if (btn) { btn.disabled = false; btn.textContent = 'SIMPAN PERUBAHAN'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = labelTombol; }
       tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
     })
     .ubahDataUserOlehAdmin(dataPengguna.token, target, payload);
 }
 
+// Reset password user LAIN lewat modal khusus. Sengaja tidak memakai modal "Akun Saya"
+// (modal-ganti-password): form utama di sana mengganti password akun yang sedang login, dan
+// dulu admin tanpa sengaja mengganti password akunnya sendiri lewat jalur ini.
 function bukaModalResetSandiUser(username) {
-  const modal = document.getElementById('modal-ganti-password');
-  if (!modal) return;
-  modal.classList.remove('hidden');
-  const selUser = document.getElementById('rs-user');
-  if (selUser) {
-    selUser.value = username;
+  const modal = document.getElementById('modal-reset-sandi-user');
+  if (!modal || !username) return;
+  if (String(username).toLowerCase() === String(dataPengguna.username || '').toLowerCase()) {
+    tampilkanToast('Untuk akun Anda sendiri, gunakan menu Akun Saya.', 'gagal');
+    return;
   }
-  const resetSec = document.getElementById('gp-reset-section');
-  if (resetSec) resetSec.scrollIntoView({ behavior: 'smooth' });
+  const u = daftarAkunLengkapCache.find(function (x) { return x.username === username; }) || {};
+  document.getElementById('rsu-username-target').value = username;
+  document.getElementById('rsu-username-display').textContent = username;
+  const ket = [labelRolePengguna(u.role), u.kecamatan, u.kelurahan ? 'Kel. ' + u.kelurahan : '', u.namaLengkap]
+    .filter(Boolean).join(' · ');
+  document.getElementById('rsu-keterangan').textContent = ket;
+  const elPass = document.getElementById('rsu-pass');
+  if (elPass) elPass.value = '';
+  document.getElementById('rsu-pesan')?.classList.add('hidden');
+  modal.classList.remove('hidden');
+  if (elPass) elPass.focus();
+}
+
+function buatPasswordSementaraAcak() {
+  // Tanpa karakter ambigu (0/O, 1/l/I) supaya mudah didiktekan ke user.
+  const huruf = 'abcdefghjkmnpqrstuvwxyz';
+  const angka = '23456789';
+  const acak = function (n) {
+    const buf = new Uint32Array(1);
+    window.crypto.getRandomValues(buf);
+    return buf[0] % n;
+  };
+  let hasil = '';
+  for (let i = 0; i < 5; i++) hasil += huruf[acak(huruf.length)];
+  for (let i = 0; i < 3; i++) hasil += angka[acak(angka.length)];
+  const elPass = document.getElementById('rsu-pass');
+  if (elPass) elPass.value = hasil;
+}
+
+function simpanResetSandiUser(e) {
+  if (e) e.preventDefault();
+  if (!pastikanLogin()) return;
+  const target = (document.getElementById('rsu-username-target')?.value || '').trim();
+  const pass = (document.getElementById('rsu-pass')?.value || '').trim();
+  const btn = document.getElementById('btn-simpan-reset-sandi-user');
+  const pesanEl = document.getElementById('rsu-pesan');
+  const tampilPesan = function (teks, sukses) {
+    if (!pesanEl) return;
+    pesanEl.textContent = teks;
+    pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg border ' + (sukses ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200');
+  };
+
+  if (!target) { tampilPesan('User target tidak valid. Tutup dan buka ulang dari tabel.', false); return; }
+  if (target.toLowerCase() === String(dataPengguna.username || '').toLowerCase()) {
+    tampilPesan('Untuk akun Anda sendiri, gunakan menu Akun Saya.', false); return;
+  }
+  if (pass.length < 6) { tampilPesan('Password sementara minimal 6 karakter.', false); return; }
+  if (!/[A-Za-z]/.test(pass) || !/[0-9]/.test(pass)) { tampilPesan('Password sementara harus mengandung huruf dan angka.', false); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'MERESET...'; }
+  google.script.run
+    .withSuccessHandler(function (res) {
+      if (btn) { btn.disabled = false; btn.textContent = 'RESET PASSWORD'; }
+      if (res && res.sukses) {
+        tampilPesan(res.pesan + ' Password sementara: ' + pass, true);
+        tampilkanToast('Password "' + target + '" berhasil direset.', 'sukses');
+      } else {
+        tampilPesan(res ? res.pesan : 'Gagal reset.', false);
+      }
+    })
+    .withFailureHandler(function (err) {
+      if (btn) { btn.disabled = false; btn.textContent = 'RESET PASSWORD'; }
+      tampilPesan('Error: ' + (err && err.message ? err.message : err), false);
+    })
+    .resetPasswordUser(dataPengguna.token, target, pass);
+}
+
+// muatDaftarUser() (dropdown reset/ubah profil di modal Akun Saya) hidup di dalam IIFE "Akun Saya"
+// dan diekspos lewat window — dulu dipanggil langsung di sini sehingga melempar ReferenceError
+// setelah simpan berhasil.
+function segarkanDaftarAkunSetelahMutasi() {
+  muatDaftarUserLengkap();
+  if (typeof window.muatDaftarUser === 'function') window.muatDaftarUser();
 }
 
 function konfirmasiHapusUser(username) {
@@ -2259,8 +2450,7 @@ function konfirmasiHapusUser(username) {
       .withSuccessHandler(function (res) {
         if (res && res.sukses) {
           tampilkanToast(res.pesan, 'sukses');
-          muatDaftarUserLengkap();
-          muatDaftarUser();
+          segarkanDaftarAkunSetelahMutasi();
         } else {
           tampilkanToast(res ? res.pesan : 'Gagal menghapus user.', 'gagal');
         }
@@ -2276,6 +2466,10 @@ window.muatDaftarUserLengkap = muatDaftarUserLengkap;
 window.bukaModalTambahUser = bukaModalTambahUser;
 window.bukaModalEditUser = bukaModalEditUser;
 window.bukaModalResetSandiUser = bukaModalResetSandiUser;
+window.simpanResetSandiUser = simpanResetSandiUser;
+window.buatPasswordSementaraAcak = buatPasswordSementaraAcak;
+window.handleKecamatanTambahUserChange = handleKecamatanTambahUserChange;
+window.handleKecamatanEditUserChange = handleKecamatanEditUserChange;
 window.konfirmasiHapusUser = konfirmasiHapusUser;
 
 // Realtime CDC & Status Badge
@@ -2362,6 +2556,24 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       }
     }
 
+    // Kelola Akun -- admin lain (atau tab lain) menambah/mengubah/menghapus akun. Debounce karena
+    // satu aksi bisa datang dari 2 jalur sekaligus (DB trigger event bus + broadcast antar-browser).
+    if (isAll || domains.includes('akun')) {
+      clearTimeout(window.__timerSegarKelolaAkun);
+      window.__timerSegarKelolaAkun = setTimeout(function () {
+        const modalKelola = document.getElementById('modal-kelola-user');
+        if (modalKelola && !modalKelola.classList.contains('hidden') && typeof muatDaftarUserLengkap === 'function') {
+          muatDaftarUserLengkap(true);
+        }
+        const resetSec = document.getElementById('gp-reset-section');
+        const modalAkunSaya = document.getElementById('modal-ganti-password');
+        if (resetSec && !resetSec.classList.contains('hidden') && modalAkunSaya && !modalAkunSaya.classList.contains('hidden') &&
+          typeof window.muatDaftarUser === 'function') {
+          window.muatDaftarUser();
+        }
+      }, 600);
+    }
+
     // Pembaruan Realtime Langsung untuk Panel Input Data
     if (isAll || domains.includes('kuota') || domains.includes('penerima')) {
       if (typeof window.jalankanCekKuota === 'function') {
@@ -2442,6 +2654,9 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
               window.djpmCache.invalidate(['kuota', 'dashboard'], false);
             } else if (domain === 'arsip_tahun') {
               window.djpmCache.invalidate(['arsip_tahun', 'data_detail', 'penerima'], false);
+            } else if (domain === 'akun') {
+              // Daftar sakelar per-user (domain setelan) ikut memuat role/kecamatan/user_id akun.
+              window.djpmCache.invalidate(['akun', 'setelan'], false);
             } else {
               window.djpmCache.invalidate([domain], false);
             }

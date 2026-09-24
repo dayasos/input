@@ -30,10 +30,22 @@ export async function resolveInstansiPengguna(
   return { instansiPengguna: null, layananPengguna: "", listLayananKemenag };
 }
 
+/**
+ * Nama kelurahan dari user_id "KELURAHAN <nama>[_<penanda kecamatan>]".
+ * Sufiks "_<...>" dipakai kalau nama kelurahan kembar di >1 kecamatan (mis. "KELURAHAN SEI MATI_MAIMUN"
+ * & "KELURAHAN SEI MATI_LABUHAN") supaya user_id -- yang juga kunci sakelar per-user -- tetap unik.
+ * Sufiks itu BUKAN bagian nama kelurahan di data (penerima.kelurahan = "SEI MATI"), jadi dibuang di sini;
+ * pembeda kecamatannya sudah ditangani filter kecamatan akun. Nama di tabel wilayah tidak ada yang memuat "_".
+ */
+export function kelurahanDariUserId(userId: string): string {
+  const u = String(userId || "").toUpperCase().trim();
+  if (u.indexOf("KELURAHAN ") !== 0) return "";
+  return u.slice("KELURAHAN ".length).split("_")[0].trim();
+}
+
 /** Port dari pola "kalau USER_ID diawali 'KELURAHAN '" (ambilDataLihatDataHakAkses baris 1298-1301). */
 export function kelurahanTerkunciDari(sesi: DataSesi): string {
-  const userIdSesi = (sesi.userId || "").toString().toUpperCase().trim();
-  return userIdSesi.indexOf("KELURAHAN ") === 0 ? userIdSesi.slice("KELURAHAN ".length).trim() : "";
+  return kelurahanDariUserId((sesi.userId || "").toString());
 }
 
 /** Port dari sub-filter GSM Katolik/Kristen (ambilDataLihatDataHakAkses baris 1303-1308). */

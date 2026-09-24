@@ -259,6 +259,10 @@ const MUTATION_INVALIDATIONS = {
   resetPasswordUser: ['akun'],
   simpanProfilUser: ['akun'],
   ubahProfilUser: ['akun'],
+  // Kelola Akun: daftar sakelar per-user (domain setelan) juga memuat role/kecamatan/user_id akun.
+  tambahUserBaru: ['akun', 'setelan'],
+  ubahDataUserOlehAdmin: ['akun', 'setelan'],
+  hapusUser: ['akun', 'setelan'],
   logoutPengguna: ['*'],
 
   buatBatchPembayaran: ['tools_batch'],

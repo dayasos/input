@@ -305,7 +305,8 @@
                       var sub = 'Administratur : ' + escBootstrap(nama);
                       var uid = (p.userId || '').toUpperCase().trim();
                       if (uid.indexOf('KELURAHAN ') === 0) {
-                        sub += ' &nbsp;·&nbsp; Kelurahan ' + escBootstrap(uid.substring('KELURAHAN '.length).trim());
+                        // Sufiks "_..." (pembeda nama kelurahan kembar) dibuang, sama seperti kelurahanDariUserId di app-core.js.
+                        sub += ' &nbsp;·&nbsp; Kelurahan ' + escBootstrap(uid.substring('KELURAHAN '.length).split('_')[0].trim());
                       }
                       document.getElementById('info-admin-subtitle').innerHTML = sub;
                     }
@@ -3052,8 +3053,8 @@
         </div>
         <div id="tu-div-kecamatan" class="hidden">
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kecamatan Tugas
-            <span class="text-red-500">*</span></label>
-          <select id="tu-kecamatan"
+            <span id="tu-wajib-kecamatan" class="text-red-500">*</span></label>
+          <select id="tu-kecamatan" onchange="handleKecamatanTambahUserChange()"
             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500">
             <option value="">-- Pilih Kecamatan --</option>
             <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
@@ -3078,6 +3079,17 @@
             <option value="MEDAN TIMUR">MEDAN TIMUR</option>
             <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
           </select>
+          <p id="tu-info-kecamatan" class="hidden text-[11px] text-slate-500 mt-1">Kosongkan jika akun berlaku
+            untuk seluruh Kota Medan.</p>
+        </div>
+        <div id="tu-div-kelurahan" class="hidden">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kelurahan
+            Tugas</label>
+          <select id="tu-kelurahan" disabled
+            class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500 disabled:bg-slate-100">
+            <option value="">-- Pilih kecamatan dulu --</option>
+          </select>
+          <p class="text-[11px] text-slate-500 mt-1">Pilih "Semua Kelurahan" untuk akun tingkat kecamatan.</p>
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nama Lengkap
@@ -3147,8 +3159,8 @@
         </div>
         <div id="eu-div-kecamatan" class="hidden">
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kecamatan
-            Tugas</label>
-          <select id="eu-kecamatan"
+            Tugas <span id="eu-wajib-kecamatan" class="text-red-500">*</span></label>
+          <select id="eu-kecamatan" onchange="handleKecamatanEditUserChange()"
             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500">
             <option value="">-- Pilih Kecamatan --</option>
             <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
@@ -3173,6 +3185,17 @@
             <option value="MEDAN TIMUR">MEDAN TIMUR</option>
             <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
           </select>
+          <p id="eu-info-kecamatan" class="hidden text-[11px] text-slate-500 mt-1">Kosongkan jika akun berlaku
+            untuk seluruh Kota Medan.</p>
+        </div>
+        <div id="eu-div-kelurahan" class="hidden">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kelurahan
+            Tugas</label>
+          <select id="eu-kelurahan" disabled
+            class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500 disabled:bg-slate-100">
+            <option value="">-- Pilih kecamatan dulu --</option>
+          </select>
+          <p class="text-[11px] text-slate-500 mt-1">Pilih "Semua Kelurahan" untuk akun tingkat kecamatan.</p>
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nama Lengkap</label>
@@ -3203,6 +3226,59 @@
             </svg>
             <span>SIMPAN PERUBAHAN</span>
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Reset Password Pengguna (dari Kelola Akun) — terpisah dari modal "Akun Saya" supaya
+       admin tidak salah mengisi form ganti password akunnya sendiri. -->
+  <div id="modal-reset-sandi-user"
+    class="hidden fixed inset-0 z-[190] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+    onclick="if(event.target===this)this.classList.add('hidden')">
+    <div
+      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] overflow-y-auto">
+      <div class="flex justify-between items-center px-5 py-4 bg-amber-700 text-white">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div
+            class="w-8 h-8 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h3 class="text-sm font-bold tracking-wide uppercase truncate">Reset Password Pengguna</h3>
+        </div>
+        <button type="button" onclick="document.getElementById('modal-reset-sandi-user').classList.add('hidden')"
+          class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
+      </div>
+      <form id="form-reset-sandi-user" onsubmit="simpanResetSandiUser(event)" class="p-5 space-y-3">
+        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p class="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Akun yang direset</p>
+          <p id="rsu-username-display" class="text-sm font-bold text-slate-800 break-all" style="text-transform:none">-</p>
+          <p id="rsu-keterangan" class="text-[11px] text-slate-600"></p>
+        </div>
+        <input type="hidden" id="rsu-username-target">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password Sementara
+            <span class="text-red-500">*</span></label>
+          <div class="flex gap-2">
+            <input type="text" id="rsu-pass" required autocomplete="off" placeholder="Min. 6 karakter, ada huruf & angka"
+              class="flex-1 min-w-0 px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
+              style="text-transform:none">
+            <button type="button" onclick="buatPasswordSementaraAcak()"
+              class="shrink-0 px-3 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">Acak</button>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Sampaikan password ini ke pengguna. Sesi login pengguna tersebut
+            akan diakhiri dan ia perlu login ulang.</p>
+        </div>
+        <div id="rsu-pesan" class="hidden text-xs font-medium rounded-lg p-2.5"></div>
+        <div class="pt-2 flex gap-2">
+          <button type="button" onclick="document.getElementById('modal-reset-sandi-user').classList.add('hidden')"
+            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition">BATAL</button>
+          <button type="submit" id="btn-simpan-reset-sandi-user"
+            class="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow transition">RESET PASSWORD</button>
         </div>
       </form>
     </div>
