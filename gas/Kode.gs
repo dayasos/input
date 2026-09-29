@@ -32,6 +32,8 @@ const MIME_DIIZINKAN = [
     "image/bmp", "image/gif", "application/pdf"
 ];
 const TTL_CACHE_SESI_DETIK = 300;      // sesi valid di-cache 5 menit -> tidak fetch ke Supabase per berkas
+const TTL_CACHE_TOLAK_DETIK = 20;      // token yang ditolak diingat singkat
+const PESAN_SESI_DITOLAK = "Akses ditolak: sesi tidak sah atau sudah berakhir. Silakan login ulang.";
 const TTL_CACHE_FOLDER_DETIK = 21600;  // 6 jam (batas maksimum CacheService)
 const WAIT_LOCK_MS = 25000;
 
@@ -123,7 +125,11 @@ function validasiSesi_(token) {
 
     const cache = CacheService.getScriptCache();
     const kunci = "ses_" + hashTeks_(t);
+    const kunciTolak = "tolak_" + hashTeks_(t);
     try { if (cache.get(kunci)) return { sah: true }; } catch (_e) { }
+    // Token yang baru saja ditolak tidak perlu ditanyakan lagi ke Supabase (melindungi kuota UrlFetch
+    // dan pool DB Edge Function dari token salah/kedaluwarsa yang dikirim berulang).
+    try { if (cache.get(kunciTolak)) return { sah: false, pesan: PESAN_SESI_DITOLAK }; } catch (_e) { }
 
     const edgeUrl = (props_().getProperty("EDGE_URL") || "").trim();
     const anonKey = (props_().getProperty("ANON_KEY") || "").trim();
@@ -157,7 +163,9 @@ function validasiSesi_(token) {
     if (kode >= 500 || kode === 429 || !json) {
         return { sah: false, pesan: "Server verifikasi sesi sedang sibuk (kode " + kode + "), coba lagi." };
     }
-    return { sah: false, pesan: "Akses ditolak: sesi tidak sah atau sudah berakhir. Silakan login ulang." };
+    // Hanya penolakan definitif yang di-cache (bukan gangguan 5xx/429), supaya login ulang langsung berlaku.
+    try { cache.put(kunciTolak, "1", TTL_CACHE_TOLAK_DETIK); } catch (_e) { }
+    return { sah: false, pesan: PESAN_SESI_DITOLAK };
 }
 
 // ---------------------------------------------------------------------------
