@@ -515,7 +515,7 @@ function panggilAksiPromise(namaAksi) {
 // sukses di-cache in-memory, jadi klik "Simpan" ulang setelah gagal sebagian tidak mengunggah
 // ulang berkas yang sudah masuk.
 // ---------------------------------------------------------------------------
-const GAS_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby-xGGRl-MvzMMIsFasPt6XYo1UuG3ImJK6892TtuqN-u3DWn0FbQExPjci4VTnWwva7w/exec';
+const GAS_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycbzvqb6npAi_7OoTnRTDDhXrVZ41a5ayeRzCBoQKLjGQK7NqhSbDDunlUvaP_Y-jm6wU4Q/exec';
 const LIMIT_PARALEL_UPLOAD = 2; // konservatif: GAS membatasi ~30 eksekusi bersamaan utk SELURUH pengguna
 const TIMEOUT_SIAPKAN_FOLDER_MS = 45000;
 const TIMEOUT_UPLOAD_BERKAS_MS = 120000;
