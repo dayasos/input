@@ -1513,12 +1513,33 @@
     if (panel.classList.contains('hidden')) { S.kotor = true; return; }
     if (sedangSibuk()) { S.kotor = true; return; }
     // Satu perubahan datang lewat dua jalur (trigger DB + siaran antar-browser), dan hapus massal memicu
-    // beberapa event beruntun: gabungkan jadi satu muat ulang.
-    clearTimeout(timerEvent);
+    // beberapa event beruntun: gabungkan jadi satu muat ulang. Jarak antar muat ulang akibat event
+    // minimal 2 dtk, karena puluhan admin kecamatan yang menginput bersamaan juga menghasilkan event
+    // 'penerima' dan tidak boleh membanjiri server.
+    S.kotor = true;
+    if (timerEvent) return;
+    var jeda = Math.max(400, 2000 - (Date.now() - waktuMuatEvent));
     timerEvent = setTimeout(function () {
-      if (panel.classList.contains('hidden')) { S.kotor = true; return; }
-      if (sedangSibuk()) { S.kotor = true; return; }
-      muat();
-    }, 400);
+      timerEvent = null;
+      jalankanMuatEvent();
+    }, jeda);
+  });
+
+  var waktuMuatEvent = 0;
+  // Muat ulang akibat event/fokus hanya bila layar benar-benar dilihat & tidak sedang mengerjakan sesuatu;
+  // selain itu tetap ditandai kotor dan disusul (tab dibuka lagi, modal ditutup, atau tab kembali terlihat).
+  function jalankanMuatEvent() {
+    if (!S.siap || !S.kotor) return;
+    if (panel.classList.contains('hidden') || document.hidden || sedangSibuk()) return;
+    waktuMuatEvent = Date.now();
+    muat();
+  }
+
+  // Tab kembali terlihat / perangkat kembali online: siaran realtime bisa terlewat selama tab di latar
+  // (WebSocket ditangguhkan browser), jadi periksa kembali bila ditandai kotor atau sudah lewat TTL.
+  window.addEventListener('djpm:swr-window-focus', function () {
+    if (!S.siap || !adalahUtama() || !token()) return;
+    if (panel.classList.contains('hidden') || document.hidden || sedangSibuk()) return;
+    if (S.kotor || Date.now() - S.waktu >= ttlSegarMs()) { S.kotor = true; jalankanMuatEvent(); }
   });
 })();

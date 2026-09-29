@@ -73,6 +73,17 @@ async function daftarTahunDiDb(): Promise<number[]> {
   return memoTahun.daftar;
 }
 
+// Master layanan hanya untuk label/kategori di tampilan daftar & detail; jarang berubah, jadi memo 60 dtk
+// menghemat satu query DB per pemuatan (pool cuma 1 koneksi, semua query antre). Validasi ubah data
+// (adminUbahData) sengaja tetap membaca langsung agar aturan layanan selalu terbaru.
+let memoMaster: { waktu: number; nilai: Awaited<ReturnType<typeof getMasterLayanan>> } | null = null;
+async function masterLayananTampilan() {
+  if (memoMaster && Date.now() - memoMaster.waktu < 60_000) return memoMaster.nilai;
+  const nilai = await getMasterLayanan();
+  memoMaster = { waktu: Date.now(), nilai };
+  return nilai;
+}
+
 export async function adminDaftarData(token: string, filter: Record<string, unknown> = {}) {
   try {
     await wajibUtama(token);
@@ -96,7 +107,7 @@ export async function adminDaftarData(token: string, filter: Record<string, unkn
     const kategori = str(f.kategori).toUpperCase();
     const kelengkapan = str(f.kelengkapan).toUpperCase();
 
-    const master = await getMasterLayanan();
+    const master = await masterLayananTampilan();
     const layananKemenag = master.kemenag.map((v) => v.toUpperCase());
     const setKemenag = new Set(layananKemenag);
 
@@ -199,7 +210,7 @@ export async function adminDetailData(token: string, id: number, tahun: number) 
       jumlahBatchPembayaran = Number(b[0]?.n) || 0;
     } catch (_e) { /* peringatan saja; jangan gagalkan detail */ }
 
-    const master = await getMasterLayanan();
+    const master = await masterLayananTampilan();
     const kemenag = new Set(master.kemenag.map((v) => v.toUpperCase()));
 
     const berkas = Object.keys(MAP_IDX_KE_KOLOM_BERKAS).map((k) => {
