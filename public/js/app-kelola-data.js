@@ -1372,8 +1372,8 @@
   // ---------------------------------------------------------------------------
   var TAB_LAIN = ['tab-input', 'tab-rekap', 'tab-tools'];
   var PANEL_LAIN = ['panel-input', 'panel-rekap', 'panel-tools'];
-  var KELAS_AKTIF = ['ring-2', 'ring-purple-300', 'bg-purple-600', 'shadow-md'];
-  var KELAS_NORMAL = ['bg-purple-600/80'];
+  var KELAS_AKTIF = ['ring-2', 'ring-amber-300', 'bg-amber-600', 'shadow-md'];
+  var KELAS_NORMAL = ['bg-amber-600/80'];
 
   function nonaktifkanTab() {
     KELAS_AKTIF.forEach(function (c) { tab.classList.remove(c); });
