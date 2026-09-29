@@ -594,6 +594,11 @@ async function panggilGas(aksi, args, timeoutMs) {
       err.permanen = /ditolak|tidak didukung|melebihi|kosong|konfigurasi/i.test(err.message); // jangan di-retry
       throw err;
     }
+    // Balasan "sukses" tapi kosong (mis. GAS kadang menjawab halaman status, bukan hasil aksi) harus
+    // dianggap gagal sementara supaya di-retry, bukan lolos dengan folderId/link undefined.
+    if (aksi === 'siapkanFolderDrive' ? !hasil.folderId : !hasil.link) {
+      throw new Error('Respon server Drive tidak lengkap.');
+    }
     return hasil;
   } catch (err) {
     if (err && err.name === 'AbortError') throw new Error('Batas waktu koneksi ke Drive terlampaui (timeout).');
