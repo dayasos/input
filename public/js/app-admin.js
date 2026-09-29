@@ -2513,7 +2513,7 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       // dibuka -- mis. baris dihapus/diubah lewat Kelola Data atau admin lain -- supaya saat tab dibuka
       // lagi data dimuat ulang, bukan menampilkan baris yang sudah tidak ada.
       if (typeof invalidateCacheDataTransaksi === 'function') invalidateCacheDataTransaksi();
-      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap') {
+      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap' && !(window._abaikanMuatUlangLihatSampai > Date.now())) {
         const modalDetail = document.getElementById('modal-detail-penerima');
         if (!modalDetail || modalDetail.classList.contains('hidden')) {
           if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();

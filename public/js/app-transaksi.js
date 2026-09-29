@@ -1135,6 +1135,7 @@ function perbaruiStatusDiMasterData(nomorBaris, statusBaru) {
   if (typeof saringDanTampilkanTabel === 'function') saringDanTampilkanTabel();
 }
 let penandaWaktuKetik;
+let _verifSedangJalan = false; // cegah verifikasi ganda selagi request sebelumnya belum selesai
 
 function inisialisasiMenuLihatData() {
   if (!pastikanLogin()) return;
@@ -2024,29 +2025,65 @@ function halamanBerikutnya() {
         batasWaktu = document.getElementById('input-batas-waktu-verifikasi').value;
         if (!batasWaktu) { tampilkanToast('Batas waktu perbaikan wajib diisi untuk status Berkas Tidak Lengkap.', 'gagal'); return; }
       }
+      if (_verifSedangJalan) { tampilkanToast('Masih menyimpan verifikasi sebelumnya, mohon tunggu sebentar.', 'info'); return; }
+      _verifSedangJalan = true;
+      // Tahan muat ulang penuh Lihat Data sejak klik (bukan hanya saat sukses): event invalidasi dari
+      // mutasi ini sendiri tiba SEBELUM handler sukses, dan bisa menimpa status optimistik dgn data lama.
+      window._abaikanMuatUlangLihatSampai = Date.now() + 30000;
       tombolAktif.disabled = true;
       tombolAktif.innerText = 'Menyimpan...';
+      // Update optimistik: status baru langsung tampil di detail & kolom Verifikasi tabel tanpa menunggu
+      // server. Nilai LAMA disimpan untuk rollback bila gagal; status lama juga dikirim sbg
+      // statusDiharapkan (deteksi konflik admin lain) -- HARUS diambil sebelum dataAktif diubah.
+      const nomorTarget = nomorBarisAktif;
+      const statusLama = dataAktif[32] || "";
+      const snapshotLama = dataAktif.slice(32, 37);
+      const statusTabelLama = statusLama || "Proses Verifikasi";
+      dataAktif[32] = statusBaru;
+      dataAktif[33] = ket;
+      dataAktif[34] = "menyimpan...";
+      dataAktif[35] = (dataPengguna.username || "").toString().toUpperCase();
+      dataAktif[36] = batasWaktu;
+      renderBaca(dataAktif);
+      perbaruiStatusDiMasterData(nomorTarget, statusBaru);
+      function selesai() { _verifSedangJalan = false; }
+      function batalkan(pesan) {
+        selesai();
+        perbaruiStatusDiMasterData(nomorTarget, statusTabelLama);
+        if (nomorBarisAktif === nomorTarget) {
+          for (let i = 0; i < snapshotLama.length; i++) dataAktif[32 + i] = snapshotLama[i];
+          renderBaca(dataAktif);
+          // renderBaca membangun ulang form: kembalikan isian agar tidak perlu mengetik ulang.
+          const elKet = document.getElementById('input-keterangan-verifikasi');
+          if (elKet) elKet.value = ket;
+          const elBatas = document.getElementById('input-batas-waktu-verifikasi');
+          if (elBatas) elBatas.value = batasWaktu;
+        }
+        tampilkanToast(pesan, 'gagal');
+      }
       google.script.run
         .withSuccessHandler(function (res) {
-          tombolAktif.disabled = false;
-          tombolAktif.innerText = teksAsliTombol;
-          if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
-          dataAktif[32] = res.status;
-          dataAktif[33] = res.keterangan;
-          dataAktif[34] = res.tanggal;
-          dataAktif[35] = res.verifikator;
-          dataAktif[36] = res.batasWaktu || "";
-          renderBaca(dataAktif);
-          perbaruiStatusDiMasterData(nomorBarisAktif, res.status);
+          if (!res || !res.sukses) { batalkan('Gagal: ' + (res && res.pesan ? res.pesan : 'tidak ada respons dari server')); return; }
+          selesai();
+          perbaruiStatusDiMasterData(nomorTarget, res.status);
+          if (nomorBarisAktif === nomorTarget) {
+            dataAktif[32] = res.status;
+            dataAktif[33] = res.keterangan;
+            dataAktif[34] = res.tanggal;
+            dataAktif[35] = res.verifikator;
+            dataAktif[36] = res.batasWaktu || "";
+            renderBaca(dataAktif);
+          }
+          // Cache dibuang, tapi data di memori sudah benar: tahan muat ulang penuh Lihat Data dari event
+          // invalidasi/CDC susulan (lihat app-admin.js) supaya tidak menarik ulang ribuan baris.
+          window._abaikanMuatUlangLihatSampai = Date.now() + 8000;
           invalidateCacheDataTransaksi();
           tampilkanToast('Status verifikasi berhasil disimpan.', 'sukses');
         })
         .withFailureHandler(function (err) {
-          tombolAktif.disabled = false;
-          tombolAktif.innerText = teksAsliTombol;
-          tampilkanToast(pesanErrorRamah(err), 'gagal');
+          batalkan(pesanErrorRamah(err));
         })
-        .verifikasiSatuData(dataPengguna.token, nomorBarisAktif, statusBaru, ket, batasWaktu, dataAktif[32] || "");
+        .verifikasiSatuData(dataPengguna.token, nomorTarget, statusBaru, ket, batasWaktu, statusLama);
     }
     const btnTandai = document.getElementById('btn-tandai-tidak-memenuhi');
     if (btnTandai) {
