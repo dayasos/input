@@ -193,16 +193,7 @@ if (perangkatIOS() && !sudahTerinstalSebagaiPwa()) {
 
 // Registrasi Service Worker secara aman dan terjamin
 if ('serviceWorker' in navigator) {
-  // Cek generik "ada overlay/modal input yang sedang terbuka" -- formSedangDiisi() saja HANYA
-  // memeriksa #form-pembayaran, padahal ada banyak modal/overlay lain (tambah/edit user, ganti
-  // password, profil awal, overlay upload "loading-overlay", dsb.) yang datanya/prosesnya juga
-  // bisa hilang kalau halaman di-reload paksa tanpa peringatan. Semua overlay di app ini
-  // konsisten memakai kelas "fixed inset-0" + "hidden" saat tertutup (lihat markup index.html),
-  // jadi cek generik berbasis kelas ini menjangkau overlay apa pun (bukan cuma yg id-nya diawali
-  // "modal-") tanpa perlu daftar id manual yang gampang basi kalau ada modal baru ditambah.
-  // #modal-login DIKECUALIKAN: modal itu selalu terbuka tiap kali sesi belum/tidak lagi valid
-  // (bukan cuma sesaat), dan isinya cuma username/password kosong -- kalau ikut dihitung,
-  // reload otomatis tidak akan pernah jalan tiap kali tab kebetulan sedang nganggur di layar
+
   // login, dan fitur "tidak perlu hard refresh lagi" ini jadi tidak berguna sama sekali.
   function adaOverlayTerbuka() {
     try {
@@ -215,9 +206,6 @@ if ('serviceWorker' in navigator) {
     return false;
   }
 
-  // Cek "ada aksi (baca/tulis) yang sedang berjalan ke server" lewat peta permintaan in-flight
-  // milik api-bridge.js -- mis. modal konfirmasi baru saja ditutup tapi permintaan simpan/ubah
-  // yang dipicunya masih berjalan. Tanpa ini, reload paksa bisa membatalkan permintaan tsb di
   // sisi klien tanpa toast sukses/gagal apa pun.
   function adaAksiSedangBerjalan() {
     try { return Boolean(window.djpmCache && window.djpmCache._inFlightRequests.size > 0); } catch (e) { return false; }
@@ -229,16 +217,6 @@ if ('serviceWorker' in navigator) {
     return true;
   }
 
-  // Reload otomatis saat SW baru ambil alih tab yang sedang terbuka (mis. versi baru dideploy
-  // sementara user tetap membuka tab lama). Hanya dipasang jika tab ini SUDAH dikontrol SW
-  // sebelumnya (kunjungan lama) -- pada kunjungan pertama (belum ada controller sama sekali)
-  // clients.claim() di sw.js juga memicu controllerchange, dan reload di situ cuma buang-buang
-  // tanpa manfaat karena tidak ada JS lama yang perlu diperbarui. Kalau saat itu ada modal/aksi
-  // yang menghalangi, JANGAN menyerah selamanya (controllerchange cuma terpicu SEKALI per versi
-  // SW) -- coba lagi berkala sampai kondisinya aman. Guard "sudahReload" SENGAJA variabel
-  // in-memory (bukan sessionStorage): tujuannya cuma menahan reload dobel dalam 1 kali muat
-  // halaman ini, BUKAN memblokir reload utk deploy berikutnya -- begitu halaman ini reload,
-  // context JS-nya diganti total & variabel ini otomatis kembali false utk deploy berikutnya.
   let sudahReload = false;
   let retryTimer = null; // dilacak di luar handler spy tidak dobel timer kalau controllerchange
   // sempat terpicu lagi (mis. deploy kedua) selagi retry loop pertama
