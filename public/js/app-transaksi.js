@@ -701,8 +701,23 @@ function cekStatusSesiUpload(url) {
   });
 }
 
-async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
-  const kunciList = Object.keys(berkasMap);
+const GAS_DRIVE_UPLOAD_URL = 'https://script.google.com/macros/s/AKfycby-xGGRl-MvzMMIsFasPt6XYo1UuG3ImJK6892TtuqN-u3DWn0FbQExPjci4VTnWwva7w/exec';
+
+function bacaBlobSebagaiBase64(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      const res = reader.result || '';
+      const parts = res.split(',');
+      resolve(parts.length > 1 ? parts[1] : parts[0]);
+    };
+    reader.onerror = function (e) { reject(e); };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
+  const kunciList = Object.keys(berkasMap || {});
   if (kunciList.length === 0) return { sukses: true, link: {} };
 
   const progressContainer = document.getElementById('loading-progress-container');
@@ -710,132 +725,91 @@ async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
   const progressPersen = document.getElementById('loading-progress-persen');
   const progressBar = document.getElementById('loading-progress-bar');
   const progressSub = document.getElementById('loading-progress-sub');
-  const daftarFileInfo = {};
-  const bytesTerunggah = {};
-  let berkasSelesai = 0;
-
-  kunciList.forEach(function (k) {
-    daftarFileInfo[k] = metaSatuBerkas(berkasMap[k]);
-    bytesTerunggah[k] = 0;
-  });
-
-  const totalByte = kunciList.reduce(function (jumlah, k) {
-    return jumlah + (daftarFileInfo[k].ukuranByte || 0);
-  }, 0) || 1;
-
-  function perbaruiProgress(label, selesai) {
-    if (!progressContainer) return;
-    const byteSelesai = kunciList.reduce(function (jumlah, k) {
-      return jumlah + (bytesTerunggah[k] || 0);
-    }, 0);
-    const persen = Math.min(99, Math.round((byteSelesai / totalByte) * 100));
-    if (progressPersen) progressPersen.innerText = persen + '%';
-    if (progressBar) progressBar.style.width = persen + '%';
-    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${kunciList.length})`;
-    if (progressSub) progressSub.innerText = selesai ? `Selesai: ${label}` : `Mengunggah: ${label}...`;
-  }
 
   if (progressContainer) {
     progressContainer.classList.remove('hidden');
-    if (progressPersen) progressPersen.innerText = '0%';
-    if (progressBar) progressBar.style.width = '0%';
-    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (0/${kunciList.length})`;
-    if (progressSub) progressSub.innerText = 'Menyiapkan penyimpanan berkas...';
+    if (progressPersen) progressPersen.innerText = '10%';
+    if (progressBar) progressBar.style.width = '10%';
+    if (progressLabel) progressLabel.innerText = `Menyiapkan Berkas (0/${kunciList.length})`;
+    if (progressSub) progressSub.innerText = 'Membaca dan menyiapkan berkas...';
   }
 
-  // Backend hanya menerbitkan URL upload yang singkat masa berlakunya. Byte berkas dikirim
-  // langsung dari browser ke bucket privat Supabase, sehingga tidak melewati batas body Vercel
-  // maupun proxy Edge Function dan tidak bergantung pada OAuth Google Drive.
-  const hasilMint = await panggilAksiDenganRetry(
-    'mintaUrlUploadBerkas', 2, dataPengguna.token, konteks, daftarFileInfo
-  );
-  if (!hasilMint || !hasilMint.sukses) {
-    if (progressContainer) progressContainer.classList.add('hidden');
-    return { sukses: false, pesan: hasilMint ? hasilMint.pesan : 'Gagal menyiapkan upload.' };
-  }
-
-  function putKeStorage(url, item, k) {
-    return new Promise(function (resolve, reject) {
-      const xhr = new XMLHttpRequest();
-      xhr.open('PUT', url, true);
-      xhr.timeout = 180000;
-      xhr.setRequestHeader('Content-Type', item.mimeType || 'application/octet-stream');
-      xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable) {
-          bytesTerunggah[k] = e.loaded;
-          perbaruiProgress(item.label || k, false);
-        }
-      };
-      xhr.onload = function () {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error('HTTP ' + xhr.status));
-      };
-      xhr.onerror = function () { reject(new Error('koneksi jaringan terputus')); };
-      xhr.ontimeout = function () { reject(new Error('batas waktu upload terlampaui')); };
-      xhr.send(item.file);
-    });
-  }
-
-  async function uploadSatu(k) {
+  const berkasPayload = {};
+  for (let i = 0; i < kunciList.length; i++) {
+    const k = kunciList[i];
     const item = berkasMap[k];
-    const info = hasilMint.daftarUrl && hasilMint.daftarUrl[k];
+    if (!item || !item.file) continue;
+
     const label = item.label || k;
-    if (!info || !info.uploadUrl) {
-      return { k: k, gagal: `URL upload "${label}" tidak tersedia.` };
-    }
+    if (progressSub) progressSub.innerText = `Membaca: ${label}...`;
+    if (progressLabel) progressLabel.innerText = `Menyiapkan Berkas (${i + 1}/${kunciList.length})`;
+    const pct = Math.round(10 + ((i + 1) / kunciList.length) * 40);
+    if (progressPersen) progressPersen.innerText = pct + '%';
+    if (progressBar) progressBar.style.width = pct + '%';
 
-    let pesanTerakhir = 'gagal tanpa keterangan';
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) {
-        bytesTerunggah[k] = 0;
-        if (progressSub) progressSub.innerText = `Mencoba ulang (${attempt}/2): ${label}...`;
-        await new Promise(function (resolve) { setTimeout(resolve, 1000 * attempt); });
+    const base64 = await bacaBlobSebagaiBase64(item.file);
+    berkasPayload[k] = {
+      namaFile: item.namaFile || `${k}.jpg`,
+      mimeType: item.mimeType || 'application/octet-stream',
+      dataBase64: base64,
+      label: label
+    };
+  }
+
+  if (progressPersen) progressPersen.innerText = '60%';
+  if (progressBar) progressBar.style.width = '60%';
+  if (progressLabel) progressLabel.innerText = 'Mengunggah ke Google Drive...';
+  if (progressSub) progressSub.innerText = 'Menyimpan berkas ke folder Google Drive kantor...';
+
+  const payload = {
+    action: 'uploadSemuaBerkasKeDrive',
+    args: [
+      (typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token) || '',
+      konteks || {},
+      berkasPayload
+    ]
+  };
+
+  let hasil = null;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) {
+      if (progressSub) progressSub.innerText = `Mencoba ulang kirim ke Drive (${attempt}/1)...`;
+      await new Promise(function (res) { setTimeout(res, 1500); });
+    }
+    try {
+      const response = await fetch(GAS_DRIVE_UPLOAD_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const json = await response.json();
+      if (json && (json.result || json.sukses)) {
+        hasil = json.result || json;
+        if (hasil.sukses) break;
+        throw new Error(hasil.pesan || 'Gagal dari Google Drive');
+      } else {
+        throw new Error(json ? (json.pesan || json.error) : 'Respon Google Drive tidak valid.');
       }
-      try {
-        await putKeStorage(info.uploadUrl, item, k);
-        bytesTerunggah[k] = daftarFileInfo[k].ukuranByte || item.file.size || 0;
-        berkasSelesai++;
-        perbaruiProgress(label, true);
-        return { k: k, path: info.path, gagal: null };
-      } catch (e) {
-        pesanTerakhir = pesanErrorRamah(e);
-      }
-    }
-    return { k: k, gagal: `Gagal mengunggah "${label}": ${pesanTerakhir}` };
-  }
-
-  const koneksiLambat = typeof navigator !== 'undefined' && navigator.connection &&
-    (navigator.connection.saveData || navigator.connection.effectiveType === '2g' || navigator.connection.effectiveType === '3g');
-  const batasParalel = koneksiLambat ? 2 : 4;
-  const hasilPut = [];
-  let nomorAntrean = 0;
-
-  async function worker() {
-    while (nomorAntrean < kunciList.length) {
-      const k = kunciList[nomorAntrean++];
-      hasilPut.push(await uploadSatu(k));
+    } catch (err) {
+      lastError = err;
     }
   }
 
-  const workers = [];
-  for (let i = 0; i < Math.min(batasParalel, kunciList.length); i++) workers.push(worker());
-  await Promise.all(workers);
-
-  const gagalPertama = hasilPut.find(function (hasil) { return hasil.gagal; });
-  if (gagalPertama) {
-    if (progressContainer) progressContainer.classList.add('hidden');
-    return { sukses: false, pesan: gagalPertama.gagal };
-  }
-
-  const daftarPath = {};
-  hasilPut.forEach(function (hasil) { daftarPath[hasil.k] = hasil.path; });
-  if (progressSub) progressSub.innerText = 'Menyelesaikan dan mengamankan berkas...';
-
-  const hasilKonfirmasi = await panggilAksiDenganRetry(
-    'konfirmasiUploadBerkas', 2, dataPengguna.token, hasilMint.prefix, daftarPath
-  );
   if (progressContainer) progressContainer.classList.add('hidden');
-  return hasilKonfirmasi || { sukses: false, pesan: 'Tidak ada respons saat konfirmasi upload.' };
+
+  if (!hasil || !hasil.sukses) {
+    return {
+      sukses: false,
+      pesan: 'Gagal mengunggah berkas ke Google Drive: ' + pesanErrorRamah(lastError)
+    };
+  }
+
+  return {
+    sukses: true,
+    link: hasil.link || {}
+  };
 }
 
 async function kumpulkanDataForm() {
@@ -962,7 +936,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
       berkasUntukUpload[k] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, ukuranByte: item.ukuranByte, label: label[k] || k };
     }
   });
-  unggahBerkasLangsungKeStorage(
+  unggahBerkasKeDriveGAS(
     { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
     berkasUntukUpload
   ).then(function (hasilUpload) {
@@ -2428,7 +2402,7 @@ function halamanBerikutnya() {
       tampilkanToast("Gagal mempersiapkan berkas: " + e.message, "gagal");
       return;
     }
-    unggahBerkasLangsungKeStorage(
+    unggahBerkasKeDriveGAS(
       { kecamatan: dataAktif[10], layanan: dataAktif[7], nama: dataAktif[1], nik: dataAktif[2], folderId: dataAktif[30] },
       berkasUntukUpload
     ).then(function (hasilUpload) {
