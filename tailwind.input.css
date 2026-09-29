@@ -13,3 +13,19 @@
 @source inline("border-{amber,red}-200");
 @source inline("text-{amber,red}-700");
 @source inline("text-{amber,red}-500");
+
+/* Critical Header & Navigation Rules */
+header { background-color: #0f172a !important; color: #ffffff !important; position: sticky !important; top: 0 !important; z-index: 50 !important; }
+header h1 { font-size: 1.125rem !important; line-height: 1.375 !important; font-weight: 700 !important; letter-spacing: 0.025em !important; color: #ffffff !important; margin: 0 !important; padding: 0 !important; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+header p { font-size: 0.75rem !important; color: #e0f2fe !important; margin-top: 0.125rem !important; }
+@media (max-width: 640px) { header h1 { font-size: 0.875rem !important; line-height: 1.3 !important; } header p { font-size: 0.7rem !important; } }
+html:not(.is-logged-in) .auth-show { display: none !important; }
+html:not(.role-utama) .utama-show { display: none !important; }
+.header-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+.header-scroll::-webkit-scrollbar { display: none; }
+header button { outline: none !important; -webkit-tap-highlight-color: transparent; }
+header button:focus, header button:focus-visible { outline: none !important; }
+.tab-nav-aktif { background-color: #ffffff !important; color: #0f172a !important; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 10px rgba(255, 255, 255, 0.35) !important; outline: none !important; }
+.tab-kelola-aktif { background-color: #d97706 !important; border-color: #fde047 !important; box-shadow: inset 0 0 0 1.5px #fde047, 0 0 8px rgba(253, 224, 71, 0.45) !important; outline: none !important; }
+.tab-kelola-user-aktif { background-color: #4f46e5 !important; border-color: #a5b4fc !important; box-shadow: inset 0 0 0 1.5px #a5b4fc, 0 0 8px rgba(165, 180, 252, 0.5) !important; outline: none !important; }
+.tab-kelola-ibadah-aktif { background-color: #059669 !important; border-color: #6ee7b7 !important; box-shadow: inset 0 0 0 1.5px #6ee7b7, 0 0 8px rgba(110, 231, 183, 0.5) !important; outline: none !important; }
