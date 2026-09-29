@@ -1,15 +1,3 @@
-/**
- * KELOLA DATA & BERKAS -- khusus Admin Utama (role UTAMA).
- *
- * Layar untuk melihat, mengubah, mengganti/menghapus berkas, dan menghapus data penerima dari
- * seluruh kecamatan dan Kemenag. Backend: supabase/functions/api/domains/kelolaData.ts
- * (adminDaftarData, adminDetailData, adminUbahData, adminHapusBerkas, adminHapusData); semua
- * aksinya menolak non-UTAMA di server, jadi pengecekan role di sini hanya untuk tampilan.
- *
- * Tahun selain tahun aktif hanya bisa DILIHAT (datanya ditimpa otomatis dari Google Sheet).
- * Tambah data baru memakai tab "Input Data" yang sudah ada. Ganti berkas memakai alur upload
- * (unggahBerkasKeDriveGAS) + editDataPenerima yang sama dengan menu Lihat Data.
- */
 (function () {
   'use strict';
 
