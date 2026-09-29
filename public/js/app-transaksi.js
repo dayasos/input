@@ -2047,11 +2047,19 @@ function halamanBerikutnya() {
       renderBaca(dataAktif);
       perbaruiStatusDiMasterData(nomorTarget, statusBaru);
       function selesai() { _verifSedangJalan = false; }
-      function batalkan(pesan) {
+      // statusServer: status terkini di server bila diketahui (konflik). sinkronPenuh: hasil request
+      // tidak pasti (timeout/putus -- bisa saja sudah tersimpan), jadi tarik ulang daftar dari server.
+      function batalkan(pesan, statusServer, sinkronPenuh) {
         selesai();
-        perbaruiStatusDiMasterData(nomorTarget, statusTabelLama);
+        window._abaikanMuatUlangLihatSampai = 0; // refresh normal boleh jalan lagi
+        perbaruiStatusDiMasterData(nomorTarget, statusServer || statusTabelLama);
+        if (statusServer || sinkronPenuh) {
+          invalidateCacheDataTransaksi();
+          if (sinkronPenuh && typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
+        }
         if (nomorBarisAktif === nomorTarget) {
           for (let i = 0; i < snapshotLama.length; i++) dataAktif[32 + i] = snapshotLama[i];
+          if (statusServer) dataAktif[32] = statusServer; // samakan dgn tabel; keterangan lengkap menyusul saat detail dibuka ulang
           renderBaca(dataAktif);
           // renderBaca membangun ulang form: kembalikan isian agar tidak perlu mengetik ulang.
           const elKet = document.getElementById('input-keterangan-verifikasi');
@@ -2063,7 +2071,11 @@ function halamanBerikutnya() {
       }
       google.script.run
         .withSuccessHandler(function (res) {
-          if (!res || !res.sukses) { batalkan('Gagal: ' + (res && res.pesan ? res.pesan : 'tidak ada respons dari server')); return; }
+          if (!res || !res.sukses) {
+            const konflik = res && res.konflik && res.statusTerkini ? res.statusTerkini : "";
+            batalkan('Gagal: ' + (res && res.pesan ? res.pesan : 'tidak ada respons dari server'), konflik, !res);
+            return;
+          }
           selesai();
           perbaruiStatusDiMasterData(nomorTarget, res.status);
           if (nomorBarisAktif === nomorTarget) {
@@ -2081,7 +2093,7 @@ function halamanBerikutnya() {
           tampilkanToast('Status verifikasi berhasil disimpan.', 'sukses');
         })
         .withFailureHandler(function (err) {
-          batalkan(pesanErrorRamah(err));
+          batalkan(pesanErrorRamah(err), "", true);
         })
         .verifikasiSatuData(dataPengguna.token, nomorTarget, statusBaru, ket, batasWaktu, statusLama);
     }
