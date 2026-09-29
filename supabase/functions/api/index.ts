@@ -31,9 +31,7 @@ import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
 import {
   konfirmasiUploadBerkas,
-  konfirmasiUploadBerkasDrive,
   mintaUrlUploadBerkas,
-  mintaUrlUploadBerkasDrive,
 } from "./domains/upload.ts";
 import {
   ambilDaftarBatchPembayaran,
@@ -80,7 +78,6 @@ import {
   ubahProfilUser,
 } from "./domains/akun.ts";
 import { sinkronDataSheet2026 } from "./domains/sinkronSheet2026.ts";
-import { tanganiProxyUploadDrive } from "./_shared/driveProxy.ts";
 
 // deno-lint-ignore no-explicit-any
 type Handler = (...args: any[]) => unknown | Promise<unknown>;
@@ -113,8 +110,6 @@ const ALLOWED: Record<string, Handler> = {
   ambilDataDetail,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
-  mintaUrlUploadBerkasDrive,
-  konfirmasiUploadBerkasDrive,
   ambilTahunTersedia,
   ambilDataTahunHakAkses,
   ambilRiwayatEdit,
@@ -196,15 +191,6 @@ Deno.serve(async (req: Request) => {
   // Tangani CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: CORS_HEADERS });
-  }
-
-  // Proxy PUT byte upload Drive (browser -> Edge Function -> Google, server-to-server, tidak
-  // kena CORS) -- lihat komentar panjang di _shared/driveProxy.ts kenapa ini WAJIB ada,
-  // menggantikan pola lama PUT langsung browser -> googleapis.com yang diblokir CORS.
-  const url = new URL(req.url);
-  if (url.pathname.endsWith("/drive-proxy-upload")) {
-    if (req.method === "PUT") return tanganiProxyUploadDrive(req, url);
-    return json({ sukses: false, pesan: "Method tidak didukung untuk endpoint ini." }, 405);
   }
 
   if (req.method !== "POST") {
