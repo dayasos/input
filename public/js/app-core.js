@@ -763,6 +763,7 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
   if (role !== "UTAMA") {
     const panelKelolaData = document.getElementById('panel-kelola-data');
     if (panelKelolaData) panelKelolaData.classList.add('hidden');
+    if (typeof window.nonaktifkanTabKelolaData === 'function') window.nonaktifkanTabKelolaData();
   }
   const btnKelolaUser = document.getElementById('btn-kelola-user');
   if (btnKelolaUser) btnKelolaUser.classList.toggle('hidden', role !== "UTAMA");

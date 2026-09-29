@@ -39,16 +39,21 @@
     { k: 'status_bpjs_tk', d: 'statusBpjs', l: 'Status BPJS TK', pilih: ['YA', 'TIDAK'] }
   ];
 
-  var KELAS_INPUT = 'w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed';
-  var KELAS_LABEL = 'block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1';
-  var KELAS_FILTER = 'w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500';
+  // Kelas input/label disamakan dengan panel Lihat Data (filter & modal detail).
+  var KELAS_INPUT = 'w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed';
+  var KELAS_LABEL = 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1';
+  var KELAS_LABEL_FILTER = 'block text-xs font-medium text-slate-600 mb-1';
+  var KELAS_FILTER = KELAS_INPUT;
+  var KELAS_TOMBOL_TEPI = 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0';
   var TOTAL_JENIS_BERKAS = 12;
+  var KOLOM_TABEL = 10; // termasuk kolom centang (disembunyikan untuk tahun arsip)
 
   // ---------------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------------
-  var S = { siap: false, tahun: null, tahunAktif: null, page: 1, limit: 20, total: 0, totalHalaman: 1, bolehUbah: true, opsi: null, daftar: [], seq: 0, pilih: {} };
-  var D = { data: null, berkas: [], versi: '', bolehUbah: false, jumlahBatch: 0, asli: {}, sibuk: false, pilihBerkas: {} };
+  // waktu: kapan daftar terakhir dimuat -- dipakai TTL yang sama dengan Lihat Data (lihat tombol tab).
+  var S = { siap: false, tahun: null, tahunAktif: null, page: 1, limit: 20, total: 0, totalHalaman: 1, bolehUbah: true, opsi: null, daftar: [], seq: 0, pilih: {}, waktu: 0, kotor: false };
+  var D = { data: null, berkas: [], versi: '', bolehUbah: false, jumlahBatch: 0, asli: {}, sibuk: false, pilihBerkas: {}, seq: 0 };
   var timerCari = null;
 
   // ---------------------------------------------------------------------------
@@ -71,6 +76,28 @@
       var run = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
       run[aksi].apply(run, [token()].concat(args));
     });
+  }
+
+  // Versi SWR dari api(): handler dipanggil SEKALI dari cache (stale, instan) lalu sekali lagi bila
+  // data segar dari server berbeda. Promise tidak cocok karena hanya menerima panggilan pertama.
+  function apiSWR(aksi, args, onData, onError) {
+    var run = google.script.run.withSuccessHandler(onData).withFailureHandler(onError);
+    run[aksi].apply(run, [token()].concat(args));
+  }
+
+  function ttlSegarMs() {
+    return typeof TTL_CACHE_DATA_TRANSAKSI_MS !== 'undefined' ? TTL_CACHE_DATA_TRANSAKSI_MS : 90 * 1000;
+  }
+
+  // Ada modal/proses yang sedang berjalan? Refresh senyap dari event realtime tidak boleh mengganggunya.
+  function sedangSibuk() {
+    var terbuka = function (id) { var el = $(id); return !!el && !el.classList.contains('hidden'); };
+    return D.sibuk || M.sibuk || terbuka('kd-modal-detail') || terbuka('kd-modal-hapus') || terbuka('kd-modal-massal');
+  }
+
+  // Perubahan dari luar yang tertahan selama modal terbuka dimuat begitu semua modal tertutup.
+  function susulKotor() {
+    if (S.kotor && S.siap && !sedangSibuk()) muat();
   }
 
   function pesanDariError(e) {
@@ -119,6 +146,8 @@
   }
 
   function badgeStatus(status) {
+    // Badge yang sama persis dengan kolom Verifikasi di Lihat Data.
+    if (typeof badgeStatusVerifikasi === 'function') return badgeStatusVerifikasi(status);
     var s = String(status || '').toUpperCase();
     var kelas = 'bg-slate-100 text-slate-600 border-slate-200';
     if (s.indexOf('TIDAK MEMENUHI') === 0) kelas = 'bg-rose-50 text-rose-700 border-rose-200';
@@ -128,86 +157,104 @@
     return '<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ' + kelas + '">' + esc(status || '-') + '</span>';
   }
 
-  function badgeKategori(k) {
-    var kemenag = k === 'KEMENAG';
-    return '<span class="inline-block px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ' +
-      (kemenag ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-sky-50 text-sky-700 border-sky-200') + '">' +
-      (kemenag ? 'Kemenag' : 'Kecamatan') + '</span>';
-  }
-
   function pillBerkas(n) {
-    var kelas = n === 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-700 border-slate-200';
-    return '<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold ' + kelas + '">' + n + ' berkas</span>';
+    var kelas = n === 0 ? 'bg-rose-50 text-rose-700 border border-rose-200/80' : 'bg-slate-100 text-slate-700';
+    return '<span class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium ' + kelas + '">' + n + ' berkas</span>';
   }
 
   // ---------------------------------------------------------------------------
   // Kerangka layar (dirender sekali saat pertama dibuka)
   // ---------------------------------------------------------------------------
-  var IKON_CARI = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
   var IKON_MUAT = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
   var IKON_TAMBAH = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>';
   var IKON_HAPUS = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>';
 
+  var IKON_FILTER = '<svg class="w-4 h-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>';
+  var IKON_MATA = '<svg class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+
   function renderKerangka() {
     panel.innerHTML =
-      '<div class="flex flex-col gap-1 mb-5 border-b border-slate-100 pb-4">' +
-        '<h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">' +
-          '<svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16M9 4v16"/></svg>' +
-          '<span>Kelola Data &amp; Berkas</span></h2>' +
-        '<p class="text-xs text-slate-500 mt-1">Khusus Admin Utama. Lihat, ubah, ganti berkas, dan hapus data penerima dari seluruh kecamatan dan Kemenag.</p>' +
+      // Header + total + toolbar (sama dengan Lihat Data)
+      '<div class="flex flex-col gap-3 mb-6 border-b border-slate-100 pb-4">' +
+      '<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">' +
+      '<div><h2 class="text-xl font-bold text-slate-800">Kelola Data &amp; Berkas</h2>' +
+      '<p class="text-xs text-slate-500 mt-1">Khusus Admin Utama. Lihat, ubah, ganti berkas, dan hapus data penerima dari seluruh kecamatan dan Kemenag.</p></div>' +
+      '<div id="kd-total" class="self-start sm:self-auto flex-shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-1 rounded-lg text-xs font-semibold border-2 border-sky-400">Total Data: Dimuat</div>' +
+      '</div>' +
+      '<div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">' +
+      '<div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-sm text-xs shrink-0">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>' +
+      '<span class="font-bold text-slate-500 uppercase tracking-wider text-[11px]">Tahun</span>' +
+      '<select id="kd-tahun" class="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer"><option value="">...</option></select>' +
+      '</div>' +
+      '<button type="button" data-kd="tambah" id="kd-btn-tambah" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">' + IKON_TAMBAH + '<span>Tambah Data</span></button>' +
+      '<button type="button" data-kd="muat" class="' + KELAS_TOMBOL_TEPI + '" title="Refresh Data">' + IKON_MUAT + '<span>Refresh</span></button>' +
+      '</div>' +
       '</div>' +
 
-      '<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 mb-4">' +
-        '<div class="grid grid-cols-2 lg:grid-cols-6 gap-2.5">' +
-          '<div class="relative col-span-2 lg:col-span-2">' +
-            '<input type="text" id="kd-cari" placeholder="Cari nama atau NIK..." autocomplete="off" style="text-transform:none" class="' + KELAS_FILTER + ' pl-9">' + IKON_CARI +
-          '</div>' +
-          '<select id="kd-tahun" class="' + KELAS_FILTER + '" title="Tahun data"></select>' +
-          '<select id="kd-kategori" class="' + KELAS_FILTER + '"><option value="">Semua Instansi</option><option value="KECAMATAN">Kecamatan</option><option value="KEMENAG">Kemenag</option></select>' +
-          '<select id="kd-layanan" class="' + KELAS_FILTER + '"><option value="">Semua Layanan</option></select>' +
-          '<select id="kd-kecamatan" class="' + KELAS_FILTER + '"><option value="">Semua Kecamatan</option></select>' +
-          '<select id="kd-kelengkapan" class="' + KELAS_FILTER + '"><option value="">Semua Kelengkapan</option><option value="ADA">Punya berkas</option><option value="KOSONG">Belum ada berkas</option></select>' +
-          '<div class="col-span-2 lg:col-span-3 flex items-center gap-2 lg:justify-end">' +
-            '<button type="button" data-kd="muat" class="flex-1 lg:flex-initial justify-center px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 active:scale-95">' + IKON_MUAT + '<span>Muat Ulang</span></button>' +
-            '<button type="button" data-kd="tambah" id="kd-btn-tambah" class="flex-1 lg:flex-initial justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5">' + IKON_TAMBAH + '<span>Tambah Data</span></button>' +
-          '</div>' +
-        '</div>' +
+      // Panel penyaringan (sama dengan Lihat Data)
+      '<div class="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">' +
+      '<div class="flex items-center justify-between flex-wrap gap-2">' +
+      '<div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">' + IKON_FILTER + '<span>Penyaringan &amp; Pencarian Data</span></div>' +
+      '<button type="button" data-kd="reset-filter" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs transition">' +
+      IKON_MUAT + '<span>Reset Filter</span></button>' +
+      '</div>' +
+      '<div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">' +
+      '<div class="col-span-2 lg:col-span-1"><label for="kd-cari" class="' + KELAS_LABEL_FILTER + '">Cari Nama / NIK</label>' +
+      '<input type="text" id="kd-cari" placeholder="Ketik kata kunci..." autocomplete="off" style="text-transform:none" class="' + KELAS_FILTER + '"></div>' +
+      '<div><label for="kd-kategori" class="' + KELAS_LABEL_FILTER + '">Filter Instansi</label>' +
+      '<select id="kd-kategori" class="' + KELAS_FILTER + '"><option value="">-- Semua Instansi --</option><option value="KECAMATAN">Kecamatan</option><option value="KEMENAG">Kemenag</option></select></div>' +
+      '<div><label for="kd-kecamatan" class="' + KELAS_LABEL_FILTER + '">Filter Kecamatan</label>' +
+      '<select id="kd-kecamatan" class="' + KELAS_FILTER + '"><option value="">-- Semua Kecamatan --</option></select></div>' +
+      '<div><label for="kd-layanan" class="' + KELAS_LABEL_FILTER + '">Filter Jenis Layanan</label>' +
+      '<select id="kd-layanan" class="' + KELAS_FILTER + '"><option value="">-- Semua Layanan --</option></select></div>' +
+      '<div><label for="kd-kelengkapan" class="' + KELAS_LABEL_FILTER + '">Filter Kelengkapan Berkas</label>' +
+      '<select id="kd-kelengkapan" class="' + KELAS_FILTER + '"><option value="">-- Semua --</option><option value="ADA">Punya berkas</option><option value="KOSONG">Belum ada berkas</option></select></div>' +
+      '</div>' +
       '</div>' +
 
       '<div id="kd-banner-arsip" class="hidden mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium"></div>' +
       '<div id="kd-error" class="hidden mb-4 p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium"></div>' +
 
       '<div id="kd-bar-pilih" class="hidden sticky top-2 z-20 mb-3 p-2.5 sm:p-3 rounded-xl border border-sky-200 bg-sky-50 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
-        '<span id="kd-bar-info" class="text-xs font-semibold text-sky-800"></span>' +
-        '<div class="flex items-center gap-2 flex-wrap">' +
-          '<button type="button" data-kd="pilih-halaman" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Pilih semua di halaman</button>' +
-          '<button type="button" data-kd="kosongkan-pilih" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Kosongkan</button>' +
-          '<button type="button" data-kd="hapus-terpilih" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition flex items-center gap-1.5">' + IKON_HAPUS + '<span>Hapus Terpilih</span></button>' +
-        '</div>' +
+      '<span id="kd-bar-info" class="text-xs font-semibold text-sky-800"></span>' +
+      '<div class="flex items-center gap-2 flex-wrap">' +
+      '<button type="button" data-kd="pilih-halaman" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Pilih semua di halaman</button>' +
+      '<button type="button" data-kd="kosongkan-pilih" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Kosongkan</button>' +
+      '<button type="button" data-kd="hapus-terpilih" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition flex items-center gap-1.5">' + IKON_HAPUS + '<span>Hapus Terpilih</span></button>' +
+      '</div>' +
       '</div>' +
 
-      '<div id="kd-hasil" class="relative">' +
-        '<div class="hidden md:block overflow-x-auto border border-slate-200 rounded-xl shadow-sm bg-white">' +
-          '<table class="w-full text-left border-collapse text-xs">' +
-            '<thead><tr class="bg-slate-800 text-white text-[11px] uppercase tracking-wide select-none">' +
-              '<th id="kd-th-pilih" class="px-3 py-2.5 text-center w-10"><input type="checkbox" id="kd-cek-semua" aria-label="Pilih semua di halaman" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"></th>' +
-              '<th class="px-3 py-2.5 text-center w-12">No</th><th class="px-3 py-2.5">Penerima</th><th class="px-3 py-2.5">Layanan</th>' +
-              '<th class="px-3 py-2.5">Wilayah</th><th class="px-3 py-2.5">Berkas</th><th class="px-3 py-2.5">Status</th><th class="px-3 py-2.5 text-center w-40">Aksi</th>' +
-            '</tr></thead>' +
-            '<tbody id="kd-tbody" class="divide-y divide-slate-100 text-slate-700"></tbody>' +
-          '</table>' +
-        '</div>' +
-        '<div id="kd-kartu" class="md:hidden flex flex-col gap-2.5"></div>' +
-        '<div id="kd-loader" class="hidden absolute inset-0 bg-white/60 flex items-start justify-center pt-10 rounded-xl"><div class="loader w-6 h-6 border-2"></div></div>' +
+      // Tabel (sama dengan Lihat Data: digeser ke samping di layar kecil)
+      '<div class="sm:hidden flex items-center justify-between text-xs text-slate-500 bg-slate-50/90 px-3 py-2 rounded-xl mb-2 border border-slate-200/60 shadow-2xs">' +
+      '<span class="flex items-center gap-1.5 font-medium">' +
+      '<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>' +
+      '<span>Geser tabel ke samping untuk melihat detail status &amp; tombol aksi</span></span>' +
+      '</div>' +
+      '<div id="kd-hasil" class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xs transition-opacity duration-150">' +
+      '<table class="w-full min-w-[920px] text-left border-collapse bg-white table-auto">' +
+      '<thead><tr class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">' +
+      '<th id="kd-th-pilih" class="w-12 px-3 py-3.5 text-center align-middle"><input type="checkbox" id="kd-cek-semua" aria-label="Pilih semua di halaman" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"></th>' +
+      '<th class="w-14 px-3 py-3.5 text-center whitespace-nowrap align-middle">No</th>' +
+      '<th class="px-4 py-3.5 min-w-[200px] whitespace-nowrap align-middle">Nama Penerima</th>' +
+      '<th class="px-4 py-3.5 whitespace-nowrap align-middle">NIK / No. KTP</th>' +
+      '<th class="px-4 py-3.5 min-w-[150px] whitespace-nowrap align-middle">Jenis Layanan</th>' +
+      '<th class="px-4 py-3.5 min-w-[130px] whitespace-nowrap align-middle">Kecamatan</th>' +
+      '<th class="px-4 py-3.5 min-w-[130px] whitespace-nowrap align-middle">Kelurahan</th>' +
+      '<th class="px-4 py-3.5 text-center whitespace-nowrap align-middle">Berkas</th>' +
+      '<th class="px-4 py-3.5 text-center min-w-[160px] whitespace-nowrap align-middle">Verifikasi</th>' +
+      '<th class="px-4 py-3.5 text-center min-w-[130px] whitespace-nowrap align-middle">Aksi</th>' +
+      '</tr></thead>' +
+      '<tbody id="kd-tbody" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white"></tbody>' +
+      '</table>' +
       '</div>' +
 
-      '<div class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-2.5">' +
-        '<span id="kd-info" class="text-xs text-slate-500 font-medium text-center sm:text-left">Total: 0 data</span>' +
-        '<div class="flex items-center justify-center gap-1.5 sm:gap-2">' +
-          '<button type="button" data-kd="prev" id="kd-prev" class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">Sebelumnya</button>' +
-          '<span id="kd-halaman" class="text-xs font-semibold text-slate-700 px-2.5 py-1 bg-white border border-slate-200 rounded-lg">1 / 1</span>' +
-          '<button type="button" data-kd="next" id="kd-next" class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">Berikutnya</button>' +
-        '</div>' +
+      '<div class="mt-5 border-t border-slate-100 pt-4">' +
+      '<div class="flex items-center justify-between flex-wrap gap-2">' +
+      '<span class="text-[9px] text-slate-400 tracking-widest uppercase font-semibold">Developed by &nbsp;&middot;&nbsp; <span style="color:#ca8a04;">Tim Kelembagaan Bidang Dayasos</span></span>' +
+      '<div id="kd-info-halaman" class="text-xs text-slate-500 font-medium"></div>' +
+      '</div>' +
+      '<div id="kd-pagination" class="flex items-center gap-1 flex-wrap justify-center mt-2"></div>' +
       '</div>';
 
     pasangModal();
@@ -217,33 +264,37 @@
     if ($('kd-modal-detail')) return;
     document.body.insertAdjacentHTML('beforeend',
       // ── Modal detail / edit ──
-      '<div id="kd-modal-detail" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
-        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
-          '<div class="flex justify-between items-center px-4 sm:px-6 py-3.5 bg-slate-800 text-white shrink-0">' +
-            '<div class="min-w-0"><h3 id="kd-detail-judul" class="text-sm font-bold tracking-wide uppercase truncate">Detail Data</h3>' +
-            '<p id="kd-detail-sub" class="text-[11px] text-slate-300 truncate"></p></div>' +
-            '<button type="button" data-kd="tutup-detail" class="text-white/70 hover:text-white text-2xl leading-none transition ml-3" aria-label="Tutup">&times;</button>' +
-          '</div>' +
-          '<div id="kd-detail-isi" class="flex-1 overflow-y-auto p-4 sm:p-6 overscroll-contain"></div>' +
-          '<div id="kd-detail-kaki" class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 shrink-0"></div>' +
-        '</div>' +
+      // Kerangka sama dengan modal detail Lihat Data (header putih, sudut membulat besar, kaki abu muda).
+      '<div id="kd-modal-detail" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">' +
+      '<div class="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg sm:max-w-3xl lg:max-w-5xl shadow-2xl border border-slate-200/80 flex flex-col max-h-[94vh] max-h-[94dvh] sm:max-h-[90vh] sm:max-h-[90dvh]">' +
+      '<div class="shrink-0 flex justify-between items-center px-5 sm:px-7 py-4 border-b border-slate-100 bg-white rounded-t-2xl sm:rounded-t-3xl">' +
+      '<div class="flex items-center gap-2.5 min-w-0">' +
+      '<svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z"/></svg>' +
+      '<div class="min-w-0"><h3 id="kd-detail-judul" class="text-sm sm:text-base font-bold text-slate-800 tracking-wide uppercase truncate">Detail Data</h3>' +
+      '<p id="kd-detail-sub" class="text-[11px] text-slate-400 truncate"></p></div>' +
+      '</div>' +
+      '<button type="button" data-kd="tutup-detail" class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition ml-3" aria-label="Tutup">&times;</button>' +
+      '</div>' +
+      '<div id="kd-detail-isi" class="flex-1 overflow-y-auto p-4 sm:p-6 text-sm text-slate-700 overscroll-contain"></div>' +
+      '<div id="kd-detail-kaki" class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 rounded-b-2xl sm:rounded-b-3xl"></div>' +
+      '</div>' +
       '</div>' +
 
       // ── Modal konfirmasi hapus data (ketik NIK) ──
       '<div id="kd-modal-hapus" class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
-        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
-          '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
-            '<div class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>' +
-            '<h3 class="text-base font-bold text-slate-900">Hapus Data Penerima?</h3>' +
-            '<p class="text-xs text-slate-500 mt-1">Data dihapus <b>permanen</b> dan tidak dapat dikembalikan. Berkas di Google Drive dipindah ke Sampah Drive (dapat dipulihkan sekitar 30 hari).</p>' +
-          '</div>' +
-          '<div id="kd-hapus-isi" class="px-5 pb-2 overflow-y-auto flex-1"></div>' +
-          '<div class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0">' +
-            '<button type="button" data-kd="batal-hapus" class="flex-1 py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition">Batal</button>' +
-            '<button type="button" data-kd="konfirmasi-hapus" id="kd-hapus-ya" disabled class="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Hapus Permanen</button>' +
-          '</div>' +
-        '</div>' +
+      '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
+      '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
+      '<div class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>' +
+      '<h3 class="text-base font-bold text-slate-900">Hapus Data Penerima?</h3>' +
+      '<p class="text-xs text-slate-500 mt-1">Data dihapus <b>permanen</b> dan tidak dapat dikembalikan. Berkas di Google Drive dipindah ke Sampah Drive (dapat dipulihkan sekitar 30 hari).</p>' +
+      '</div>' +
+      '<div id="kd-hapus-isi" class="px-5 pb-2 overflow-y-auto flex-1"></div>' +
+      '<div class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0">' +
+      '<button type="button" data-kd="batal-hapus" class="flex-1 py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition">Batal</button>' +
+      '<button type="button" data-kd="konfirmasi-hapus" id="kd-hapus-ya" disabled class="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Hapus Permanen</button>' +
+      '</div>' +
+      '</div>' +
       '</div>');
 
     var md = $('kd-modal-detail');
@@ -298,22 +349,34 @@
     if (pesan) { el.textContent = pesan; el.classList.remove('hidden'); } else { el.classList.add('hidden'); el.textContent = ''; }
   }
 
+  // Baris lama tetap tampil (agak pudar) selama memuat ulang; skeleton hanya bila tabel masih kosong
+  // -- pola yang sama dengan Lihat Data.
   function setMemuat(ya) {
-    var l = $('kd-loader');
-    if (l) l.classList.toggle('hidden', !ya);
+    var h = $('kd-hasil');
+    if (h) h.classList.toggle('opacity-60', !!ya && S.daftar.length > 0);
+  }
+
+  function skeletonTabel() {
+    var tb = $('kd-tbody');
+    if (tb && typeof htmlSkeletonBaris === 'function') tb.innerHTML = htmlSkeletonBaris(KOLOM_TABEL, 5);
+  }
+
+  function barisPesan(teks, kelas) {
+    var tb = $('kd-tbody');
+    if (tb) tb.innerHTML = '<tr><td colspan="' + KOLOM_TABEL + '" class="px-4 py-8 text-center italic ' + (kelas || 'text-slate-400') + '">' + esc(teks) + '</td></tr>';
   }
 
   function isiOpsiFilter(opsi) {
     if (!opsi) return;
     var selLay = $('kd-layanan'), selKec = $('kd-kecamatan');
     if (selLay && selLay.options.length <= 1) {
-      var h = '<option value="">Semua Layanan</option>';
+      var h = '<option value="">-- Semua Layanan --</option>';
       h += '<optgroup label="Kecamatan">' + (opsi.layananKecamatan || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
       h += '<optgroup label="Kemenag">' + (opsi.layananKemenag || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
       selLay.innerHTML = h;
     }
     if (selKec && selKec.options.length <= 1) {
-      selKec.innerHTML = '<option value="">Semua Kecamatan</option>' + (opsi.kecamatan || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+      selKec.innerHTML = '<option value="">-- Semua Kecamatan --</option>' + (opsi.kecamatan || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
     }
   }
 
@@ -322,38 +385,78 @@
     if (!sel) return;
     var list = res.tahunTersedia || [res.tahunAktif];
     sel.innerHTML = list.map(function (t) {
-      return '<option value="' + t + '"' + (Number(t) === Number(res.tahun) ? ' selected' : '') + '>' + t + (Number(t) === Number(res.tahunAktif) ? ' (Aktif)' : ' (Arsip)') + '</option>';
+      return '<option value="' + t + '"' + (Number(t) === Number(res.tahun) ? ' selected' : '') + '>' + t + (Number(t) === Number(res.tahunAktif) ? ' (Aktif)' : '') + '</option>';
     }).join('');
   }
 
+  // Stale-while-revalidate lewat api-bridge (domain 'penerima'): bila ada salinan cache, daftar tampil
+  // seketika lalu diperbarui diam-diam kalau data server berbeda. Promise-nya selesai pada balasan
+  // pertama (cache atau server) -- cukup untuk alur "simpan lalu muat ulang".
   function muat() {
     var seq = ++S.seq;
-    setMemuat(true);
-    tampilError('');
     var filter = {
       tahun: S.tahun, page: S.page, limit: S.limit,
       cari: nilaiEl('kd-cari'), kategori: nilaiEl('kd-kategori'), layanan: nilaiEl('kd-layanan'),
       kecamatan: nilaiEl('kd-kecamatan'), kelengkapan: nilaiEl('kd-kelengkapan')
     };
-    return api('adminDaftarData', filter).then(function (res) {
-      if (seq !== S.seq) return;
-      if (!res || !res.sukses) { tampilError((res && res.pesan) || 'Gagal memuat data.'); return; }
-      // Halaman terakhir baru saja kosong (mis. semua baris dihapus): mundur ke halaman terakhir yang ada.
-      if (res.daftar.length === 0 && res.total > 0 && S.page > res.totalHalaman) { S.page = res.totalHalaman; return muat(); }
-      if (S.tahun !== res.tahun || !res.bolehUbah) S.pilih = {};
-      S.tahun = res.tahun; S.tahunAktif = res.tahunAktif; S.total = res.total; S.totalHalaman = res.totalHalaman;
-      S.bolehUbah = !!res.bolehUbah; S.opsi = res.opsi; S.daftar = res.daftar;
-      isiPilihanTahun(res); isiOpsiFilter(res.opsi);
-      renderDaftar();
-    }).catch(function (e) {
-      if (seq === S.seq) tampilError(pesanDariError(e));
-    }).then(function () {
-      if (seq === S.seq) setMemuat(false);
+    var pernahTampil = false;
+    S.kotor = false;
+    tampilError('');
+    if (S.daftar.length === 0) skeletonTabel();
+    setMemuat(true);
+
+    return new Promise(function (selesai) {
+      apiSWR('adminDaftarData', [filter], function (res) {
+        if (seq !== S.seq) return selesai();
+        setMemuat(false);
+        if (!res || !res.sukses) {
+          var pesan = (res && res.pesan) || 'Gagal memuat data.';
+          if (pernahTampil) toast(pesan, 'peringatan'); else { tampilError(pesan); if (S.daftar.length === 0) barisPesan(pesan, 'text-rose-500'); }
+          return selesai();
+        }
+        // Halaman terakhir baru saja kosong (mis. semua baris dihapus): mundur ke halaman terakhir yang ada.
+        if (res.daftar.length === 0 && res.total > 0 && S.page > res.totalHalaman) { S.page = res.totalHalaman; return selesai(muat()); }
+        if (S.tahun !== res.tahun || !res.bolehUbah) S.pilih = {};
+        S.tahun = res.tahun; S.tahunAktif = res.tahunAktif; S.total = res.total; S.totalHalaman = res.totalHalaman;
+        S.bolehUbah = !!res.bolehUbah; S.opsi = res.opsi; S.daftar = res.daftar; S.waktu = Date.now();
+        pernahTampil = true;
+        isiPilihanTahun(res); isiOpsiFilter(res.opsi);
+        renderDaftar();
+        selesai();
+      }, function (e) {
+        if (seq !== S.seq) return selesai();
+        setMemuat(false);
+        var pesan = pesanDariError(e);
+        if (pernahTampil || S.daftar.length > 0) toast(pesan, 'gagal', 6000); else { tampilError(pesan); barisPesan(pesan, 'text-rose-500'); }
+        selesai();
+      });
     });
   }
 
+  // Refresh manual: buang cache SWR tab ini dulu, kalau tidak klik dalam jeda kesegaran (20 dtk) hanya
+  // menampilkan ulang salinan lama. broadcast:false -- ini bukan mutasi data, tidak perlu ke tab lain.
+  var abaikanEvent = false;
+  function segarkan() {
+    batalkanCacheLama();
+    abaikanEvent = true;
+    try {
+      if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') window.djpmCache.invalidate(['penerima', 'penerima_detail'], false);
+    } finally { abaikanEvent = false; }
+    muat();
+  }
+
+  function resetFilter() {
+    ['kd-cari', 'kd-kategori', 'kd-kecamatan', 'kd-layanan', 'kd-kelengkapan'].forEach(function (id) {
+      var el = $(id);
+      if (el) el.value = '';
+    });
+    S.page = 1;
+    muat();
+    toast('Filter telah disetel ulang', 'info', 2000);
+  }
+
   function renderDaftar() {
-    var tbody = $('kd-tbody'), kartu = $('kd-kartu');
+    var tbody = $('kd-tbody');
     var offset = (S.page - 1) * S.limit;
     var banner = $('kd-banner-arsip');
     if (banner) {
@@ -364,34 +467,21 @@
     if (tambah) tambah.classList.toggle('hidden', !S.bolehUbah);
 
     if (S.daftar.length === 0) {
-      var kosong = '<div class="text-center py-10 text-slate-400 italic text-xs">Tidak ada data yang cocok dengan filter.</div>';
-      tbody.innerHTML = '<tr><td colspan="8">' + kosong + '</td></tr>';
-      kartu.innerHTML = kosong;
+      tbody.innerHTML = '<tr><td colspan="' + (S.bolehUbah ? KOLOM_TABEL : KOLOM_TABEL - 1) + '" class="px-4 py-8 text-center text-slate-400 italic">Tidak ada data yang sesuai filter atau kata kunci.</td></tr>';
     } else {
       tbody.innerHTML = S.daftar.map(function (r, i) {
-        return '<tr class="hover:bg-slate-50' + (S.pilih[r.id] ? ' bg-sky-50/60' : '') + '">' +
-          '<td class="px-3 py-2.5 text-center' + (S.bolehUbah ? '' : ' hidden') + '">' + (S.bolehUbah ? kotakPilih(r) : '') + '</td>' +
-          '<td class="px-3 py-2.5 text-center text-slate-500">' + (offset + i + 1) + '</td>' +
-          '<td class="px-3 py-2.5"><div class="font-semibold text-slate-800">' + esc(r.nama) + '</div><div class="text-[11px] text-slate-500 font-mono">' + esc(r.nik) + '</div></td>' +
-          '<td class="px-3 py-2.5"><div>' + esc(r.layanan) + '</div><div class="mt-0.5">' + badgeKategori(r.kategori) + '</div></td>' +
-          '<td class="px-3 py-2.5"><div>' + esc(r.kecamatan) + '</div><div class="text-[11px] text-slate-500">' + esc(r.kelurahan) + '</div></td>' +
-          '<td class="px-3 py-2.5">' + pillBerkas(r.jumlahBerkas) + '</td>' +
-          '<td class="px-3 py-2.5">' + badgeStatus(r.status) + '</td>' +
-          '<td class="px-3 py-2.5"><div class="flex items-center justify-center gap-1.5">' + tombolBaris(r) + '</div></td>' +
-        '</tr>';
-      }).join('');
-      kartu.innerHTML = S.daftar.map(function (r) {
-        return '<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">' +
-          '<div class="flex items-start justify-between gap-2">' +
-            (S.bolehUbah ? '<div class="pt-0.5">' + kotakPilih(r) + '</div>' : '') +
-            '<div class="min-w-0 flex-1"><div class="font-semibold text-sm text-slate-800 break-words">' + esc(r.nama) + '</div>' +
-            '<div class="text-[11px] text-slate-500 font-mono">' + esc(r.nik) + '</div></div>' + badgeStatus(r.status) +
-          '</div>' +
-          '<div class="mt-2 text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">' + badgeKategori(r.kategori) + '<span>' + esc(r.layanan) + '</span></div>' +
-          '<div class="mt-1 text-[11px] text-slate-500">' + esc(r.kecamatan) + (r.kelurahan ? ' &middot; ' + esc(r.kelurahan) : '') + '</div>' +
-          '<div class="mt-2.5 flex items-center justify-between gap-2">' + pillBerkas(r.jumlahBerkas) +
-            '<div class="flex items-center gap-1.5">' + tombolBaris(r) + '</div></div>' +
-        '</div>';
+        return '<tr class="hover:bg-sky-50/40 transition-colors duration-150 border-b border-slate-100/90' + (S.pilih[r.id] ? ' bg-sky-50/60' : '') + '">' +
+          (S.bolehUbah ? '<td class="w-12 px-3 py-3 text-center align-middle">' + kotakPilih(r) + '</td>' : '') +
+          '<td class="w-14 px-3 py-3 text-center font-medium text-xs text-slate-400 align-middle whitespace-nowrap">' + (offset + i + 1) + '</td>' +
+          '<td class="px-4 py-3 font-semibold text-slate-800 break-words align-middle min-w-[200px]">' + (esc(r.nama) || '-') + '</td>' +
+          '<td class="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap align-middle">' + (esc(r.nik) || '-') + '</td>' +
+          '<td class="px-4 py-3 whitespace-nowrap align-middle min-w-[150px]"><span class="bg-slate-100 text-slate-700 text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-block">' + (esc(r.layanan) || '-') + '</span></td>' +
+          '<td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">' + (esc(r.kecamatan) || '-') + '</td>' +
+          '<td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">' + (esc(r.kelurahan) || '-') + '</td>' +
+          '<td class="px-4 py-3 text-center whitespace-nowrap align-middle">' + pillBerkas(r.jumlahBerkas) + '</td>' +
+          '<td class="px-4 py-3 text-center whitespace-nowrap align-middle min-w-[160px]">' + badgeStatus(r.status) + '</td>' +
+          '<td class="px-4 py-3 whitespace-nowrap align-middle"><div class="flex items-center justify-center gap-1.5">' + tombolBaris(r) + '</div></td>' +
+          '</tr>';
       }).join('');
     }
 
@@ -399,17 +489,48 @@
     if (thPilih) thPilih.classList.toggle('hidden', !S.bolehUbah);
     perbaruiBar();
 
-    $('kd-info').textContent = 'Total: ' + S.total + ' data · tahun ' + S.tahun;
-    $('kd-halaman').textContent = S.page + ' / ' + S.totalHalaman;
-    $('kd-prev').disabled = S.page <= 1;
-    $('kd-next').disabled = S.page >= S.totalHalaman;
+    $('kd-total').textContent = 'Total Data: ' + S.total + ' Baris';
+    renderNavigasi();
+  }
+
+  // Penomoran halaman: markup & kelas sama dengan perbaruiElemenNavigasi (Lihat Data), tetapi
+  // memakai data-kd karena halamannya dipagi di server.
+  function renderNavigasi() {
+    var wrap = $('kd-pagination'), info = $('kd-info-halaman');
+    if (!wrap) return;
+    var sekarang = S.page, total = S.totalHalaman;
+    if (info) info.textContent = S.total === 0 ? 'Tidak ada data' : 'Halaman ' + sekarang + ' dari ' + total;
+    if (total <= 1) { wrap.innerHTML = ''; return; }
+    var TAMPIL = 5;
+    var mulai = Math.max(1, sekarang - Math.floor(TAMPIL / 2));
+    var akhir = mulai + TAMPIL - 1;
+    if (akhir > total) { akhir = total; mulai = Math.max(1, akhir - TAMPIL + 1); }
+    var BASE = 'px-3 py-1.5 rounded-xl text-xs font-semibold transition min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-center active:scale-95 shadow-2xs';
+    var AKTIF = BASE + ' bg-slate-800 text-white shadow-xs';
+    var PASIF = BASE + ' bg-white border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 cursor-pointer';
+    var NONAKTIF = BASE + ' bg-slate-100/60 border border-slate-200/50 text-slate-300 cursor-not-allowed';
+    var ikonPrev = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>';
+    var ikonNext = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>';
+    var noHal = function (n) { return '<button type="button" data-kd="hal" data-hal="' + n + '" class="' + (n === sekarang ? AKTIF : PASIF) + '">' + n + '</button>'; };
+    var h = '<button type="button" data-kd="prev"' + (sekarang === 1 ? ' disabled' : '') + ' class="' + (sekarang === 1 ? NONAKTIF : PASIF) + '" title="Halaman Sebelumnya">' + ikonPrev + '</button>';
+    if (mulai > 1) {
+      h += noHal(1);
+      if (mulai > 2) h += '<span class="px-1 text-slate-400 text-xs">&hellip;</span>';
+    }
+    for (var i = mulai; i <= akhir; i++) h += noHal(i);
+    if (akhir < total) {
+      if (akhir < total - 1) h += '<span class="px-1 text-slate-400 text-xs">&hellip;</span>';
+      h += noHal(total);
+    }
+    h += '<button type="button" data-kd="next"' + (sekarang === total ? ' disabled' : '') + ' class="' + (sekarang === total ? NONAKTIF : PASIF) + '" title="Halaman Berikutnya">' + ikonNext + '</button>';
+    wrap.innerHTML = h;
   }
 
   function tombolBaris(r) {
     var attr = ' data-id="' + r.id + '" data-tahun="' + r.tahun + '"';
-    var kelola = '<button type="button" data-kd="kelola"' + attr + ' class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition">' + (S.bolehUbah ? 'Kelola' : 'Lihat') + '</button>';
+    var kelola = '<button type="button" data-kd="kelola"' + attr + ' class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-lg font-semibold text-xs transition shadow-2xs">' + IKON_MATA + '<span>' + (S.bolehUbah ? 'Kelola' : 'Detail') + '</span></button>';
     var hapus = S.bolehUbah
-      ? '<button type="button" data-kd="hapus"' + attr + ' title="Hapus data" aria-label="Hapus data" class="px-2 py-1 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 border border-red-200 rounded-md font-semibold text-[11px] transition flex items-center">' + IKON_HAPUS + '</button>'
+      ? '<button type="button" data-kd="hapus"' + attr + ' title="Hapus data" aria-label="Hapus data" class="inline-flex items-center justify-center px-2.5 py-1.5 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 border border-red-200 rounded-lg transition shadow-2xs">' + IKON_HAPUS + '</button>'
       : '';
     return kelola + hapus;
   }
@@ -422,7 +543,8 @@
   function perubahanTertunda() { return Object.keys(ambilPerubahan()).length > 0; }
 
   function tutupDetail(paksa) {
-    var lanjut = function () { $('kd-modal-detail').classList.add('hidden'); D.data = null; };
+    // D.seq++: balasan detail yang masih di jalan (cache/revalidasi) tidak boleh membuka ulang data ini.
+    var lanjut = function () { $('kd-modal-detail').classList.add('hidden'); D.data = null; D.seq++; susulKotor(); };
     if (!paksa && D.data && D.bolehUbah && perubahanTertunda() && typeof konfirmasiAksi === 'function') {
       konfirmasiAksi({ judul: 'Buang perubahan?', pesan: 'Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?', tipe: 'warning', teksKonfirmasi: 'Ya, Buang', teksBatal: 'Kembali' })
         .then(function (ya) { if (ya) lanjut(); });
@@ -431,25 +553,56 @@
     lanjut();
   }
 
+  function skeletonDetail() {
+    var kotak = '<div class="h-14 rounded-xl bg-slate-100 animate-pulse"></div>';
+    var baris = '<div class="h-11 rounded-xl bg-slate-100 animate-pulse"></div>';
+    var isi = function (n, s) { var o = ''; for (var i = 0; i < n; i++) o += s; return o; };
+    return '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">' + isi(9, kotak) + '</div>' +
+      '<div class="mt-5 border-t border-slate-200/80 pt-4 grid grid-cols-1 lg:grid-cols-2 gap-2.5">' + isi(6, baris) + '</div>';
+  }
+
+  function tampilGagalDetail(pesan) {
+    $('kd-detail-judul').textContent = 'Detail Data';
+    $('kd-detail-isi').innerHTML = '<div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc(pesan) + '</div>';
+    $('kd-detail-kaki').innerHTML = '<span></span><button type="button" data-kd="tutup-detail" class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">Tutup</button>';
+  }
+
+  // Sama seperti daftar: tampil seketika dari cache SWR (domain 'penerima_detail'), lalu diperbarui
+  // bila server punya data yang berbeda -- kecuali admin sudah mulai mengetik, agar isian tidak hilang
+  // (bentrok versi tetap dijaga server saat simpan).
   function muatDetail(id, tahun) {
-    $('kd-detail-judul').textContent = 'Memuat data...';
-    $('kd-detail-sub').textContent = '';
-    $('kd-detail-kaki').innerHTML = '';
-    $('kd-detail-isi').innerHTML = '<div class="flex flex-col items-center justify-center py-12 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Mengambil data dari server...</p></div>';
+    var seq = ++D.seq;
+    var sudahAda = !!(D.data && D.data.id === id && D.data.tahun === tahun);
+    var dirender = 0;
+    if (!sudahAda) {
+      D.data = null;
+      $('kd-detail-judul').textContent = 'Memuat data...';
+      $('kd-detail-sub').textContent = '';
+      $('kd-detail-kaki').innerHTML = '';
+      $('kd-detail-isi').innerHTML = skeletonDetail();
+    }
     bukaModalDetail();
-    return api('adminDetailData', id, tahun).then(function (res) {
-      if (!res || !res.sukses) {
-        $('kd-detail-isi').innerHTML = '<div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc((res && res.pesan) || 'Gagal memuat detail.') + '</div>';
-        $('kd-detail-kaki').innerHTML = '<button type="button" data-kd="tutup-detail" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg">Tutup</button>';
-        return;
-      }
-      D.data = res.data; D.berkas = res.berkas; D.versi = res.versi; D.bolehUbah = !!res.bolehUbah; D.jumlahBatch = res.jumlahBatchPembayaran || 0;
-      D.asli = {};
-      D.pilihBerkas = {};
-      FIELD.forEach(function (f) { D.asli[f.k] = res.data[f.d] || ''; });
-      renderDetail();
-    }).catch(function (e) {
-      $('kd-detail-isi').innerHTML = '<div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc(pesanDariError(e)) + '</div>';
+
+    return new Promise(function (selesai) {
+      apiSWR('adminDetailData', [id, tahun], function (res) {
+        if (seq !== D.seq) return selesai();
+        if (!res || !res.sukses) {
+          if (!dirender) tampilGagalDetail((res && res.pesan) || 'Gagal memuat detail.');
+          return selesai();
+        }
+        if (dirender && D.data && D.bolehUbah && perubahanTertunda()) return selesai();
+        dirender++;
+        D.data = res.data; D.berkas = res.berkas; D.versi = res.versi; D.bolehUbah = !!res.bolehUbah; D.jumlahBatch = res.jumlahBatchPembayaran || 0;
+        D.asli = {};
+        D.pilihBerkas = {};
+        FIELD.forEach(function (f) { D.asli[f.k] = res.data[f.d] || ''; });
+        renderDetail();
+        selesai();
+      }, function (e) {
+        if (seq !== D.seq) return selesai();
+        if (!dirender) tampilGagalDetail(pesanDariError(e)); else toast(pesanDariError(e), 'gagal', 6000);
+        selesai();
+      });
     });
   }
 
@@ -472,23 +625,23 @@
       kontrol = '<input type="text" id="' + id + '" value="' + esc(nilai) + '" autocomplete="off"' +
         (f.maks ? ' maxlength="' + f.maks + '"' : '') + (f.mode ? ' inputmode="' + f.mode + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>';
     }
-    return '<div class="' + span.trim() + '"><label for="' + id + '" class="' + KELAS_LABEL + '">' + esc(f.l) + '</label>' + kontrol + '</div>';
+    return '<div class="bg-slate-50/80 rounded-xl px-4 py-2.5 border border-slate-100/90 transition-colors' + span + '"><label for="' + id + '" class="' + KELAS_LABEL + '">' + esc(f.l) + '</label>' + kontrol + '</div>';
   }
 
   function htmlBerkas(b) {
     var ada = !!b.link;
     var url = linkAman(b.link);
     var aksi = '';
-    if (ada && url) aksi += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition">Buka</a>';
+    if (ada && url) aksi += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="text-[11px] font-semibold text-white bg-sky-600 hover:bg-sky-700 active:scale-95 px-3 py-1 rounded-lg transition shadow-2xs">Buka &#8599;</a>';
     if (D.bolehUbah) {
-      aksi += '<button type="button" data-kd="ganti" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-[11px] transition">' + (ada ? 'Ganti' : 'Unggah') + '</button>';
+      aksi += '<button type="button" data-kd="ganti" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 active:scale-95 text-emerald-700 border border-emerald-200 rounded-lg font-semibold text-[11px] transition">' + (ada ? 'Ganti' : 'Unggah') + '</button>';
       aksi += '<input type="file" data-kd-file="' + b.idx + '" accept="image/*,application/pdf" class="hidden">';
-      if (ada) aksi += '<button type="button" data-kd="hapus-berkas" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-md font-semibold text-[11px] transition">Hapus</button>';
+      if (ada) aksi += '<button type="button" data-kd="hapus-berkas" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 border border-red-200 rounded-lg font-semibold text-[11px] transition">Hapus</button>';
     }
     var centang = (ada && D.bolehUbah)
       ? '<input type="checkbox" data-kd-berkas="' + b.idx + '"' + (D.pilihBerkas[b.idx] ? ' checked' : '') + ' aria-label="Pilih ' + esc(b.label) + '" class="w-4 h-4 mr-2 shrink-0 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer">'
       : '';
-    return '<div class="flex items-center justify-between gap-2 p-2.5 border rounded-lg ' + (ada ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300 bg-slate-50') + '">' +
+    return '<div class="flex items-center justify-between gap-2 bg-slate-50/90 border rounded-xl px-3.5 py-2.5 ' + (ada ? 'border-slate-200/80' : 'border-dashed border-slate-300') + '">' +
       '<div class="min-w-0 flex items-center">' + centang + '<div class="min-w-0"><div class="text-xs font-semibold text-slate-700 break-words">' + esc(b.label) + '</div>' +
       '<div class="text-[10px] mt-0.5 ' + (ada ? 'text-emerald-600' : 'text-slate-400') + ' font-semibold uppercase">' + (ada ? 'Sudah ada' : 'Belum ada') + '</div></div></div>' +
       '<div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">' + aksi + '</div></div>';
@@ -506,22 +659,22 @@
     if (!D.bolehUbah) {
       html += '<div class="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium">Data tahun ' + esc(d.tahun) + ' adalah arsip dan hanya bisa dilihat.</div>';
     }
-    html += '<div class="mb-5"><div class="flex items-center justify-between gap-2 mb-2.5"><h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Data Penerima</h4>' +
-      '<span class="flex items-center gap-2">' + badgeStatus(d.statusVerifikasi) + '</span></div>' +
-      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' + FIELD.map(function (f) { return htmlField(f, d); }).join('') + '</div></div>';
+    html += '<div class="mb-4">' + badgeStatus(d.statusVerifikasi) + '</div>' +
+      '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">' + FIELD.map(function (f) { return htmlField(f, d); }).join('') + '</div>';
 
-    html += '<div><div class="flex items-center justify-between gap-2 mb-2.5"><h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Berkas Unggahan</h4>' +
+    html += '<div class="mt-5 border-t border-slate-200/80 pt-4">' +
+      '<div class="flex items-center justify-between gap-2 mb-3"><p class="text-xs font-bold text-slate-700 uppercase tracking-wider">Berkas &amp; Dokumen Pendukung</p>' +
       '<span class="text-[11px] text-slate-500">' + punya.length + ' dari ' + TOTAL_JENIS_BERKAS + ' jenis terisi</span></div>' +
       (D.bolehUbah && punya.length > 1
-        ? '<div class="flex items-center justify-between gap-2 mb-2.5 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">' +
-            '<label class="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none"><input type="checkbox" id="kd-berkas-semua" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">Pilih semua berkas</label>' +
-            '<button type="button" data-kd="hapus-berkas-terpilih" id="kd-btn-hapus-berkas-terpilih" class="hidden px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition">Hapus Terpilih (0)</button>' +
-          '</div>'
+        ? '<div class="flex items-center justify-between gap-2 mb-2.5 px-3 py-2 rounded-xl bg-slate-50/90 border border-slate-200/80">' +
+        '<label class="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none"><input type="checkbox" id="kd-berkas-semua" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">Pilih semua berkas</label>' +
+        '<button type="button" data-kd="hapus-berkas-terpilih" id="kd-btn-hapus-berkas-terpilih" class="hidden px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition">Hapus Terpilih (0)</button>' +
+        '</div>'
         : '') +
-      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">' + (punya.length ? punya.map(htmlBerkas).join('') : '<div class="sm:col-span-2 text-xs text-slate-400 italic py-2">Belum ada berkas terunggah.</div>') + '</div>' +
+      '<div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">' + (punya.length ? punya.map(htmlBerkas).join('') : '<div class="lg:col-span-2 text-xs text-slate-400 italic py-2">Belum ada berkas terunggah.</div>') + '</div>' +
       (D.bolehUbah && belum.length
         ? '<details class="mt-3 group"><summary class="cursor-pointer text-xs font-semibold text-sky-700 hover:text-sky-800 select-none">Jenis berkas lain (' + belum.length + ') &mdash; unggah bila diperlukan</summary>' +
-          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2.5">' + belum.map(htmlBerkas).join('') + '</div></details>'
+        '<div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5 mt-2.5">' + belum.map(htmlBerkas).join('') + '</div></details>'
         : '') +
       '</div>';
 
@@ -529,13 +682,13 @@
 
     var kaki = '';
     if (D.bolehUbah) {
-      kaki += '<button type="button" data-kd="hapus-data" class="w-full sm:w-auto px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95">' + IKON_HAPUS + '<span>Hapus Data</span></button>';
+      kaki += '<button type="button" data-kd="hapus-data" class="w-full sm:w-auto px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95">' + IKON_HAPUS + '<span>Hapus Data</span></button>';
     } else {
       kaki += '<span></span>';
     }
     kaki += '<div class="flex items-center gap-2"><span id="kd-info-ubah" class="hidden sm:inline text-[11px] text-amber-600 font-semibold"></span>' +
-      '<button type="button" data-kd="tutup-detail" class="flex-1 sm:flex-initial px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">Tutup</button>' +
-      (D.bolehUbah ? '<button type="button" data-kd="simpan" id="kd-btn-simpan" disabled class="flex-1 sm:flex-initial px-5 py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Simpan Perubahan</button>' : '') +
+      '<button type="button" data-kd="tutup-detail" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">Tutup Detail</button>' +
+      (D.bolehUbah ? '<button type="button" data-kd="simpan" id="kd-btn-simpan" disabled class="flex-1 sm:flex-initial px-4 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-xl text-xs font-semibold shadow-xs transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Simpan Perubahan</button>' : '') +
       '</div>';
     $('kd-detail-kaki').innerHTML = kaki;
 
@@ -733,7 +886,7 @@
   // ---------------------------------------------------------------------------
   var hapusCtx = null;
 
-  function tutupHapus() { $('kd-modal-hapus').classList.add('hidden'); hapusCtx = null; }
+  function tutupHapus() { $('kd-modal-hapus').classList.add('hidden'); hapusCtx = null; susulKotor(); }
 
   function periksaKonfirmasiNik() {
     var el = $('kd-hapus-nik'), btn = $('kd-hapus-ya');
@@ -748,9 +901,19 @@
     $('kd-hapus-ya').disabled = true;
     $('kd-modal-hapus').classList.remove('hidden');
     var ctx = hapusCtx;
-    var siap = (D.data && D.data.id === id && D.data.tahun === tahun)
-      ? Promise.resolve({ sukses: true, data: D.data, berkas: D.berkas, jumlahBatchPembayaran: D.jumlahBatch })
-      : api('adminDetailData', id, tahun);
+    // Dari baris tabel (tanpa detail terbuka) ambil dari server, bukan salinan cache: jumlah berkas &
+    // batch pembayaran yang tampil di konfirmasi hapus harus sesuai kondisi saat ini. broadcast:false
+    // + abaikanEvent supaya tidak memicu refresh senyap dari listener di bawah.
+    var siap;
+    if (D.data && D.data.id === id && D.data.tahun === tahun) {
+      siap = Promise.resolve({ sukses: true, data: D.data, berkas: D.berkas, jumlahBatchPembayaran: D.jumlahBatch });
+    } else {
+      abaikanEvent = true;
+      try {
+        if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') window.djpmCache.invalidate(['penerima_detail'], false);
+      } finally { abaikanEvent = false; }
+      siap = api('adminDetailData', id, tahun);
+    }
     siap.then(function (res) {
       if (hapusCtx !== ctx) return;
       if (!res || !res.sukses) {
@@ -763,14 +926,14 @@
       var batch = res.jumlahBatchPembayaran || 0;
       isi.innerHTML =
         '<div class="text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 space-y-1">' +
-          '<div><span class="text-slate-500">Nama:</span> <b class="text-slate-800">' + esc(d.nama) + '</b></div>' +
-          '<div><span class="text-slate-500">NIK:</span> <b class="font-mono text-slate-800">' + esc(d.nik) + '</b></div>' +
-          '<div><span class="text-slate-500">Layanan:</span> ' + esc(d.layanan) + '</div>' +
-          '<div><span class="text-slate-500">Wilayah:</span> ' + esc(d.kecamatan) + (d.kelurahan ? ' &middot; ' + esc(d.kelurahan) : '') + '</div>' +
-          '<div><span class="text-slate-500">Berkas terunggah:</span> ' + nBerkas + ' berkas akan dipindah ke Sampah Drive</div>' +
+        '<div><span class="text-slate-500">Nama:</span> <b class="text-slate-800">' + esc(d.nama) + '</b></div>' +
+        '<div><span class="text-slate-500">NIK:</span> <b class="font-mono text-slate-800">' + esc(d.nik) + '</b></div>' +
+        '<div><span class="text-slate-500">Layanan:</span> ' + esc(d.layanan) + '</div>' +
+        '<div><span class="text-slate-500">Wilayah:</span> ' + esc(d.kecamatan) + (d.kelurahan ? ' &middot; ' + esc(d.kelurahan) : '') + '</div>' +
+        '<div><span class="text-slate-500">Berkas terunggah:</span> ' + nBerkas + ' berkas akan dipindah ke Sampah Drive</div>' +
         '</div>' +
         (batch > 0 ? '<div class="text-xs p-3 mb-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800"><b>Perhatian:</b> NIK ini tercatat di ' + batch + ' batch pembayaran. Laporan pembayaran lama tetap memuat NIK tersebut.</div>' : '') +
-        '<label for="kd-hapus-nik" class="' + KELAS_LABEL + '">Ketik NIK <span class="font-mono normal-case">' + esc(d.nik) + '</span> untuk mengonfirmasi</label>' +
+        '<label for="kd-hapus-nik" class="' + KELAS_LABEL_FILTER + '">Ketik NIK <span class="font-mono normal-case">' + esc(d.nik) + '</span> untuk mengonfirmasi</label>' +
         '<input type="text" id="kd-hapus-nik" autocomplete="off" inputmode="numeric" maxlength="16" placeholder="Ketik NIK di sini" class="' + KELAS_INPUT + '">';
       var inp = $('kd-hapus-nik');
       if (inp) inp.focus();
@@ -800,7 +963,7 @@
       batalkanCacheLama();
       tutupHapus();
       $('kd-modal-detail').classList.add('hidden');
-      D.data = null;
+      D.data = null; D.seq++;
       return muat();
     }).catch(function (e) {
       toast(pesanDariError(e), 'gagal', 8000);
@@ -873,16 +1036,16 @@
     if ($('kd-modal-massal')) return;
     document.body.insertAdjacentHTML('beforeend',
       '<div id="kd-modal-massal" class="hidden fixed inset-0 z-[185] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
-        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
-          '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
-            '<div id="kd-massal-ikon" class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>' +
-            '<h3 id="kd-massal-judul" class="text-base font-bold text-slate-900"></h3>' +
-            '<p id="kd-massal-sub" class="text-xs text-slate-500 mt-1"></p>' +
-          '</div>' +
-          '<div id="kd-massal-isi" class="px-5 pb-3 overflow-y-auto flex-1"></div>' +
-          '<div id="kd-massal-kaki" class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0"></div>' +
-        '</div>' +
+      '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
+      '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
+      '<div id="kd-massal-ikon" class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>' +
+      '<h3 id="kd-massal-judul" class="text-base font-bold text-slate-900"></h3>' +
+      '<p id="kd-massal-sub" class="text-xs text-slate-500 mt-1"></p>' +
+      '</div>' +
+      '<div id="kd-massal-isi" class="px-5 pb-3 overflow-y-auto flex-1"></div>' +
+      '<div id="kd-massal-kaki" class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0"></div>' +
+      '</div>' +
       '</div>');
     var m = $('kd-modal-massal');
     m.addEventListener('click', function (e) {
@@ -911,6 +1074,7 @@
     var selesai = M.opsi && M.opsi.hasilSiap ? M.opsi.selesai : null;
     M.opsi = null;
     if (selesai) selesai();
+    susulKotor();
   }
 
   function periksaFormMassal() {
@@ -937,7 +1101,7 @@
     }).join('');
     var form = '';
     if (opsi.kata) {
-      form += '<label for="kd-massal-kata" class="' + KELAS_LABEL + ' mt-3">Ketik <span class="font-mono normal-case">' + esc(opsi.kata) + '</span> untuk mengonfirmasi</label>' +
+      form += '<label for="kd-massal-kata" class="' + KELAS_LABEL_FILTER + ' mt-3">Ketik <span class="font-mono normal-case">' + esc(opsi.kata) + '</span> untuk mengonfirmasi</label>' +
         '<input type="text" id="kd-massal-kata" autocomplete="off" placeholder="' + esc(opsi.kata) + '" class="' + KELAS_INPUT + '">';
     }
     if (opsi.ack) {
@@ -1163,7 +1327,9 @@
     if (!b) return;
     var id = Number(b.getAttribute('data-id')), tahun = Number(b.getAttribute('data-tahun'));
     switch (b.getAttribute('data-kd')) {
-      case 'muat': muat(); break;
+      case 'muat': segarkan(); break;
+      case 'reset-filter': resetFilter(); break;
+      case 'hal': { var n = Number(b.getAttribute('data-hal')); if (n >= 1 && n <= S.totalHalaman && n !== S.page) { S.page = n; muat(); } break; }
       case 'tambah':
         if (typeof tampilkanToast === 'function') toast('Isi formulir Input Data sebagai Admin Utama untuk menambah penerima baru.', 'info');
         $('tab-input').click();
@@ -1202,15 +1368,25 @@
   });
 
   // ---------------------------------------------------------------------------
-  // Tab
+  // Tab & Aksi Tombol Kelola Data
   // ---------------------------------------------------------------------------
   var TAB_LAIN = ['tab-input', 'tab-rekap', 'tab-tools'];
   var PANEL_LAIN = ['panel-input', 'panel-rekap', 'panel-tools'];
+  var KELAS_AKTIF = ['ring-2', 'ring-purple-300', 'bg-purple-600', 'shadow-md'];
+  var KELAS_NORMAL = ['bg-purple-600/80'];
 
   function nonaktifkanTab() {
-    if (typeof setTabTidakAktif === 'function') setTabTidakAktif(tab);
-    else { tab.classList.remove('bg-white', 'text-slate-900', 'shadow-sm'); tab.classList.add('text-white', 'hover:bg-slate-700'); }
+    KELAS_AKTIF.forEach(function (c) { tab.classList.remove(c); });
+    KELAS_NORMAL.forEach(function (c) { tab.classList.add(c); });
   }
+
+  function aktifkanTab() {
+    KELAS_NORMAL.forEach(function (c) { tab.classList.remove(c); });
+    KELAS_AKTIF.forEach(function (c) { tab.classList.add(c); });
+  }
+
+  window.nonaktifkanTabKelolaData = nonaktifkanTab;
+  window.aktifkanTabKelolaData = aktifkanTab;
 
   TAB_LAIN.forEach(function (id) {
     var el = $(id);
@@ -1231,12 +1407,35 @@
     PANEL_LAIN.forEach(function (id) { var el = $(id); if (el) el.classList.add('hidden'); });
     var refresh = $('btn-refresh-data');
     if (refresh) refresh.classList.add('hidden');
-    if (typeof setTabAktif === 'function') setTabAktif(tab);
-    else { tab.classList.remove('text-white', 'hover:bg-slate-700'); tab.classList.add('bg-white', 'text-slate-900', 'shadow-sm'); }
+    aktifkanTab();
     try { panelAktif = 'kelola'; } catch (_e) { /* panelAktif tidak tersedia */ }
     panel.classList.remove('hidden');
 
-    if (!S.siap) { S.siap = true; renderKerangka(); }
-    muat();
+    if (!S.siap) {
+      S.siap = true;
+      renderKerangka();
+      // Tahun aktif diketahui sejak awal, jadi kunci cache SWR sama dengan panggilan berikutnya dan
+      // daftar bisa langsung tampil dari cache sesi begitu tab dibuka.
+      if (S.tahun === null && typeof window._tahunAktifGetter === 'function') S.tahun = Number(window._tahunAktifGetter()) || null;
+    }
+    // Aturan yang sama dengan tab Lihat Data: daftar yang masih segar (TTL 90 dtk) langsung dipakai
+    // tanpa fetch; yang sudah lewat TTL ditampilkan dulu dari memori/cache lalu diperbarui di latar.
+    if (S.daftar.length > 0) {
+      renderDaftar();
+      if (S.kotor || Date.now() - S.waktu >= ttlSegarMs()) muat();
+    } else {
+      muat();
+    }
+  });
+
+  // Mutasi dari tab/perangkat lain (BroadcastChannel & Realtime lewat api-bridge) membuang cache domain
+  // 'penerima': segarkan daftar tanpa mengganggu modal/proses yang sedang dikerjakan admin ini.
+  window.addEventListener('djpm:swr-invalidated', function (ev) {
+    if (abaikanEvent || !S.siap || !adalahUtama() || !token()) return;
+    var domains = (ev.detail && ev.detail.domains) || [];
+    if (domains.indexOf('*') === -1 && domains.indexOf('penerima') === -1) return;
+    // Tab ini sedang tidak dibuka (mis. data diubah lewat Lihat Data): cukup tandai, dimuat saat dibuka lagi.
+    if (panel.classList.contains('hidden')) { S.kotor = true; return; }
+    if (sedangSibuk()) S.kotor = true; else muat();
   });
 })();

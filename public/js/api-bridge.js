@@ -196,6 +196,12 @@ const SWR_CONFIG = {
   getDashboardProgresVerifikasi: { ttl: 3 * 60 * 1000, domain: 'dashboard' },
   ambilDataDetail: { ttl: 3 * 60 * 1000, domain: 'data_detail' },
 
+  // Kelola Data & Berkas (khusus UTAMA): domain sama dengan Lihat Data supaya semua mutasi
+  // (termasuk aksi admin* di MUTATION_INVALIDATIONS) otomatis membuang daftar & detail ini.
+  // Kunci cache memuat filter/halaman, jadi tiap kombinasi filter punya salinan sendiri.
+  adminDaftarData: { ttl: 3 * 60 * 1000, domain: 'penerima' },
+  adminDetailData: { ttl: 2 * 60 * 1000, domain: 'penerima_detail' },
+
   // Kuota: TTL 5 menit
   getSemuaKuota: { ttl: 5 * 60 * 1000, domain: 'kuota' },
   getProgresKuota: { ttl: 5 * 60 * 1000, domain: 'kuota' },
@@ -303,10 +309,9 @@ const AKSI_BACA_AMAN_DIRETRY = new Set([
   'ambilDetailBatchPembayaran',
   'getDaftarBerkasTidakLengkapUntukWA',
   'ambilDaftarAkunLengkap',
-  // Kelola Data & Berkas: dua aksi BACA murni (tanpa cache SWR supaya selalu segar). Aksi tulisnya
-  // (adminUbahData/adminHapusBerkasMassal/adminHapusData/adminHapusDataMassal) SENGAJA tidak di sini -- tidak boleh diulang otomatis.
-  'adminDaftarData',
-  'adminDetailData',
+  // Kelola Data & Berkas: adminDaftarData/adminDetailData (aksi BACA murni) sudah masuk lewat
+  // SWR_CONFIG di atas. Aksi tulisnya (adminUbahData/adminHapusBerkasMassal/adminHapusData/
+  // adminHapusDataMassal) SENGAJA tidak di sini -- tidak boleh diulang otomatis.
   'ping',
 ]);
 
