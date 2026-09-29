@@ -14,7 +14,11 @@
  *   siapkanFolderDrive      -> args [token, konteks]               : cari/buat folder pendaftar
  *   uploadSatuBerkasKeDrive -> args [token, konteks, {kunci:item}] : simpan 1 berkas (TANPA lock global)
  *   uploadSemuaBerkasKeDrive-> kompatibilitas klien lama; sama, tapi banyak berkas
- * Semua aksi selain ping WAJIB token sesi valid (args[0]).
+ *   hapusBerkasDrive        -> args [ADMIN_SECRET, {fileUrl}]      : berkas pendaftar ke Sampah (khusus Edge Function)
+ *   hapusFolderDrive        -> args [ADMIN_SECRET, {folderId}]     : folder pendaftar ke Sampah (khusus Edge Function)
+ * Semua aksi selain ping dan hapus* WAJIB token sesi valid (args[0]). Aksi hapus* memakai ADMIN_SECRET
+ * (Script Properties), bukan token sesi. Isi ADMIN_SECRET dengan string acak panjang, nilai yang sama
+ * dengan secret GAS_ADMIN_SECRET di Supabase.
  *
  * Desain konkurensi:
  *  - Lock global HANYA utk membuat folder Kecamatan/Layanan (dipakai bersama semua pendaftar). ID kedua
@@ -65,6 +69,18 @@ function doPost(e) {
 
         if (action === "ping") {
             return responseJson({ status: "ok", pesan: "Microservice Google Drive Aktif!" });
+        }
+
+        // Aksi admin (hapus): TIDAK memakai token sesi. Hanya Edge Function (yang sudah memverifikasi
+        // role UTAMA) memegang ADMIN_SECRET, jadi browser -- sekalipun punya sesi sah -- tak bisa
+        // memanggilnya langsung.
+        if (action === "hapusBerkasDrive" || action === "hapusFolderDrive") {
+            const cekAdmin = validasiSecretAdmin_(args[0]);
+            if (!cekAdmin.sah) return responseJson({ sukses: false, pesan: cekAdmin.pesan });
+            const hasilAdmin = action === "hapusFolderDrive"
+                ? hapusFolderPendaftar_(args[1] || {})
+                : hapusBerkasTunggal_(args[1] || {});
+            return responseJson({ result: hasilAdmin, sukses: hasilAdmin.sukses });
         }
 
         const aksiDikenal = ["siapkanFolderDrive", "uploadSatuBerkasKeDrive", "uploadSemuaBerkasKeDrive"];
@@ -363,6 +379,100 @@ function prosesUploadBerkas_(konteks, berkasMap) {
         return { sukses: true, link: daftarLink };
     } catch (err) {
         return { sukses: false, pesan: "Gagal simpan ke Drive: " + err.toString() };
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hapus (khusus Admin Utama, dipanggil dari Edge Function dengan ADMIN_SECRET)
+// Selalu memindahkan ke SAMPAH Drive (setTrashed), bukan menghapus permanen.
+// ---------------------------------------------------------------------------
+function validasiSecretAdmin_(secret) {
+    const dipegang = (props_().getProperty("ADMIN_SECRET") || "").trim();
+    if (!dipegang) return { sah: false, pesan: "Konfigurasi GAS belum lengkap (ADMIN_SECRET di Script Properties)." };
+    const kiriman = (secret || "").toString();
+    // Bandingkan hash agar waktu pembandingan tidak bergantung pada panjang kecocokan.
+    if (!kiriman || hashTeks_(kiriman) !== hashTeks_(dipegang)) {
+        return { sah: false, pesan: "Akses ditolak: kredensial admin tidak sah." };
+    }
+    return { sah: true };
+}
+
+// Kedalaman folder di bawah FOLDER_ID_INDUK: 1 = anak langsung (Kecamatan), 2 = Layanan,
+// 3 = folder pendaftar. -1 = bukan turunan induk. Tanpa cache: dipakai untuk aksi yang merusak.
+function kedalamanDariInduk_(folder) {
+    const indukId = folderIndukId_();
+    let cur = folder;
+    for (let d = 0; d < 8; d++) {
+        if (cur.getId() === indukId) return d;
+        const parents = cur.getParents();
+        if (!parents.hasNext()) return -1;
+        cur = parents.next();
+    }
+    return -1;
+}
+
+const KEDALAMAN_FOLDER_PENDAFTAR = 3;
+
+function tidakDitemukan_(err) {
+    return /No item with the given ID|tidak ditemukan|not found/i.test(err && err.toString ? err.toString() : String(err));
+}
+
+function hapusFolderPendaftar_(konteks) {
+    const id = ((konteks && konteks.folderId) || "").toString().trim();
+    if (!/^[A-Za-z0-9_-]{10,}$/.test(id)) return { sukses: false, pesan: "ID folder tidak valid." };
+    try {
+        let folder;
+        try {
+            folder = DriveApp.getFolderById(id);
+        } catch (err) {
+            if (tidakDitemukan_(err)) return { sukses: true, sudahTiada: true };
+            throw err;
+        }
+        if (folder.isTrashed()) return { sukses: true, sudahTiada: true };
+        if (kedalamanDariInduk_(folder) !== KEDALAMAN_FOLDER_PENDAFTAR) {
+            return { sukses: false, pesan: "Ditolak: folder ini bukan folder pendaftar di dalam folder induk." };
+        }
+        denganRetry_(function () { folder.setTrashed(true); });
+        return { sukses: true };
+    } catch (err) {
+        return { sukses: false, pesan: "Gagal memindahkan folder ke Sampah: " + err.toString() };
+    }
+}
+
+function idBerkasDariUrl_(teks) {
+    const s = (teks || "").toString().trim();
+    let m = s.match(/\/d\/([A-Za-z0-9_-]{10,})/);
+    if (m) return m[1];
+    m = s.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+    if (m) return m[1];
+    return /^[A-Za-z0-9_-]{10,}$/.test(s) ? s : null;
+}
+
+function hapusBerkasTunggal_(konteks) {
+    const id = idBerkasDariUrl_(konteks && konteks.fileUrl);
+    if (!id) return { sukses: false, pesan: "Tautan berkas bukan tautan Google Drive yang valid." };
+    try {
+        let file;
+        try {
+            file = DriveApp.getFileById(id);
+        } catch (err) {
+            if (tidakDitemukan_(err)) return { sukses: true, sudahTiada: true };
+            throw err;
+        }
+        if (file.isTrashed()) return { sukses: true, sudahTiada: true };
+
+        // Berkas hanya boleh dihapus bila berada langsung di folder pendaftar.
+        let diFolderPendaftar = false;
+        const parents = file.getParents();
+        while (parents.hasNext()) {
+            if (kedalamanDariInduk_(parents.next()) === KEDALAMAN_FOLDER_PENDAFTAR) { diFolderPendaftar = true; break; }
+        }
+        if (!diFolderPendaftar) return { sukses: false, pesan: "Ditolak: berkas ini bukan berkas pendaftar di dalam folder induk." };
+
+        denganRetry_(function () { file.setTrashed(true); });
+        return { sukses: true };
+    } catch (err) {
+        return { sukses: false, pesan: "Gagal memindahkan berkas ke Sampah: " + err.toString() };
     }
 }
 

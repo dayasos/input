@@ -48,6 +48,24 @@ export async function buatSignedUrlBaca(path: string): Promise<HasilUpload> {
 // pernah pegang kredensial Storage -- cuma pegang satu URL bertanda-tangan yang hanya berlaku
 // untuk SATU path spesifik dan kedaluwarsa cepat (beda dari signed READ url di atas yang umurnya
 // ~10 tahun -- ini cuma jendela upload sekali pakai, expiry default dari Supabase, ~2 jam).
+// Hapus objek Storage LEGACY dari signed URL yang tersimpan di kolom `link_*` (periode sebelum
+// berkas pindah ke Google Drive). Path diambil dari bagian sesudah "/berkas-penerima/" sampai "?".
+// Idempoten: Supabase mengembalikan sukses walau objeknya sudah tidak ada.
+export function pathStorageDariUrl(url: string): string | null {
+  const m = (url || "").match(/\/berkas-penerima\/([^?#]+)/);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch (_e) {
+    return null;
+  }
+}
+
+export async function hapusObjekStorage(path: string): Promise<{ sukses: boolean; pesan?: string }> {
+  const { error } = await storageClient.from(NAMA_BUCKET_BERKAS).remove([path]);
+  return error ? { sukses: false, pesan: error.message } : { sukses: true };
+}
+
 export type HasilUrlUpload =
   | { sukses: true; uploadUrl: string; token: string; path: string }
   | { sukses: false; pesan: string };

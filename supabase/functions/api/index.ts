@@ -78,6 +78,14 @@ import {
   ubahProfilUser,
 } from "./domains/akun.ts";
 import { sinkronDataSheet2026 } from "./domains/sinkronSheet2026.ts";
+import {
+  adminDaftarData,
+  adminDetailData,
+  adminHapusBerkasMassal,
+  adminHapusData,
+  adminHapusDataMassal,
+  adminUbahData,
+} from "./domains/kelolaData.ts";
 
 // deno-lint-ignore no-explicit-any
 type Handler = (...args: any[]) => unknown | Promise<unknown>;
@@ -151,6 +159,12 @@ const ALLOWED: Record<string, Handler> = {
   simpanSkLayanan,
   ambilReferensiSkWalikota,
   simpanReferensiSkWalikota,
+  adminDaftarData,
+  adminDetailData,
+  adminUbahData,
+  adminHapusBerkasMassal,
+  adminHapusData,
+  adminHapusDataMassal,
   ping: () => ({ pong: true, status: "ok", timestamp: new Date().toISOString() }),
 };
 

@@ -1,0 +1,1242 @@
+/**
+ * KELOLA DATA & BERKAS -- khusus Admin Utama (role UTAMA).
+ *
+ * Layar untuk melihat, mengubah, mengganti/menghapus berkas, dan menghapus data penerima dari
+ * seluruh kecamatan dan Kemenag. Backend: supabase/functions/api/domains/kelolaData.ts
+ * (adminDaftarData, adminDetailData, adminUbahData, adminHapusBerkas, adminHapusData); semua
+ * aksinya menolak non-UTAMA di server, jadi pengecekan role di sini hanya untuk tampilan.
+ *
+ * Tahun selain tahun aktif hanya bisa DILIHAT (datanya ditimpa otomatis dari Google Sheet).
+ * Tambah data baru memakai tab "Input Data" yang sudah ada. Ganti berkas memakai alur upload
+ * (unggahBerkasKeDriveGAS) + editDataPenerima yang sama dengan menu Lihat Data.
+ */
+(function () {
+  'use strict';
+
+  var tab = document.getElementById('tab-kelola-data');
+  var panel = document.getElementById('panel-kelola-data');
+  if (!tab || !panel) return;
+
+  // ---------------------------------------------------------------------------
+  // Konfigurasi
+  // ---------------------------------------------------------------------------
+  var FIELD = [
+    { k: 'nama', d: 'nama', l: 'Nama Lengkap', lebar: 2 },
+    { k: 'nik', d: 'nik', l: 'NIK (16 digit)', mentah: true, maks: 16, mode: 'numeric' },
+    { k: 'jenis_kelamin', d: 'jenisKelamin', l: 'Jenis Kelamin', pilih: ['LAKI-LAKI', 'PEREMPUAN'] },
+    { k: 'tempat_lahir', d: 'tempatLahir', l: 'Tempat Lahir' },
+    { k: 'tanggal_lahir', d: 'tanggalLahir', l: 'Tanggal Lahir (DD-MM-YYYY)', mentah: true, maks: 10, mode: 'numeric' },
+    { k: 'alamat', d: 'alamat', l: 'Alamat Domisili', lebar: 2, area: true },
+    { k: 'layanan', d: 'layanan', l: 'Layanan', sel: 'layanan' },
+    { k: 'tempat_tugas', d: 'tempatTugas', l: 'Tempat Tugas' },
+    { k: 'alamat_tugas', d: 'alamatTugas', l: 'Alamat Tugas', lebar: 2, area: true },
+    { k: 'kecamatan', d: 'kecamatan', l: 'Kecamatan', sel: 'kecamatan' },
+    { k: 'kelurahan', d: 'kelurahan', l: 'Kelurahan', sel: 'kelurahan' },
+    { k: 'nama_rekening', d: 'namaRekening', l: 'Nama Rekening' },
+    { k: 'nomor_rekening', d: 'nomorRekening', l: 'Nomor Rekening (14 digit)', mentah: true, maks: 14, mode: 'numeric' },
+    { k: 'kantor_cabang', d: 'kantorCabang', l: 'Kantor Cabang' },
+    { k: 'no_kontak', d: 'noKontak', l: 'No. Kontak', mentah: true, maks: 20, mode: 'tel' },
+    { k: 'status_bpjs_tk', d: 'statusBpjs', l: 'Status BPJS TK', pilih: ['YA', 'TIDAK'] }
+  ];
+
+  var KELAS_INPUT = 'w-full px-3 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed';
+  var KELAS_LABEL = 'block text-[11px] font-semibold text-slate-600 uppercase tracking-wider mb-1';
+  var KELAS_FILTER = 'w-full px-2.5 py-2 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500';
+  var TOTAL_JENIS_BERKAS = 12;
+
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+  var S = { siap: false, tahun: null, tahunAktif: null, page: 1, limit: 20, total: 0, totalHalaman: 1, bolehUbah: true, opsi: null, daftar: [], seq: 0, pilih: {} };
+  var D = { data: null, berkas: [], versi: '', bolehUbah: false, jumlahBatch: 0, asli: {}, sibuk: false, pilihBerkas: {} };
+  var timerCari = null;
+
+  // ---------------------------------------------------------------------------
+  // Util
+  // ---------------------------------------------------------------------------
+  function $(id) { return document.getElementById(id); }
+
+  function adalahUtama() {
+    return typeof dataPengguna !== 'undefined' && dataPengguna && String(dataPengguna.role || '').trim().toUpperCase() === 'UTAMA';
+  }
+
+  function token() {
+    return (typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token) || '';
+  }
+
+  // Panggil aksi backend sebagai Promise; token sesi otomatis jadi argumen pertama.
+  function api(aksi) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    return new Promise(function (resolve, reject) {
+      var run = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+      run[aksi].apply(run, [token()].concat(args));
+    });
+  }
+
+  function pesanDariError(e) {
+    var m = (e && e.message) ? e.message : String(e || '');
+    if (/network|fetch|timeout|timed out|internet|koneksi/i.test(m) && typeof pesanErrorRamah === 'function') return pesanErrorRamah(e);
+    return m || 'Terjadi kesalahan.';
+  }
+
+  function toast(pesan, jenis, durasi) {
+    if (typeof tampilkanToast === 'function') tampilkanToast(pesan, jenis, { durasi: durasi || 5000 });
+  }
+
+  // Pilih <option> yang cocok TANPA membedakan huruf besar/kecil (data tersimpan huruf besar, master bisa campuran).
+  function setPilihan(sel, nilai) {
+    var target = String(nilai || '').toUpperCase();
+    for (var i = 0; i < sel.options.length; i++) {
+      if (String(sel.options[i].value).toUpperCase() === target) { sel.selectedIndex = i; return; }
+    }
+    sel.value = nilai || '';
+  }
+
+  function linkAman(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+
+  function nilaiEl(id) { var el = $(id); return el ? String(el.value || '').trim() : ''; }
+
+  function batalkanCacheLama() {
+    // Menu "Lihat Data" menyimpan salinan sendiri; buang supaya tidak menampilkan data yang sudah diubah/dihapus.
+    try { if (typeof invalidateCacheDataTransaksi === 'function') invalidateCacheDataTransaksi(); } catch (_e) { /* abaikan */ }
+  }
+
+  var overlayAsli = null;
+  function overlay(tampil, judul, pesan) {
+    var o = $('loading-overlay'), j = $('loading-overlay-judul'), p = $('loading-overlay-pesan');
+    if (!o) return;
+    if (tampil) {
+      if (!overlayAsli && j && p) overlayAsli = { j: j.innerHTML, p: p.innerHTML };
+      if (j) j.textContent = judul || 'MEMPROSES...';
+      if (p) p.textContent = pesan || 'Mohon tunggu sebentar.';
+      o.classList.remove('hidden');
+    } else {
+      o.classList.add('hidden');
+      var pc = $('loading-progress-container');
+      if (pc) pc.classList.add('hidden');
+      if (overlayAsli && j && p) { j.innerHTML = overlayAsli.j; p.innerHTML = overlayAsli.p; overlayAsli = null; }
+    }
+  }
+
+  function badgeStatus(status) {
+    var s = String(status || '').toUpperCase();
+    var kelas = 'bg-slate-100 text-slate-600 border-slate-200';
+    if (s.indexOf('TIDAK MEMENUHI') === 0) kelas = 'bg-rose-50 text-rose-700 border-rose-200';
+    else if (s.indexOf('MEMENUHI') === 0 || s === 'AKTIF') kelas = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    else if (s.indexOf('TIDAK LENGKAP') !== -1) kelas = 'bg-amber-50 text-amber-700 border-amber-200';
+    else if (s.indexOf('PROSES') !== -1) kelas = 'bg-sky-50 text-sky-700 border-sky-200';
+    return '<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide ' + kelas + '">' + esc(status || '-') + '</span>';
+  }
+
+  function badgeKategori(k) {
+    var kemenag = k === 'KEMENAG';
+    return '<span class="inline-block px-1.5 py-0.5 rounded border text-[10px] font-bold uppercase ' +
+      (kemenag ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-sky-50 text-sky-700 border-sky-200') + '">' +
+      (kemenag ? 'Kemenag' : 'Kecamatan') + '</span>';
+  }
+
+  function pillBerkas(n) {
+    var kelas = n === 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-700 border-slate-200';
+    return '<span class="inline-block px-2 py-0.5 rounded-full border text-[10px] font-bold ' + kelas + '">' + n + ' berkas</span>';
+  }
+
+  // ---------------------------------------------------------------------------
+  // Kerangka layar (dirender sekali saat pertama dibuka)
+  // ---------------------------------------------------------------------------
+  var IKON_CARI = '<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>';
+  var IKON_MUAT = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+  var IKON_TAMBAH = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>';
+  var IKON_HAPUS = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>';
+
+  function renderKerangka() {
+    panel.innerHTML =
+      '<div class="flex flex-col gap-1 mb-5 border-b border-slate-100 pb-4">' +
+        '<h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">' +
+          '<svg class="w-5 h-5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16M9 4v16"/></svg>' +
+          '<span>Kelola Data &amp; Berkas</span></h2>' +
+        '<p class="text-xs text-slate-500 mt-1">Khusus Admin Utama. Lihat, ubah, ganti berkas, dan hapus data penerima dari seluruh kecamatan dan Kemenag.</p>' +
+      '</div>' +
+
+      '<div class="bg-slate-50 border border-slate-200 rounded-xl p-3.5 sm:p-4 mb-4">' +
+        '<div class="grid grid-cols-2 lg:grid-cols-6 gap-2.5">' +
+          '<div class="relative col-span-2 lg:col-span-2">' +
+            '<input type="text" id="kd-cari" placeholder="Cari nama atau NIK..." autocomplete="off" style="text-transform:none" class="' + KELAS_FILTER + ' pl-9">' + IKON_CARI +
+          '</div>' +
+          '<select id="kd-tahun" class="' + KELAS_FILTER + '" title="Tahun data"></select>' +
+          '<select id="kd-kategori" class="' + KELAS_FILTER + '"><option value="">Semua Instansi</option><option value="KECAMATAN">Kecamatan</option><option value="KEMENAG">Kemenag</option></select>' +
+          '<select id="kd-layanan" class="' + KELAS_FILTER + '"><option value="">Semua Layanan</option></select>' +
+          '<select id="kd-kecamatan" class="' + KELAS_FILTER + '"><option value="">Semua Kecamatan</option></select>' +
+          '<select id="kd-kelengkapan" class="' + KELAS_FILTER + '"><option value="">Semua Kelengkapan</option><option value="ADA">Punya berkas</option><option value="KOSONG">Belum ada berkas</option></select>' +
+          '<div class="col-span-2 lg:col-span-3 flex items-center gap-2 lg:justify-end">' +
+            '<button type="button" data-kd="muat" class="flex-1 lg:flex-initial justify-center px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 active:scale-95">' + IKON_MUAT + '<span>Muat Ulang</span></button>' +
+            '<button type="button" data-kd="tambah" id="kd-btn-tambah" class="flex-1 lg:flex-initial justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5">' + IKON_TAMBAH + '<span>Tambah Data</span></button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="kd-banner-arsip" class="hidden mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium"></div>' +
+      '<div id="kd-error" class="hidden mb-4 p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium"></div>' +
+
+      '<div id="kd-bar-pilih" class="hidden sticky top-2 z-20 mb-3 p-2.5 sm:p-3 rounded-xl border border-sky-200 bg-sky-50 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">' +
+        '<span id="kd-bar-info" class="text-xs font-semibold text-sky-800"></span>' +
+        '<div class="flex items-center gap-2 flex-wrap">' +
+          '<button type="button" data-kd="pilih-halaman" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Pilih semua di halaman</button>' +
+          '<button type="button" data-kd="kosongkan-pilih" class="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[11px] font-semibold transition">Kosongkan</button>' +
+          '<button type="button" data-kd="hapus-terpilih" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition flex items-center gap-1.5">' + IKON_HAPUS + '<span>Hapus Terpilih</span></button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="kd-hasil" class="relative">' +
+        '<div class="hidden md:block overflow-x-auto border border-slate-200 rounded-xl shadow-sm bg-white">' +
+          '<table class="w-full text-left border-collapse text-xs">' +
+            '<thead><tr class="bg-slate-800 text-white text-[11px] uppercase tracking-wide select-none">' +
+              '<th id="kd-th-pilih" class="px-3 py-2.5 text-center w-10"><input type="checkbox" id="kd-cek-semua" aria-label="Pilih semua di halaman" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer"></th>' +
+              '<th class="px-3 py-2.5 text-center w-12">No</th><th class="px-3 py-2.5">Penerima</th><th class="px-3 py-2.5">Layanan</th>' +
+              '<th class="px-3 py-2.5">Wilayah</th><th class="px-3 py-2.5">Berkas</th><th class="px-3 py-2.5">Status</th><th class="px-3 py-2.5 text-center w-40">Aksi</th>' +
+            '</tr></thead>' +
+            '<tbody id="kd-tbody" class="divide-y divide-slate-100 text-slate-700"></tbody>' +
+          '</table>' +
+        '</div>' +
+        '<div id="kd-kartu" class="md:hidden flex flex-col gap-2.5"></div>' +
+        '<div id="kd-loader" class="hidden absolute inset-0 bg-white/60 flex items-start justify-center pt-10 rounded-xl"><div class="loader w-6 h-6 border-2"></div></div>' +
+      '</div>' +
+
+      '<div class="mt-4 flex flex-col sm:flex-row justify-between items-center gap-2.5">' +
+        '<span id="kd-info" class="text-xs text-slate-500 font-medium text-center sm:text-left">Total: 0 data</span>' +
+        '<div class="flex items-center justify-center gap-1.5 sm:gap-2">' +
+          '<button type="button" data-kd="prev" id="kd-prev" class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">Sebelumnya</button>' +
+          '<span id="kd-halaman" class="text-xs font-semibold text-slate-700 px-2.5 py-1 bg-white border border-slate-200 rounded-lg">1 / 1</span>' +
+          '<button type="button" data-kd="next" id="kd-next" class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed">Berikutnya</button>' +
+        '</div>' +
+      '</div>';
+
+    pasangModal();
+  }
+
+  function pasangModal() {
+    if ($('kd-modal-detail')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      // ── Modal detail / edit ──
+      '<div id="kd-modal-detail" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
+        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
+          '<div class="flex justify-between items-center px-4 sm:px-6 py-3.5 bg-slate-800 text-white shrink-0">' +
+            '<div class="min-w-0"><h3 id="kd-detail-judul" class="text-sm font-bold tracking-wide uppercase truncate">Detail Data</h3>' +
+            '<p id="kd-detail-sub" class="text-[11px] text-slate-300 truncate"></p></div>' +
+            '<button type="button" data-kd="tutup-detail" class="text-white/70 hover:text-white text-2xl leading-none transition ml-3" aria-label="Tutup">&times;</button>' +
+          '</div>' +
+          '<div id="kd-detail-isi" class="flex-1 overflow-y-auto p-4 sm:p-6 overscroll-contain"></div>' +
+          '<div id="kd-detail-kaki" class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-2.5 shrink-0"></div>' +
+        '</div>' +
+      '</div>' +
+
+      // ── Modal konfirmasi hapus data (ketik NIK) ──
+      '<div id="kd-modal-hapus" class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
+        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
+          '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
+            '<div class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
+              '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg></div>' +
+            '<h3 class="text-base font-bold text-slate-900">Hapus Data Penerima?</h3>' +
+            '<p class="text-xs text-slate-500 mt-1">Data dihapus <b>permanen</b> dan tidak dapat dikembalikan. Berkas di Google Drive dipindah ke Sampah Drive (dapat dipulihkan sekitar 30 hari).</p>' +
+          '</div>' +
+          '<div id="kd-hapus-isi" class="px-5 pb-2 overflow-y-auto flex-1"></div>' +
+          '<div class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0">' +
+            '<button type="button" data-kd="batal-hapus" class="flex-1 py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition">Batal</button>' +
+            '<button type="button" data-kd="konfirmasi-hapus" id="kd-hapus-ya" disabled class="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Hapus Permanen</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+
+    var md = $('kd-modal-detail');
+    md.addEventListener('click', function (e) {
+      if (e.target === md) tutupDetail();
+    });
+    md.addEventListener('click', aksiModalDetail);
+    md.addEventListener('input', tandaiPerubahan);
+    md.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t && t.id === 'kd-f-kecamatan') isiKelurahan(t.value, '');
+      if (t && t.id === 'kd-berkas-semua') { pilihSemuaBerkas(t.checked); return; }
+      if (t && t.hasAttribute && t.hasAttribute('data-kd-berkas')) {
+        var ib = Number(t.getAttribute('data-kd-berkas')), bb = cariBerkas(ib);
+        if (t.checked && bb) D.pilihBerkas[ib] = bb.link; else delete D.pilihBerkas[ib];
+        perbaruiBarBerkas();
+        return;
+      }
+      if (t && t.matches && t.matches('input[type="file"][data-kd-file]')) {
+        var f = t.files && t.files[0];
+        var idx = Number(t.getAttribute('data-kd-file'));
+        t.value = '';
+        if (f) gantiBerkas(idx, f);
+        return;
+      }
+      tandaiPerubahan();
+    });
+
+    var mh = $('kd-modal-hapus');
+    mh.addEventListener('click', function (e) {
+      if (e.target === mh) tutupHapus();
+      var b = e.target.closest && e.target.closest('[data-kd]');
+      if (!b) return;
+      if (b.getAttribute('data-kd') === 'batal-hapus') tutupHapus();
+      if (b.getAttribute('data-kd') === 'konfirmasi-hapus') eksekusiHapusData();
+    });
+    mh.addEventListener('input', function (e) {
+      if (e.target && e.target.id === 'kd-hapus-nik') periksaKonfirmasiNik();
+    });
+    mh.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.id === 'kd-hapus-nik') { e.preventDefault(); if (!$('kd-hapus-ya').disabled) eksekusiHapusData(); }
+      if (e.key === 'Escape') tutupHapus();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Daftar
+  // ---------------------------------------------------------------------------
+  function tampilError(pesan) {
+    var el = $('kd-error');
+    if (!el) return;
+    if (pesan) { el.textContent = pesan; el.classList.remove('hidden'); } else { el.classList.add('hidden'); el.textContent = ''; }
+  }
+
+  function setMemuat(ya) {
+    var l = $('kd-loader');
+    if (l) l.classList.toggle('hidden', !ya);
+  }
+
+  function isiOpsiFilter(opsi) {
+    if (!opsi) return;
+    var selLay = $('kd-layanan'), selKec = $('kd-kecamatan');
+    if (selLay && selLay.options.length <= 1) {
+      var h = '<option value="">Semua Layanan</option>';
+      h += '<optgroup label="Kecamatan">' + (opsi.layananKecamatan || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
+      h += '<optgroup label="Kemenag">' + (opsi.layananKemenag || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
+      selLay.innerHTML = h;
+    }
+    if (selKec && selKec.options.length <= 1) {
+      selKec.innerHTML = '<option value="">Semua Kecamatan</option>' + (opsi.kecamatan || []).map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+    }
+  }
+
+  function isiPilihanTahun(res) {
+    var sel = $('kd-tahun');
+    if (!sel) return;
+    var list = res.tahunTersedia || [res.tahunAktif];
+    sel.innerHTML = list.map(function (t) {
+      return '<option value="' + t + '"' + (Number(t) === Number(res.tahun) ? ' selected' : '') + '>' + t + (Number(t) === Number(res.tahunAktif) ? ' (Aktif)' : ' (Arsip)') + '</option>';
+    }).join('');
+  }
+
+  function muat() {
+    var seq = ++S.seq;
+    setMemuat(true);
+    tampilError('');
+    var filter = {
+      tahun: S.tahun, page: S.page, limit: S.limit,
+      cari: nilaiEl('kd-cari'), kategori: nilaiEl('kd-kategori'), layanan: nilaiEl('kd-layanan'),
+      kecamatan: nilaiEl('kd-kecamatan'), kelengkapan: nilaiEl('kd-kelengkapan')
+    };
+    return api('adminDaftarData', filter).then(function (res) {
+      if (seq !== S.seq) return;
+      if (!res || !res.sukses) { tampilError((res && res.pesan) || 'Gagal memuat data.'); return; }
+      // Halaman terakhir baru saja kosong (mis. semua baris dihapus): mundur ke halaman terakhir yang ada.
+      if (res.daftar.length === 0 && res.total > 0 && S.page > res.totalHalaman) { S.page = res.totalHalaman; return muat(); }
+      if (S.tahun !== res.tahun || !res.bolehUbah) S.pilih = {};
+      S.tahun = res.tahun; S.tahunAktif = res.tahunAktif; S.total = res.total; S.totalHalaman = res.totalHalaman;
+      S.bolehUbah = !!res.bolehUbah; S.opsi = res.opsi; S.daftar = res.daftar;
+      isiPilihanTahun(res); isiOpsiFilter(res.opsi);
+      renderDaftar();
+    }).catch(function (e) {
+      if (seq === S.seq) tampilError(pesanDariError(e));
+    }).then(function () {
+      if (seq === S.seq) setMemuat(false);
+    });
+  }
+
+  function renderDaftar() {
+    var tbody = $('kd-tbody'), kartu = $('kd-kartu');
+    var offset = (S.page - 1) * S.limit;
+    var banner = $('kd-banner-arsip');
+    if (banner) {
+      banner.classList.toggle('hidden', S.bolehUbah);
+      banner.textContent = 'Data tahun ' + S.tahun + ' adalah arsip dan hanya bisa dilihat. Sumbernya Google Sheet dan disinkronkan otomatis, sehingga perubahan di sini tidak akan bertahan.';
+    }
+    var tambah = $('kd-btn-tambah');
+    if (tambah) tambah.classList.toggle('hidden', !S.bolehUbah);
+
+    if (S.daftar.length === 0) {
+      var kosong = '<div class="text-center py-10 text-slate-400 italic text-xs">Tidak ada data yang cocok dengan filter.</div>';
+      tbody.innerHTML = '<tr><td colspan="8">' + kosong + '</td></tr>';
+      kartu.innerHTML = kosong;
+    } else {
+      tbody.innerHTML = S.daftar.map(function (r, i) {
+        return '<tr class="hover:bg-slate-50' + (S.pilih[r.id] ? ' bg-sky-50/60' : '') + '">' +
+          '<td class="px-3 py-2.5 text-center' + (S.bolehUbah ? '' : ' hidden') + '">' + (S.bolehUbah ? kotakPilih(r) : '') + '</td>' +
+          '<td class="px-3 py-2.5 text-center text-slate-500">' + (offset + i + 1) + '</td>' +
+          '<td class="px-3 py-2.5"><div class="font-semibold text-slate-800">' + esc(r.nama) + '</div><div class="text-[11px] text-slate-500 font-mono">' + esc(r.nik) + '</div></td>' +
+          '<td class="px-3 py-2.5"><div>' + esc(r.layanan) + '</div><div class="mt-0.5">' + badgeKategori(r.kategori) + '</div></td>' +
+          '<td class="px-3 py-2.5"><div>' + esc(r.kecamatan) + '</div><div class="text-[11px] text-slate-500">' + esc(r.kelurahan) + '</div></td>' +
+          '<td class="px-3 py-2.5">' + pillBerkas(r.jumlahBerkas) + '</td>' +
+          '<td class="px-3 py-2.5">' + badgeStatus(r.status) + '</td>' +
+          '<td class="px-3 py-2.5"><div class="flex items-center justify-center gap-1.5">' + tombolBaris(r) + '</div></td>' +
+        '</tr>';
+      }).join('');
+      kartu.innerHTML = S.daftar.map(function (r) {
+        return '<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">' +
+          '<div class="flex items-start justify-between gap-2">' +
+            (S.bolehUbah ? '<div class="pt-0.5">' + kotakPilih(r) + '</div>' : '') +
+            '<div class="min-w-0 flex-1"><div class="font-semibold text-sm text-slate-800 break-words">' + esc(r.nama) + '</div>' +
+            '<div class="text-[11px] text-slate-500 font-mono">' + esc(r.nik) + '</div></div>' + badgeStatus(r.status) +
+          '</div>' +
+          '<div class="mt-2 text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-1">' + badgeKategori(r.kategori) + '<span>' + esc(r.layanan) + '</span></div>' +
+          '<div class="mt-1 text-[11px] text-slate-500">' + esc(r.kecamatan) + (r.kelurahan ? ' &middot; ' + esc(r.kelurahan) : '') + '</div>' +
+          '<div class="mt-2.5 flex items-center justify-between gap-2">' + pillBerkas(r.jumlahBerkas) +
+            '<div class="flex items-center gap-1.5">' + tombolBaris(r) + '</div></div>' +
+        '</div>';
+      }).join('');
+    }
+
+    var thPilih = $('kd-th-pilih');
+    if (thPilih) thPilih.classList.toggle('hidden', !S.bolehUbah);
+    perbaruiBar();
+
+    $('kd-info').textContent = 'Total: ' + S.total + ' data · tahun ' + S.tahun;
+    $('kd-halaman').textContent = S.page + ' / ' + S.totalHalaman;
+    $('kd-prev').disabled = S.page <= 1;
+    $('kd-next').disabled = S.page >= S.totalHalaman;
+  }
+
+  function tombolBaris(r) {
+    var attr = ' data-id="' + r.id + '" data-tahun="' + r.tahun + '"';
+    var kelola = '<button type="button" data-kd="kelola"' + attr + ' class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition">' + (S.bolehUbah ? 'Kelola' : 'Lihat') + '</button>';
+    var hapus = S.bolehUbah
+      ? '<button type="button" data-kd="hapus"' + attr + ' title="Hapus data" aria-label="Hapus data" class="px-2 py-1 bg-red-50 hover:bg-red-100 active:scale-95 text-red-700 border border-red-200 rounded-md font-semibold text-[11px] transition flex items-center">' + IKON_HAPUS + '</button>'
+      : '';
+    return kelola + hapus;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Detail / edit
+  // ---------------------------------------------------------------------------
+  function bukaModalDetail() { $('kd-modal-detail').classList.remove('hidden'); }
+
+  function perubahanTertunda() { return Object.keys(ambilPerubahan()).length > 0; }
+
+  function tutupDetail(paksa) {
+    var lanjut = function () { $('kd-modal-detail').classList.add('hidden'); D.data = null; };
+    if (!paksa && D.data && D.bolehUbah && perubahanTertunda() && typeof konfirmasiAksi === 'function') {
+      konfirmasiAksi({ judul: 'Buang perubahan?', pesan: 'Ada perubahan yang belum disimpan. Tutup tanpa menyimpan?', tipe: 'warning', teksKonfirmasi: 'Ya, Buang', teksBatal: 'Kembali' })
+        .then(function (ya) { if (ya) lanjut(); });
+      return;
+    }
+    lanjut();
+  }
+
+  function muatDetail(id, tahun) {
+    $('kd-detail-judul').textContent = 'Memuat data...';
+    $('kd-detail-sub').textContent = '';
+    $('kd-detail-kaki').innerHTML = '';
+    $('kd-detail-isi').innerHTML = '<div class="flex flex-col items-center justify-center py-12 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Mengambil data dari server...</p></div>';
+    bukaModalDetail();
+    return api('adminDetailData', id, tahun).then(function (res) {
+      if (!res || !res.sukses) {
+        $('kd-detail-isi').innerHTML = '<div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc((res && res.pesan) || 'Gagal memuat detail.') + '</div>';
+        $('kd-detail-kaki').innerHTML = '<button type="button" data-kd="tutup-detail" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg">Tutup</button>';
+        return;
+      }
+      D.data = res.data; D.berkas = res.berkas; D.versi = res.versi; D.bolehUbah = !!res.bolehUbah; D.jumlahBatch = res.jumlahBatchPembayaran || 0;
+      D.asli = {};
+      D.pilihBerkas = {};
+      FIELD.forEach(function (f) { D.asli[f.k] = res.data[f.d] || ''; });
+      renderDetail();
+    }).catch(function (e) {
+      $('kd-detail-isi').innerHTML = '<div class="p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc(pesanDariError(e)) + '</div>';
+    });
+  }
+
+  function htmlField(f, data) {
+    var id = 'kd-f-' + f.k;
+    var nilai = data[f.d] || '';
+    var dis = D.bolehUbah ? '' : ' disabled';
+    var span = f.lebar === 2 ? ' sm:col-span-2' : '';
+    var kontrol;
+    if (f.pilih) {
+      var ops = f.pilih.slice();
+      if (nilai && ops.indexOf(nilai) === -1) ops.unshift(nilai);
+      kontrol = '<select id="' + id + '" class="' + KELAS_INPUT + '"' + dis + '>' +
+        '<option value="">-- Pilih --</option>' + ops.map(function (o) { return '<option value="' + esc(o) + '"' + (o === nilai ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join('') + '</select>';
+    } else if (f.sel) {
+      kontrol = '<select id="' + id + '" class="' + KELAS_INPUT + '"' + dis + '><option value="' + esc(nilai) + '" selected>' + esc(nilai || '-- Pilih --') + '</option></select>';
+    } else if (f.area) {
+      kontrol = '<textarea id="' + id + '" rows="2" class="' + KELAS_INPUT + '"' + dis + '>' + esc(nilai) + '</textarea>';
+    } else {
+      kontrol = '<input type="text" id="' + id + '" value="' + esc(nilai) + '" autocomplete="off"' +
+        (f.maks ? ' maxlength="' + f.maks + '"' : '') + (f.mode ? ' inputmode="' + f.mode + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>';
+    }
+    return '<div class="' + span.trim() + '"><label for="' + id + '" class="' + KELAS_LABEL + '">' + esc(f.l) + '</label>' + kontrol + '</div>';
+  }
+
+  function htmlBerkas(b) {
+    var ada = !!b.link;
+    var url = linkAman(b.link);
+    var aksi = '';
+    if (ada && url) aksi += '<a href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition">Buka</a>';
+    if (D.bolehUbah) {
+      aksi += '<button type="button" data-kd="ganti" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-md font-semibold text-[11px] transition">' + (ada ? 'Ganti' : 'Unggah') + '</button>';
+      aksi += '<input type="file" data-kd-file="' + b.idx + '" accept="image/*,application/pdf" class="hidden">';
+      if (ada) aksi += '<button type="button" data-kd="hapus-berkas" data-idx="' + b.idx + '" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-md font-semibold text-[11px] transition">Hapus</button>';
+    }
+    var centang = (ada && D.bolehUbah)
+      ? '<input type="checkbox" data-kd-berkas="' + b.idx + '"' + (D.pilihBerkas[b.idx] ? ' checked' : '') + ' aria-label="Pilih ' + esc(b.label) + '" class="w-4 h-4 mr-2 shrink-0 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer">'
+      : '';
+    return '<div class="flex items-center justify-between gap-2 p-2.5 border rounded-lg ' + (ada ? 'border-slate-200 bg-white' : 'border-dashed border-slate-300 bg-slate-50') + '">' +
+      '<div class="min-w-0 flex items-center">' + centang + '<div class="min-w-0"><div class="text-xs font-semibold text-slate-700 break-words">' + esc(b.label) + '</div>' +
+      '<div class="text-[10px] mt-0.5 ' + (ada ? 'text-emerald-600' : 'text-slate-400') + ' font-semibold uppercase">' + (ada ? 'Sudah ada' : 'Belum ada') + '</div></div></div>' +
+      '<div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">' + aksi + '</div></div>';
+  }
+
+  function renderDetail() {
+    var d = D.data;
+    $('kd-detail-judul').textContent = d.nama || 'Detail Data';
+    $('kd-detail-sub').textContent = 'NIK ' + d.nik + ' · ' + (d.kategori === 'KEMENAG' ? 'Kemenag' : 'Kecamatan') + ' · Tahun ' + d.tahun;
+
+    var punya = D.berkas.filter(function (b) { return b.link; });
+    var belum = D.berkas.filter(function (b) { return !b.link; });
+
+    var html = '';
+    if (!D.bolehUbah) {
+      html += '<div class="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-xs font-medium">Data tahun ' + esc(d.tahun) + ' adalah arsip dan hanya bisa dilihat.</div>';
+    }
+    html += '<div class="mb-5"><div class="flex items-center justify-between gap-2 mb-2.5"><h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Data Penerima</h4>' +
+      '<span class="flex items-center gap-2">' + badgeStatus(d.statusVerifikasi) + '</span></div>' +
+      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' + FIELD.map(function (f) { return htmlField(f, d); }).join('') + '</div></div>';
+
+    html += '<div><div class="flex items-center justify-between gap-2 mb-2.5"><h4 class="text-sm font-bold text-slate-700 uppercase tracking-wide">Berkas Unggahan</h4>' +
+      '<span class="text-[11px] text-slate-500">' + punya.length + ' dari ' + TOTAL_JENIS_BERKAS + ' jenis terisi</span></div>' +
+      (D.bolehUbah && punya.length > 1
+        ? '<div class="flex items-center justify-between gap-2 mb-2.5 px-2.5 py-2 rounded-lg bg-slate-50 border border-slate-200">' +
+            '<label class="flex items-center gap-2 text-[11px] font-semibold text-slate-600 cursor-pointer select-none"><input type="checkbox" id="kd-berkas-semua" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500">Pilih semua berkas</label>' +
+            '<button type="button" data-kd="hapus-berkas-terpilih" id="kd-btn-hapus-berkas-terpilih" class="hidden px-3 py-1.5 bg-rose-600 hover:bg-rose-700 active:scale-95 text-white rounded-lg text-[11px] font-bold shadow-sm transition">Hapus Terpilih (0)</button>' +
+          '</div>'
+        : '') +
+      '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">' + (punya.length ? punya.map(htmlBerkas).join('') : '<div class="sm:col-span-2 text-xs text-slate-400 italic py-2">Belum ada berkas terunggah.</div>') + '</div>' +
+      (D.bolehUbah && belum.length
+        ? '<details class="mt-3 group"><summary class="cursor-pointer text-xs font-semibold text-sky-700 hover:text-sky-800 select-none">Jenis berkas lain (' + belum.length + ') &mdash; unggah bila diperlukan</summary>' +
+          '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-2.5">' + belum.map(htmlBerkas).join('') + '</div></details>'
+        : '') +
+      '</div>';
+
+    $('kd-detail-isi').innerHTML = html;
+
+    var kaki = '';
+    if (D.bolehUbah) {
+      kaki += '<button type="button" data-kd="hapus-data" class="w-full sm:w-auto px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-95">' + IKON_HAPUS + '<span>Hapus Data</span></button>';
+    } else {
+      kaki += '<span></span>';
+    }
+    kaki += '<div class="flex items-center gap-2"><span id="kd-info-ubah" class="hidden sm:inline text-[11px] text-amber-600 font-semibold"></span>' +
+      '<button type="button" data-kd="tutup-detail" class="flex-1 sm:flex-initial px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">Tutup</button>' +
+      (D.bolehUbah ? '<button type="button" data-kd="simpan" id="kd-btn-simpan" disabled class="flex-1 sm:flex-initial px-5 py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">Simpan Perubahan</button>' : '') +
+      '</div>';
+    $('kd-detail-kaki').innerHTML = kaki;
+
+    if (D.bolehUbah) {
+      isiLayanan(d.layanan);
+      isiKecamatan(d.kecamatan);
+      isiKelurahan(d.kecamatan, d.kelurahan);
+    }
+  }
+
+  function isiLayanan(pilihan) {
+    var sel = $('kd-f-layanan');
+    if (!sel || !S.opsi) return;
+    var kec = S.opsi.layananKecamatan || [], kem = S.opsi.layananKemenag || [];
+    var semua = kec.concat(kem).map(function (v) { return String(v).toUpperCase(); });
+    var h = '';
+    if (pilihan && semua.indexOf(String(pilihan).toUpperCase()) === -1) h += '<option value="' + esc(pilihan) + '" selected>' + esc(pilihan) + '</option>';
+    h += '<optgroup label="Kecamatan">' + kec.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
+    h += '<optgroup label="Kemenag">' + kem.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('') + '</optgroup>';
+    sel.innerHTML = h;
+    setPilihan(sel, pilihan);
+  }
+
+  function isiKecamatan(pilihan) {
+    var sel = $('kd-f-kecamatan');
+    if (!sel || !S.opsi) return;
+    var list = (S.opsi.kecamatan || []).slice();
+    var h = '';
+    if (pilihan && list.indexOf(String(pilihan).toUpperCase()) === -1) h += '<option value="' + esc(pilihan) + '">' + esc(pilihan) + '</option>';
+    h += list.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+    sel.innerHTML = h;
+    setPilihan(sel, pilihan);
+  }
+
+  function isiKelurahan(kec, pilihan) {
+    var sel = $('kd-f-kelurahan');
+    if (!sel) return;
+    sel.dataset.kec = kec || '';
+    if (!kec) { sel.innerHTML = '<option value="">-- Pilih Kecamatan dulu --</option>'; tandaiPerubahan(); return; }
+    sel.innerHTML = '<option value="">Memuat...</option>';
+    api('getKelurahanByKecamatan', kec).then(function (list) {
+      if (sel.dataset.kec !== (kec || '')) return; // kecamatan sudah diganti lagi
+      var arr = Array.isArray(list) ? list : [];
+      var h = '<option value="">-- Pilih Kelurahan --</option>';
+      if (pilihan && arr.map(function (v) { return String(v).toUpperCase(); }).indexOf(String(pilihan).toUpperCase()) === -1) {
+        h += '<option value="' + esc(pilihan) + '">' + esc(pilihan) + '</option>';
+      }
+      h += arr.map(function (v) { return '<option value="' + esc(v) + '">' + esc(v) + '</option>'; }).join('');
+      sel.innerHTML = h;
+      setPilihan(sel, pilihan);
+      tandaiPerubahan();
+    }).catch(function (e) {
+      sel.innerHTML = '<option value="">Gagal memuat kelurahan</option>';
+      toast('Gagal memuat daftar kelurahan: ' + pesanDariError(e), 'gagal');
+    });
+  }
+
+  function ambilPerubahan() {
+    var out = {};
+    if (!D.data || !D.bolehUbah) return out;
+    FIELD.forEach(function (f) {
+      var el = $('kd-f-' + f.k);
+      if (!el) return;
+      var baru = String(el.value || '').trim();
+      var lama = String(D.asli[f.k] || '').trim();
+      var sama = f.mentah ? baru === lama : baru.toUpperCase() === lama.toUpperCase();
+      if (!sama) out[f.k] = baru;
+    });
+    return out;
+  }
+
+  function tandaiPerubahan() {
+    var btn = $('kd-btn-simpan'), info = $('kd-info-ubah');
+    if (!btn) return;
+    var n = Object.keys(ambilPerubahan()).length;
+    btn.disabled = n === 0 || D.sibuk;
+    if (info) { info.textContent = n ? n + ' perubahan belum disimpan' : ''; info.classList.toggle('hidden', !n); }
+  }
+
+  function simpanPerubahan() {
+    if (!D.data || !D.bolehUbah || D.sibuk) return;
+    var perubahan = ambilPerubahan();
+    if (Object.keys(perubahan).length === 0) { toast('Tidak ada perubahan.', 'info'); return; }
+    var btn = $('kd-btn-simpan');
+    D.sibuk = true;
+    if (typeof setTombolMemuat === 'function') setTombolMemuat(btn, 'Menyimpan...');
+    var id = D.data.id, tahun = D.data.tahun;
+    api('adminUbahData', id, tahun, perubahan, D.versi).then(function (res) {
+      if (res && res.sukses) {
+        toast(res.pesan || 'Data berhasil diperbarui.', 'sukses');
+        batalkanCacheLama();
+        D.sibuk = false;
+        return Promise.all([muatDetail(id, tahun), muat()]);
+      }
+      toast((res && res.pesan) || 'Gagal menyimpan.', res && res.konflik ? 'peringatan' : 'gagal', 7000);
+      if (res && res.konflik) return muatDetail(id, tahun);
+    }).catch(function (e) {
+      toast(pesanDariError(e), 'gagal', 7000);
+    }).then(function () {
+      D.sibuk = false;
+      if (typeof pulihkanTombol === 'function') pulihkanTombol($('kd-btn-simpan'));
+      tandaiPerubahan();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Berkas: ganti / unggah / hapus
+  // ---------------------------------------------------------------------------
+  function cariBerkas(idx) {
+    for (var i = 0; i < D.berkas.length; i++) if (D.berkas[i].idx === idx) return D.berkas[i];
+    return null;
+  }
+
+  function gantiBerkas(idx, file) {
+    var b = cariBerkas(idx);
+    if (!D.data || !D.bolehUbah || !b || D.sibuk) return;
+    if (typeof prosesFileTerkompresi !== 'function' || typeof unggahBerkasKeDriveGAS !== 'function') {
+      toast('Modul unggah berkas belum siap. Muat ulang halaman.', 'gagal');
+      return;
+    }
+    if (perubahanTertunda()) {
+      toast('Simpan atau batalkan perubahan data terlebih dulu sebelum mengganti berkas.', 'peringatan');
+      return;
+    }
+    D.sibuk = true;
+    var d = D.data, id = d.id, tahun = d.tahun;
+    overlay(true, 'MENGUNGGAH BERKAS...', 'Mengirim "' + b.label + '" ke Google Drive.');
+    prosesFileTerkompresi(file).then(function (item) {
+      var peta = {};
+      peta[idx] = { file: item.file, namaFile: item.namaFile, mimeType: item.mimeType, ukuranByte: item.ukuranByte, label: b.label };
+      return unggahBerkasKeDriveGAS(
+        { kecamatan: d.kecamatan, layanan: d.layanan, nama: d.nama, nik: d.nik, folderId: d.idFolderBerkas },
+        peta
+      );
+    }).then(function (up) {
+      if (!up || !up.sukses) throw new Error((up && up.pesan) || 'Unggah gagal.');
+      var link = up.link || {};
+      var idFolder = link.idFolderBerkas || '';
+      delete link.idFolderBerkas;
+      if (!link[idx]) throw new Error('Drive tidak mengembalikan tautan berkas.');
+      overlay(true, 'MENYIMPAN...', 'Menautkan berkas ke data penerima.');
+      return api('editDataPenerima', id, { teks: {}, berkas: link, idFolderBerkas: idFolder });
+    }).then(function (res) {
+      if (!res || !res.sukses) throw new Error((res && res.pesan) || 'Gagal menyimpan tautan berkas.');
+      try { if (typeof bersihkanCacheUploadUntukNik === 'function') bersihkanCacheUploadUntukNik(d.nik, d.layanan); } catch (_e) { /* abaikan */ }
+      toast('Berkas "' + b.label + '" berhasil ' + (b.link ? 'diganti' : 'diunggah') + '.', 'sukses');
+      batalkanCacheLama();
+      D.sibuk = false;
+      return Promise.all([muatDetail(id, tahun), muat()]);
+    }).catch(function (e) {
+      toast('Gagal ' + (b.link ? 'mengganti' : 'mengunggah') + ' berkas: ' + pesanDariError(e), 'gagal', 8000);
+    }).then(function () {
+      D.sibuk = false;
+      overlay(false);
+      tandaiPerubahan();
+    });
+  }
+
+  function hapusBerkas(idx) {
+    var b = cariBerkas(idx);
+    if (!D.data || !D.bolehUbah || !b || !b.link || D.sibuk) return;
+    var d = D.data, id = d.id, tahun = d.tahun;
+    var tanya = typeof konfirmasiAksi === 'function'
+      ? konfirmasiAksi({
+        judul: 'Hapus berkas?',
+        pesan: 'Berkas "' + b.label + '" milik ' + d.nama + ' akan dilepas dari data dan dipindah ke Sampah Google Drive.',
+        tipe: 'danger', teksKonfirmasi: 'Ya, Hapus', teksBatal: 'Batal'
+      })
+      : Promise.resolve(window.confirm('Hapus berkas "' + b.label + '"?'));
+    tanya.then(function (ya) {
+      if (!ya) return;
+      D.sibuk = true;
+      overlay(true, 'MENGHAPUS BERKAS...', 'Memindahkan berkas ke Sampah Drive.');
+      return api('adminHapusBerkasMassal', id, tahun, [{ idx: idx, link: b.link }]).then(function (res) {
+        if (!res || !res.sukses) {
+          toast((res && res.pesan) || 'Gagal menghapus berkas.', res && res.konflik ? 'peringatan' : 'gagal', 7000);
+          if (res && res.konflik) { D.sibuk = false; return muatDetail(id, tahun); }
+          return;
+        }
+        toast(res.pesan || 'Berkas dihapus.', res.perluTindakLanjut ? 'peringatan' : 'sukses', res.perluTindakLanjut ? 12000 : 5000);
+        batalkanCacheLama();
+        D.sibuk = false;
+        return Promise.all([muatDetail(id, tahun), muat()]);
+      });
+    }).catch(function (e) {
+      toast(pesanDariError(e), 'gagal', 7000);
+    }).then(function () {
+      D.sibuk = false;
+      overlay(false);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hapus data penerima (ketik NIK untuk konfirmasi)
+  // ---------------------------------------------------------------------------
+  var hapusCtx = null;
+
+  function tutupHapus() { $('kd-modal-hapus').classList.add('hidden'); hapusCtx = null; }
+
+  function periksaKonfirmasiNik() {
+    var el = $('kd-hapus-nik'), btn = $('kd-hapus-ya');
+    if (!el || !btn || !hapusCtx) return;
+    btn.disabled = !(hapusCtx.detail && el.value.trim() === String(hapusCtx.detail.data.nik).trim());
+  }
+
+  function bukaHapus(id, tahun) {
+    hapusCtx = { id: id, tahun: tahun, detail: null };
+    var isi = $('kd-hapus-isi');
+    isi.innerHTML = '<div class="flex justify-center py-6"><div class="loader"></div></div>';
+    $('kd-hapus-ya').disabled = true;
+    $('kd-modal-hapus').classList.remove('hidden');
+    var ctx = hapusCtx;
+    var siap = (D.data && D.data.id === id && D.data.tahun === tahun)
+      ? Promise.resolve({ sukses: true, data: D.data, berkas: D.berkas, jumlahBatchPembayaran: D.jumlahBatch })
+      : api('adminDetailData', id, tahun);
+    siap.then(function (res) {
+      if (hapusCtx !== ctx) return;
+      if (!res || !res.sukses) {
+        isi.innerHTML = '<div class="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc((res && res.pesan) || 'Gagal memuat data.') + '</div>';
+        return;
+      }
+      ctx.detail = res;
+      var d = res.data;
+      var nBerkas = (res.berkas || []).filter(function (b) { return b.link; }).length;
+      var batch = res.jumlahBatchPembayaran || 0;
+      isi.innerHTML =
+        '<div class="text-xs bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 space-y-1">' +
+          '<div><span class="text-slate-500">Nama:</span> <b class="text-slate-800">' + esc(d.nama) + '</b></div>' +
+          '<div><span class="text-slate-500">NIK:</span> <b class="font-mono text-slate-800">' + esc(d.nik) + '</b></div>' +
+          '<div><span class="text-slate-500">Layanan:</span> ' + esc(d.layanan) + '</div>' +
+          '<div><span class="text-slate-500">Wilayah:</span> ' + esc(d.kecamatan) + (d.kelurahan ? ' &middot; ' + esc(d.kelurahan) : '') + '</div>' +
+          '<div><span class="text-slate-500">Berkas terunggah:</span> ' + nBerkas + ' berkas akan dipindah ke Sampah Drive</div>' +
+        '</div>' +
+        (batch > 0 ? '<div class="text-xs p-3 mb-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800"><b>Perhatian:</b> NIK ini tercatat di ' + batch + ' batch pembayaran. Laporan pembayaran lama tetap memuat NIK tersebut.</div>' : '') +
+        '<label for="kd-hapus-nik" class="' + KELAS_LABEL + '">Ketik NIK <span class="font-mono normal-case">' + esc(d.nik) + '</span> untuk mengonfirmasi</label>' +
+        '<input type="text" id="kd-hapus-nik" autocomplete="off" inputmode="numeric" maxlength="16" placeholder="Ketik NIK di sini" class="' + KELAS_INPUT + '">';
+      var inp = $('kd-hapus-nik');
+      if (inp) inp.focus();
+    }).catch(function (e) {
+      if (hapusCtx !== ctx) return;
+      isi.innerHTML = '<div class="p-3 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium">' + esc(pesanDariError(e)) + '</div>';
+    });
+  }
+
+  function eksekusiHapusData() {
+    var ctx = hapusCtx;
+    var inp = $('kd-hapus-nik');
+    if (!ctx || !ctx.detail || !inp || D.sibuk) return;
+    var nik = inp.value.trim();
+    if (nik !== String(ctx.detail.data.nik).trim()) return;
+    D.sibuk = true;
+    var btn = $('kd-hapus-ya');
+    btn.disabled = true;
+    overlay(true, 'MENGHAPUS DATA...', 'Menghapus data dan memindahkan berkas ke Sampah Drive.');
+    api('adminHapusData', ctx.id, ctx.tahun, nik).then(function (res) {
+      if (!res || !res.sukses) {
+        toast((res && res.pesan) || 'Gagal menghapus data.', 'gagal', 8000);
+        btn.disabled = false;
+        return;
+      }
+      toast(res.pesan || 'Data dihapus.', res.perluTindakLanjut ? 'peringatan' : 'sukses', res.perluTindakLanjut ? 15000 : 6000);
+      batalkanCacheLama();
+      tutupHapus();
+      $('kd-modal-detail').classList.add('hidden');
+      D.data = null;
+      return muat();
+    }).catch(function (e) {
+      toast(pesanDariError(e), 'gagal', 8000);
+      btn.disabled = false;
+    }).then(function () {
+      D.sibuk = false;
+      overlay(false);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Seleksi baris (untuk hapus data massal)
+  // ---------------------------------------------------------------------------
+  var MAKS_PILIH = 100;
+  var UKURAN_PAKET = 10; // harus <= MAKS_DATA_MASSAL di kelolaData.ts
+
+  function jumlahPilih() { return Object.keys(S.pilih).length; }
+
+  function kotakPilih(r) {
+    return '<input type="checkbox" data-kd-pilih data-id="' + r.id + '"' + (S.pilih[r.id] ? ' checked' : '') +
+      ' aria-label="Pilih ' + esc(r.nama) + '" class="w-4 h-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer">';
+  }
+
+  function sinkronCentang() {
+    var semua = panel.querySelectorAll('[data-kd-pilih]');
+    for (var i = 0; i < semua.length; i++) semua[i].checked = !!S.pilih[semua[i].getAttribute('data-id')];
+  }
+
+  function perbaruiBar() {
+    var n = jumlahPilih();
+    var bar = $('kd-bar-pilih');
+    if (bar) bar.classList.toggle('hidden', n === 0 || !S.bolehUbah);
+    var info = $('kd-bar-info');
+    if (info) info.textContent = n + ' data dipilih' + (n >= MAKS_PILIH ? ' (batas maksimum)' : '');
+    var semua = $('kd-cek-semua');
+    if (semua) {
+      var dihalaman = S.daftar.filter(function (r) { return S.pilih[r.id]; }).length;
+      semua.checked = S.daftar.length > 0 && dihalaman === S.daftar.length;
+      semua.indeterminate = dihalaman > 0 && dihalaman < S.daftar.length;
+    }
+  }
+
+  // Kembalikan false bila gagal memilih (mis. melewati batas), supaya kotak bisa dikembalikan.
+  function ubahPilih(id, ya) {
+    id = Number(id);
+    if (!ya) { delete S.pilih[id]; return true; }
+    var r = S.daftar.filter(function (x) { return x.id === id; })[0];
+    if (!r) return false;
+    if (!S.pilih[id] && jumlahPilih() >= MAKS_PILIH) {
+      toast('Maksimal ' + MAKS_PILIH + ' data dapat dipilih sekaligus.', 'peringatan');
+      return false;
+    }
+    S.pilih[id] = { id: r.id, tahun: r.tahun, nama: r.nama, nik: r.nik, layanan: r.layanan, jumlahBerkas: r.jumlahBerkas };
+    return true;
+  }
+
+  function pilihSemuaHalaman(ya) {
+    for (var i = 0; i < S.daftar.length; i++) { if (!ubahPilih(S.daftar[i].id, ya)) break; }
+    sinkronCentang();
+    perbaruiBar();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Modal konfirmasi massal (dipakai hapus data massal dan hapus berkas massal)
+  //   fase 1 konfirmasi (daftar + form konfirmasi) -> fase 2 progres -> fase 3 hasil
+  // ---------------------------------------------------------------------------
+  var M = { opsi: null, sibuk: false };
+
+  function pasangModalMassal() {
+    if ($('kd-modal-massal')) return;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="kd-modal-massal" class="hidden fixed inset-0 z-[185] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4">' +
+        '<div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">' +
+          '<div class="px-5 pt-5 pb-3 text-center shrink-0">' +
+            '<div id="kd-massal-ikon" class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 bg-rose-100 text-rose-600 ring-8 ring-rose-50">' +
+              '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></div>' +
+            '<h3 id="kd-massal-judul" class="text-base font-bold text-slate-900"></h3>' +
+            '<p id="kd-massal-sub" class="text-xs text-slate-500 mt-1"></p>' +
+          '</div>' +
+          '<div id="kd-massal-isi" class="px-5 pb-3 overflow-y-auto flex-1"></div>' +
+          '<div id="kd-massal-kaki" class="px-5 py-4 flex items-center gap-2 border-t border-slate-100 shrink-0"></div>' +
+        '</div>' +
+      '</div>');
+    var m = $('kd-modal-massal');
+    m.addEventListener('click', function (e) {
+      if (e.target === m && !M.sibuk) tutupMassal();
+      var b = e.target.closest && e.target.closest('[data-kd]');
+      if (!b) return;
+      var a = b.getAttribute('data-kd');
+      if (a === 'massal-batal' || a === 'massal-tutup') { if (!M.sibuk) tutupMassal(); }
+      if (a === 'massal-ya') jalankanMassal();
+    });
+    m.addEventListener('input', periksaFormMassal);
+    m.addEventListener('change', periksaFormMassal);
+    m.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !M.sibuk) tutupMassal();
+      if (e.key === 'Enter' && e.target && e.target.id === 'kd-massal-kata') {
+        e.preventDefault();
+        var ya = $('kd-massal-ya');
+        if (ya && !ya.disabled) jalankanMassal();
+      }
+    });
+  }
+
+  function tutupMassal() {
+    if (M.sibuk) return;
+    $('kd-modal-massal').classList.add('hidden');
+    var selesai = M.opsi && M.opsi.hasilSiap ? M.opsi.selesai : null;
+    M.opsi = null;
+    if (selesai) selesai();
+  }
+
+  function periksaFormMassal() {
+    var o = M.opsi, ya = $('kd-massal-ya');
+    if (!o || !ya || o.fase !== 'konfirmasi') return;
+    var ok = true;
+    if (o.kata) { var k = $('kd-massal-kata'); ok = ok && !!k && k.value.trim().toUpperCase() === o.kata; }
+    if (o.ack) { var c = $('kd-massal-ack'); ok = ok && !!c && c.checked; }
+    ya.disabled = !ok;
+  }
+
+  // opsi: { judul, sub, items:[{t, s}], kata, ack, teksYa, jalankan(kabar) -> Promise<{ringkas, baris:[{st,t,s}]}>, selesai() }
+  function bukaMassal(opsi) {
+    pasangModalMassal();
+    opsi.fase = 'konfirmasi';
+    opsi.hasilSiap = false;
+    M.opsi = opsi; M.sibuk = false;
+    $('kd-massal-judul').textContent = opsi.judul;
+    $('kd-massal-sub').textContent = opsi.sub || '';
+    var daftar = opsi.items.map(function (x, i) {
+      return '<li class="flex items-start gap-2 py-1.5 ' + (i ? 'border-t border-slate-100' : '') + '"><span class="text-[10px] font-bold text-slate-400 w-5 text-right shrink-0 pt-0.5">' + (i + 1) + '</span>' +
+        '<span class="min-w-0"><span class="block text-xs font-semibold text-slate-800 break-words">' + esc(x.t) + '</span>' +
+        (x.s ? '<span class="block text-[11px] text-slate-500 break-words">' + esc(x.s) + '</span>' : '') + '</span></li>';
+    }).join('');
+    var form = '';
+    if (opsi.kata) {
+      form += '<label for="kd-massal-kata" class="' + KELAS_LABEL + ' mt-3">Ketik <span class="font-mono normal-case">' + esc(opsi.kata) + '</span> untuk mengonfirmasi</label>' +
+        '<input type="text" id="kd-massal-kata" autocomplete="off" placeholder="' + esc(opsi.kata) + '" class="' + KELAS_INPUT + '">';
+    }
+    if (opsi.ack) {
+      form += '<label class="mt-3 flex items-start gap-2 text-xs text-slate-700 cursor-pointer"><input type="checkbox" id="kd-massal-ack" class="mt-0.5 w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"><span>' + esc(opsi.ack) + '</span></label>';
+    }
+    $('kd-massal-isi').innerHTML =
+      '<div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1">' + opsi.items.length + ' item akan dihapus</div>' +
+      '<ul class="max-h-44 overflow-y-auto border border-slate-200 rounded-xl px-3 bg-slate-50">' + daftar + '</ul>' + form;
+    $('kd-massal-kaki').innerHTML =
+      '<button type="button" data-kd="massal-batal" class="flex-1 py-2.5 px-4 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-xl transition">Batal</button>' +
+      '<button type="button" data-kd="massal-ya" id="kd-massal-ya" disabled class="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">' + esc(opsi.teksYa) + '</button>';
+    $('kd-modal-massal').classList.remove('hidden');
+    var k = $('kd-massal-kata');
+    if (k) k.focus();
+    periksaFormMassal();
+  }
+
+  function jalankanMassal() {
+    var o = M.opsi;
+    if (!o || o.fase !== 'konfirmasi' || M.sibuk) return;
+    var ya = $('kd-massal-ya');
+    if (!ya || ya.disabled) return;
+    o.fase = 'progres'; M.sibuk = true;
+    $('kd-massal-kaki').innerHTML = '<div class="w-full text-center text-[11px] text-slate-500">Mohon tunggu, jangan tutup halaman ini...</div>';
+    $('kd-massal-isi').innerHTML =
+      '<div class="py-4"><div class="flex justify-between text-xs font-semibold text-slate-600 mb-1.5"><span id="kd-massal-label">Memulai...</span><span id="kd-massal-persen">0%</span></div>' +
+      '<div class="h-2.5 rounded-full bg-slate-200 overflow-hidden"><div id="kd-massal-bar" class="h-full bg-rose-500 transition-all duration-300" style="width:0%"></div></div></div>';
+    var kabar = function (selesai, total, teks) {
+      var pct = total ? Math.round((selesai / total) * 100) : 0;
+      var l = $('kd-massal-label'), p = $('kd-massal-persen'), b = $('kd-massal-bar');
+      if (l) l.textContent = teks || '';
+      if (p) p.textContent = pct + '%';
+      if (b) b.style.width = pct + '%';
+    };
+    var lanjut = function (hasil) {
+      o.fase = 'hasil'; o.hasilSiap = true; M.sibuk = false;
+      tampilHasilMassal(hasil);
+    };
+    Promise.resolve().then(function () { return o.jalankan(kabar); }).then(lanjut).catch(function (e) {
+      lanjut({ ringkas: 'Proses berhenti karena kesalahan: ' + pesanDariError(e), baris: [], gagalTotal: true });
+    });
+  }
+
+  var IKON_HASIL = {
+    ok: '<span class="text-emerald-600 font-bold shrink-0">&#10003;</span>',
+    warn: '<span class="text-amber-600 font-bold shrink-0">!</span>',
+    gagal: '<span class="text-rose-600 font-bold shrink-0">&#10007;</span>'
+  };
+
+  function tampilHasilMassal(h) {
+    var baris = h.baris || [];
+    var nGagal = baris.filter(function (b) { return b.st === 'gagal'; }).length;
+    var nWarn = baris.filter(function (b) { return b.st === 'warn'; }).length;
+    var ikon = $('kd-massal-ikon');
+    var aman = !h.gagalTotal && nGagal === 0 && nWarn === 0;
+    ikon.className = 'mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-3 ring-8 ' +
+      (aman ? 'bg-emerald-100 text-emerald-600 ring-emerald-50' : 'bg-amber-100 text-amber-600 ring-amber-50');
+    ikon.innerHTML = aman
+      ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+      : '<svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>';
+    $('kd-massal-judul').textContent = aman ? 'Selesai' : (h.gagalTotal ? 'Proses terganggu' : 'Selesai dengan catatan');
+    $('kd-massal-sub').textContent = h.ringkas || '';
+    $('kd-massal-isi').innerHTML = baris.length
+      ? '<ul class="max-h-64 overflow-y-auto border border-slate-200 rounded-xl px-3 bg-slate-50">' + baris.map(function (b, i) {
+        return '<li class="flex items-start gap-2 py-1.5 ' + (i ? 'border-t border-slate-100' : '') + '">' + (IKON_HASIL[b.st] || '') +
+          '<span class="min-w-0"><span class="block text-xs font-semibold text-slate-800 break-words">' + esc(b.t) + '</span>' +
+          (b.s ? '<span class="block text-[11px] ' + (b.st === 'ok' ? 'text-slate-500' : 'text-slate-600') + ' break-words">' + esc(b.s) + '</span>' : '') + '</span></li>';
+      }).join('') + '</ul>'
+      : '';
+    $('kd-massal-kaki').innerHTML = '<button type="button" data-kd="massal-tutup" class="w-full py-2.5 px-4 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition">Tutup</button>';
+    toast(h.ringkas || 'Selesai.', aman ? 'sukses' : 'peringatan', aman ? 5000 : 10000);
+  }
+
+  // ---- hapus data terpilih ----
+  function bukaMassalData() {
+    if (!S.bolehUbah) return;
+    var pilihan = Object.keys(S.pilih).map(function (k) { return S.pilih[k]; });
+    var n = pilihan.length;
+    if (n === 0) return;
+    var totalBerkas = pilihan.reduce(function (a, x) { return a + (x.jumlahBerkas || 0); }, 0);
+    bukaMassal({
+      judul: 'Hapus ' + n + ' data penerima?',
+      sub: 'Data dihapus PERMANEN dan tidak dapat dikembalikan. ' + totalBerkas + ' berkas di Google Drive dipindah ke Sampah Drive (dapat dipulihkan sekitar 30 hari).',
+      items: pilihan.map(function (x) { return { t: x.nama, s: 'NIK ' + x.nik + ' · ' + x.layanan }; }),
+      kata: 'HAPUS',
+      teksYa: 'Hapus ' + n + ' Data',
+      jalankan: function (kabar) { return eksekusiMassalData(pilihan, kabar); },
+      selesai: function () { batalkanCacheLama(); perbaruiBar(); muat(); }
+    });
+  }
+
+  function potong(arr, ukuran) {
+    var hasil = [];
+    for (var i = 0; i < arr.length; i += ukuran) hasil.push(arr.slice(i, i + ukuran));
+    return hasil;
+  }
+
+  function eksekusiMassalData(pilihan, kabar) {
+    var baris = [], sukses = 0, gagal = 0, perluDrive = 0, selesai = 0;
+    var paket = potong(pilihan, UKURAN_PAKET);
+    var nama = {};
+    pilihan.forEach(function (x) { nama[x.id] = x; });
+    kabar(0, pilihan.length, 'Menghapus 0 dari ' + pilihan.length + ' data...');
+
+    return paket.reduce(function (rantai, isi) {
+      return rantai.then(function () {
+        return api('adminHapusDataMassal', S.tahun, isi.map(function (x) { return { id: x.id, nik: x.nik }; })).then(function (res) {
+          if (!res || !res.sukses) throw new Error((res && res.pesan) || 'Permintaan ditolak server.');
+          res.hasil.forEach(function (h) {
+            var info = nama[h.id] || { nama: 'ID ' + h.id, nik: '' };
+            var judul = h.nama || info.nama;
+            if (h.status === 'gagal') { gagal++; baris.push({ st: 'gagal', t: judul, s: h.pesan || 'Gagal.' }); }
+            else {
+              sukses++;
+              delete S.pilih[h.id];
+              if (h.drive && h.drive.status === 'gagal') { perluDrive++; baris.push({ st: 'warn', t: judul, s: h.pesan }); }
+              else baris.push({ st: 'ok', t: judul, s: h.status === 'sudahTiada' ? 'Sudah tidak ada (kemungkinan sudah dihapus).' : 'Dihapus.' });
+            }
+          });
+        }).catch(function (e) {
+          // Permintaan gagal/terputus: server MUNGKIN sudah memproses sebagian. Jangan menyatakan gagal pasti.
+          isi.forEach(function (x) {
+            gagal++;
+            baris.push({ st: 'gagal', t: x.nama, s: 'Status tidak pasti (' + pesanDariError(e) + '). Muat ulang daftar untuk memeriksa sebelum mengulang.' });
+          });
+        }).then(function () {
+          selesai += isi.length;
+          kabar(selesai, pilihan.length, 'Menghapus ' + selesai + ' dari ' + pilihan.length + ' data...');
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      return {
+        ringkas: sukses + ' data dihapus' + (gagal ? ', ' + gagal + ' gagal' : '') +
+          (perluDrive ? ', ' + perluDrive + ' berkasnya perlu dibereskan manual di Drive' : '') + '.',
+        baris: baris
+      };
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Seleksi berkas di modal detail (hapus berkas massal)
+  // ---------------------------------------------------------------------------
+  function jumlahPilihBerkas() { return Object.keys(D.pilihBerkas).length; }
+
+  function perbaruiBarBerkas() {
+    var n = jumlahPilihBerkas();
+    var ada = D.berkas.filter(function (b) { return b.link; }).length;
+    var btn = $('kd-btn-hapus-berkas-terpilih'), semua = $('kd-berkas-semua');
+    if (btn) { btn.classList.toggle('hidden', n === 0); btn.textContent = 'Hapus Terpilih (' + n + ')'; }
+    if (semua) { semua.checked = ada > 0 && n === ada; semua.indeterminate = n > 0 && n < ada; }
+  }
+
+  function pilihSemuaBerkas(ya) {
+    D.pilihBerkas = {};
+    if (ya) D.berkas.forEach(function (b) { if (b.link) D.pilihBerkas[b.idx] = b.link; });
+    var cek = $('kd-modal-detail').querySelectorAll('input[data-kd-berkas]');
+    for (var i = 0; i < cek.length; i++) cek[i].checked = !!D.pilihBerkas[cek[i].getAttribute('data-kd-berkas')];
+    perbaruiBarBerkas();
+  }
+
+  function eksekusiHapusBerkas(daftar, id, tahun, kabar) {
+    kabar(0, 1, 'Menghapus ' + daftar.length + ' berkas...');
+    return api('adminHapusBerkasMassal', id, tahun, daftar.map(function (x) { return { idx: x.idx, link: x.link }; })).then(function (res) {
+      kabar(1, 1, 'Selesai');
+      var baris = [];
+      if (res && res.drive) {
+        res.drive.forEach(function (d) {
+          if (d.status === 'gagal') baris.push({ st: 'warn', t: d.label, s: 'Tautan dilepas, tetapi file di Drive belum dipindah ke Sampah: ' + (d.pesan || '') });
+          else baris.push({ st: 'ok', t: d.label, s: d.status === 'sudahTiada' ? 'File di Drive sudah tidak ada.' : 'Dihapus.' });
+        });
+      }
+      (res && res.konflikBerkas || []).forEach(function (k) {
+        baris.push({ st: 'gagal', t: k.label, s: 'Dilewati: berkas baru saja diganti/dihapus pengguna lain.' });
+      });
+      if (!res || !res.sukses) {
+        if (!baris.length) daftar.forEach(function (x) { baris.push({ st: 'gagal', t: x.label, s: (res && res.pesan) || 'Gagal.' }); });
+        return { ringkas: (res && res.pesan) || 'Gagal menghapus berkas.', baris: baris };
+      }
+      return { ringkas: res.pesan, baris: baris };
+    });
+  }
+
+  function bukaMassalBerkas() {
+    if (!D.data || !D.bolehUbah || D.sibuk) return;
+    var pilihan = D.berkas.filter(function (b) { return b.link && D.pilihBerkas[b.idx]; });
+    if (pilihan.length === 0) return;
+    var d = D.data, id = d.id, tahun = d.tahun;
+    bukaMassal({
+      judul: 'Hapus ' + pilihan.length + ' berkas?',
+      sub: 'Berkas milik ' + d.nama + ' dilepas dari data dan dipindah ke Sampah Google Drive (dapat dipulihkan sekitar 30 hari).',
+      items: pilihan.map(function (b) { return { t: b.label, s: '' }; }),
+      ack: 'Saya mengerti berkas ini akan dilepas dari data penerima.',
+      teksYa: 'Hapus ' + pilihan.length + ' Berkas',
+      jalankan: function (kabar) { return eksekusiHapusBerkas(pilihan, id, tahun, kabar); },
+      selesai: function () { batalkanCacheLama(); muatDetail(id, tahun); muat(); }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event: panel utama & modal detail
+  // ---------------------------------------------------------------------------
+  function aksiModalDetail(e) {
+    var b = e.target.closest && e.target.closest('[data-kd]');
+    if (!b) return;
+    switch (b.getAttribute('data-kd')) {
+      case 'tutup-detail': tutupDetail(); break;
+      case 'simpan': simpanPerubahan(); break;
+      case 'ganti': {
+        var inp = $('kd-modal-detail').querySelector('input[data-kd-file="' + b.getAttribute('data-idx') + '"]');
+        if (inp) inp.click();
+        break;
+      }
+      case 'hapus-berkas': hapusBerkas(Number(b.getAttribute('data-idx'))); break;
+      case 'hapus-berkas-terpilih': bukaMassalBerkas(); break;
+      case 'hapus-data':
+        if (D.data) bukaHapus(D.data.id, D.data.tahun);
+        break;
+    }
+  }
+
+  panel.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-kd]');
+    if (!b) return;
+    var id = Number(b.getAttribute('data-id')), tahun = Number(b.getAttribute('data-tahun'));
+    switch (b.getAttribute('data-kd')) {
+      case 'muat': muat(); break;
+      case 'tambah':
+        if (typeof tampilkanToast === 'function') toast('Isi formulir Input Data sebagai Admin Utama untuk menambah penerima baru.', 'info');
+        $('tab-input').click();
+        break;
+      case 'prev': if (S.page > 1) { S.page--; muat(); } break;
+      case 'next': if (S.page < S.totalHalaman) { S.page++; muat(); } break;
+      case 'kelola': if (id) muatDetail(id, tahun); break;
+      case 'pilih-halaman': pilihSemuaHalaman(true); break;
+      case 'kosongkan-pilih': S.pilih = {}; renderDaftar(); break;
+      case 'hapus-terpilih': bukaMassalData(); break;
+      case 'hapus': if (id) bukaHapus(id, tahun); break;
+    }
+  });
+
+  panel.addEventListener('input', function (e) {
+    if (e.target && e.target.id === 'kd-cari') {
+      clearTimeout(timerCari);
+      timerCari = setTimeout(function () { S.page = 1; muat(); }, 320);
+    }
+  });
+
+  panel.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t) return;
+    if (t.id === 'kd-cek-semua') { pilihSemuaHalaman(t.checked); renderDaftar(); return; }
+    if (t.hasAttribute && t.hasAttribute('data-kd-pilih')) {
+      if (!ubahPilih(t.getAttribute('data-id'), t.checked)) t.checked = !t.checked;
+      sinkronCentang(); perbaruiBar();
+      var tr = t.closest && t.closest('tr');
+      if (tr) tr.classList.toggle('bg-sky-50/60', t.checked);
+      return;
+    }
+    if (!t.id) return;
+    if (t.id === 'kd-tahun') { S.tahun = Number(t.value); S.pilih = {}; S.page = 1; muat(); return; }
+    if (/^kd-(kategori|layanan|kecamatan|kelengkapan)$/.test(t.id)) { S.page = 1; muat(); }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tab
+  // ---------------------------------------------------------------------------
+  var TAB_LAIN = ['tab-input', 'tab-rekap', 'tab-tools'];
+  var PANEL_LAIN = ['panel-input', 'panel-rekap', 'panel-tools'];
+
+  function nonaktifkanTab() {
+    if (typeof setTabTidakAktif === 'function') setTabTidakAktif(tab);
+    else { tab.classList.remove('bg-white', 'text-slate-900', 'shadow-sm'); tab.classList.add('text-white', 'hover:bg-slate-700'); }
+  }
+
+  TAB_LAIN.forEach(function (id) {
+    var el = $(id);
+    if (!el) return;
+    el.addEventListener('click', function () {
+      panel.classList.add('hidden');
+      nonaktifkanTab();
+    });
+  });
+
+  tab.addEventListener('click', function () {
+    if (!adalahUtama()) return; // pengaman tambahan; server tetap menolak non-UTAMA
+    TAB_LAIN.forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      if (typeof setTabTidakAktif === 'function') setTabTidakAktif(el);
+    });
+    PANEL_LAIN.forEach(function (id) { var el = $(id); if (el) el.classList.add('hidden'); });
+    var refresh = $('btn-refresh-data');
+    if (refresh) refresh.classList.add('hidden');
+    if (typeof setTabAktif === 'function') setTabAktif(tab);
+    else { tab.classList.remove('text-white', 'hover:bg-slate-700'); tab.classList.add('bg-white', 'text-slate-900', 'shadow-sm'); }
+    try { panelAktif = 'kelola'; } catch (_e) { /* panelAktif tidak tersedia */ }
+    panel.classList.remove('hidden');
+
+    if (!S.siap) { S.siap = true; renderKerangka(); }
+    muat();
+  });
+})();

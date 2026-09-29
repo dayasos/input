@@ -264,7 +264,7 @@ export async function ambilDetailPenerimaPerBaris(token: string, nomorBarisAsli:
 // Dipakai editDataPenerima untuk teks maupun berkas.
 // Sumber: header appendRow di Kode.gs baris 997-1007 & KOLOM_TEKS_BOLEH/KOLOM_BERKAS baris 2635-2650.
 // ---------------------------------------------------------------------------
-const MAP_IDX_KE_KOLOM_TEKS: Record<number, string> = {
+export const MAP_IDX_KE_KOLOM_TEKS: Record<number, string> = {
   1: "nama",
   2: "nik",
   3: "jenis_kelamin",
@@ -281,7 +281,7 @@ const MAP_IDX_KE_KOLOM_TEKS: Record<number, string> = {
   16: "status_bpjs_tk",
 };
 
-const MAP_IDX_KE_KOLOM_BERKAS: Record<number, string> = {
+export const MAP_IDX_KE_KOLOM_BERKAS: Record<number, string> = {
   18: "link_ktp",
   19: "link_buku_rekening",
   20: "link_surat_permohonan",
@@ -297,7 +297,7 @@ const MAP_IDX_KE_KOLOM_BERKAS: Record<number, string> = {
 };
 
 // Label kolom untuk riwayat_edit (sama persis labelKolom_() Kode.gs baris 3102-3110)
-function labelKolom(idx: number): string {
+export function labelKolom(idx: number): string {
   const MAP: Record<number, string> = {
     1: "Nama Lengkap", 2: "NIK", 3: "Jenis Kelamin", 4: "Tempat Lahir",
     5: "Tanggal Lahir", 6: "Alamat Domisili", 8: "Tempat Tugas", 9: "Alamat Tugas",
@@ -313,7 +313,7 @@ function labelKolom(idx: number): string {
 }
 
 // Hitung umur berdasarkan patokan 1 Januari TAHUN_AKTIF (port hitungUmur_ Kode.gs baris 3112-3127)
-function hitungUmur(tglStr: string): number | null {
+export function hitungUmur(tglStr: string): number | null {
   try {
     const parts = tglStr.split(/[-/]/);
     if (parts.length < 3) return null;
@@ -335,7 +335,7 @@ function hitungUmur(tglStr: string): number | null {
 }
 
 // Konversi "dd-MM-yyyy" → "yyyy-MM-dd" untuk Postgres date type
-function tglDDMMYYYYkeISO(tglStr: string): string | null {
+export function tglDDMMYYYYkeISO(tglStr: string): string | null {
   try {
     const parts = tglStr.trim().split(/[-/]/);
     if (parts.length < 3) return null;

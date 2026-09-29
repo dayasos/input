@@ -273,6 +273,13 @@ const MUTATION_INVALIDATIONS = {
   tambahRumahIbadah: ['rumah_ibadah', 'master'],
   ubahRumahIbadah: ['rumah_ibadah', 'master'],
   hapusRumahIbadah: ['rumah_ibadah', 'master'],
+
+  // Kelola Data & Berkas (khusus UTAMA): mengubah/menghapus penerima atau berkasnya memengaruhi
+  // daftar Lihat Data, dashboard, kuota (hitungan terpakai), data_detail, dan riwayat.
+  adminUbahData: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
+  adminHapusBerkasMassal: ['penerima', 'penerima_detail', 'dashboard', 'riwayat'],
+  adminHapusData: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
+  adminHapusDataMassal: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
 };
 
 // Daftar PUTIH (whitelist) aksi baca murni yang aman diulang otomatis kalau koneksi timeout/putus
@@ -296,6 +303,10 @@ const AKSI_BACA_AMAN_DIRETRY = new Set([
   'ambilDetailBatchPembayaran',
   'getDaftarBerkasTidakLengkapUntukWA',
   'ambilDaftarAkunLengkap',
+  // Kelola Data & Berkas: dua aksi BACA murni (tanpa cache SWR supaya selalu segar). Aksi tulisnya
+  // (adminUbahData/adminHapusBerkasMassal/adminHapusData/adminHapusDataMassal) SENGAJA tidak di sini -- tidak boleh diulang otomatis.
+  'adminDaftarData',
+  'adminDetailData',
   'ping',
 ]);
 
