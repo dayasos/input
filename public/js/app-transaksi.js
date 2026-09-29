@@ -784,13 +784,15 @@ async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
       });
-      const json = await response.json();
+      const text = await response.text();
+      let json = null;
+      try { json = JSON.parse(text); } catch (_e) { }
       if (json && (json.result || json.sukses)) {
         hasil = json.result || json;
         if (hasil.sukses) break;
         throw new Error(hasil.pesan || 'Gagal dari Google Drive');
       } else {
-        throw new Error(json ? (json.pesan || json.error) : 'Respon Google Drive tidak valid.');
+        throw new Error(json ? (json.pesan || json.error) : 'Respon server Drive tidak valid.');
       }
     } catch (err) {
       lastError = err;
@@ -937,7 +939,12 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
     }
   });
   unggahBerkasKeDriveGAS(
-    { kecamatan: dataObjek.controlKecamatan, layanan: dataObjek.selectLayanan, nama: dataObjek.inputNama, nik: dataObjek.inputNik },
+    {
+      kecamatan: (dataObjek.controlKecamatan || (typeof dataPengguna !== 'undefined' && dataPengguna ? dataPengguna.kecamatan : '') || '').toString().trim().toUpperCase(),
+      layanan: dataObjek.selectLayanan,
+      nama: dataObjek.inputNama,
+      nik: dataObjek.inputNik
+    },
     berkasUntukUpload
   ).then(function (hasilUpload) {
     if (!hasilUpload || !hasilUpload.sukses) {
