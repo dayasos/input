@@ -990,11 +990,14 @@
   }
 
   // Buang satu baris dari daftar yang sedang tampil tanpa menunggu server (setelah server memastikan terhapus).
-  function hapusBarisLokal(id) {
+  function hapusBarisLokal(id) { hapusBarisLokalBanyak([id]); }
+
+  function hapusBarisLokalBanyak(ids) {
+    var buang = {};
+    ids.forEach(function (id) { buang[id] = true; delete S.pilih[id]; });
     var sebelum = S.daftar.length;
-    S.daftar = S.daftar.filter(function (r) { return r.id !== id; });
-    if (S.daftar.length !== sebelum) S.total = Math.max(0, S.total - 1);
-    delete S.pilih[id];
+    S.daftar = S.daftar.filter(function (r) { return !buang[r.id]; });
+    S.total = Math.max(0, S.total - (sebelum - S.daftar.length));
     renderDaftar();
   }
 
@@ -1165,6 +1168,9 @@
     };
     var lanjut = function (hasil) {
       o.fase = 'hasil'; o.hasilSiap = true; M.sibuk = false;
+      // Segarkan daftar/detail SEKARANG (di latar), bukan menunggu modal hasil ditutup -- kalau tidak,
+      // baris yang sudah terhapus masih terlihat di belakang modal.
+      try { if (o.setelahProses) o.setelahProses(); } catch (err) { if (window.console) console.error('[kelola-data] setelahProses:', err); }
       tampilHasilMassal(hasil);
     };
     Promise.resolve().then(function () { return o.jalankan(kabar); }).then(lanjut).catch(function (e) {
@@ -1216,7 +1222,8 @@
       kata: 'HAPUS',
       teksYa: 'Hapus ' + n + ' Data',
       jalankan: function (kabar) { return eksekusiMassalData(pilihan, kabar); },
-      selesai: function () { batalkanCacheLama(); perbaruiBar(); muat(); }
+      setelahProses: function () { batalkanCacheLama(); perbaruiBar(); muat(); },
+      selesai: function () { perbaruiBar(); }
     });
   }
 
@@ -1249,6 +1256,9 @@
         return api('adminHapusDataMassal', S.tahun, isi.map(function (x) { return { id: x.id, nik: x.nik }; })).then(function (res) {
           if (!res || !res.sukses) throw new Error((res && res.pesan) || 'Permintaan ditolak server.');
           beruntun = 0;
+          // Baris yang sudah pasti terhapus langsung hilang dari tabel per paket (tidak menunggu semua paket).
+          var terhapus = res.hasil.filter(function (h) { return h.status !== 'gagal'; }).map(function (h) { return h.id; });
+          if (terhapus.length) hapusBarisLokalBanyak(terhapus);
           res.hasil.forEach(function (h) {
             var info = nama[h.id] || { nama: 'ID ' + h.id, nik: '' };
             var judul = h.nama || info.nama;
@@ -1336,7 +1346,7 @@
       ack: 'Saya mengerti berkas ini akan dilepas dari data penerima.',
       teksYa: 'Hapus ' + pilihan.length + ' Berkas',
       jalankan: function (kabar) { return eksekusiHapusBerkas(pilihan, id, tahun, kabar); },
-      selesai: function () { batalkanCacheLama(); muatDetail(id, tahun); muat(); }
+      setelahProses: function () { batalkanCacheLama(); muatDetail(id, tahun); muat(); }
     });
   }
 
@@ -1488,12 +1498,27 @@
 
   // Mutasi dari tab/perangkat lain (BroadcastChannel & Realtime lewat api-bridge) membuang cache domain
   // 'penerima': segarkan daftar tanpa mengganggu modal/proses yang sedang dikerjakan admin ini.
+  var timerEvent = null;
   window.addEventListener('djpm:swr-invalidated', function (ev) {
     if (abaikanEvent || !S.siap || !adalahUtama() || !token()) return;
     var domains = (ev.detail && ev.detail.domains) || [];
     if (domains.indexOf('*') === -1 && domains.indexOf('penerima') === -1) return;
+    // Event DB (CDC) tidak membuang cache detail padahal barisnya berubah: buang di sini supaya detail
+    // yang dibuka berikutnya tidak memakai salinan lama (memicu event lagi -> dijaga abaikanEvent).
+    abaikanEvent = true;
+    try {
+      if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') window.djpmCache.invalidate(['penerima_detail'], false);
+    } finally { abaikanEvent = false; }
     // Tab ini sedang tidak dibuka (mis. data diubah lewat Lihat Data): cukup tandai, dimuat saat dibuka lagi.
     if (panel.classList.contains('hidden')) { S.kotor = true; return; }
-    if (sedangSibuk()) S.kotor = true; else muat();
+    if (sedangSibuk()) { S.kotor = true; return; }
+    // Satu perubahan datang lewat dua jalur (trigger DB + siaran antar-browser), dan hapus massal memicu
+    // beberapa event beruntun: gabungkan jadi satu muat ulang.
+    clearTimeout(timerEvent);
+    timerEvent = setTimeout(function () {
+      if (panel.classList.contains('hidden')) { S.kotor = true; return; }
+      if (sedangSibuk()) { S.kotor = true; return; }
+      muat();
+    }, 400);
   });
 })();
