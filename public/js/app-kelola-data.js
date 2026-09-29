@@ -41,7 +41,8 @@
 
   // Kelas input/label disamakan dengan panel Lihat Data (filter & modal detail).
   var KELAS_INPUT = 'w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed';
-  var KELAS_LABEL = 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1';
+  // slate-500 (bukan 400 seperti tampilan baca di Lihat Data): label ini menempel pada kolom isian, kontrasnya harus cukup.
+  var KELAS_LABEL = 'block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1';
   var KELAS_LABEL_FILTER = 'block text-xs font-medium text-slate-600 mb-1';
   var KELAS_FILTER = KELAS_INPUT;
   var KELAS_TOMBOL_TEPI = 'bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0';
@@ -185,7 +186,7 @@
       '<div class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-sm text-xs shrink-0">' +
       '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>' +
       '<span class="font-bold text-slate-500 uppercase tracking-wider text-[11px]">Tahun</span>' +
-      '<select id="kd-tahun" class="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer"><option value="">...</option></select>' +
+      '<select id="kd-tahun" aria-label="Tahun data" class="text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer rounded focus-visible:ring-2 focus-visible:ring-sky-500/40"><option value="">...</option></select>' +
       '</div>' +
       '<button type="button" data-kd="tambah" id="kd-btn-tambah" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">' + IKON_TAMBAH + '<span>Tambah Data</span></button>' +
       '<button type="button" data-kd="muat" class="' + KELAS_TOMBOL_TEPI + '" title="Refresh Data">' + IKON_MUAT + '<span>Refresh</span></button>' +
@@ -265,7 +266,7 @@
     document.body.insertAdjacentHTML('beforeend',
       // ── Modal detail / edit ──
       // Kerangka sama dengan modal detail Lihat Data (header putih, sudut membulat besar, kaki abu muda).
-      '<div id="kd-modal-detail" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">' +
+      '<div id="kd-modal-detail" role="dialog" aria-modal="true" aria-labelledby="kd-detail-judul" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 md:p-6 overflow-hidden">' +
       '<div class="bg-white rounded-2xl sm:rounded-3xl w-full max-w-lg sm:max-w-3xl lg:max-w-5xl shadow-2xl border border-slate-200/80 flex flex-col max-h-[94vh] max-h-[94dvh] sm:max-h-[90vh] sm:max-h-[90dvh]">' +
       '<div class="shrink-0 flex justify-between items-center px-5 sm:px-7 py-4 border-b border-slate-100 bg-white rounded-t-2xl sm:rounded-t-3xl">' +
       '<div class="flex items-center gap-2.5 min-w-0">' +
@@ -353,7 +354,8 @@
   // -- pola yang sama dengan Lihat Data.
   function setMemuat(ya) {
     var h = $('kd-hasil');
-    if (h) h.classList.toggle('opacity-60', !!ya && S.daftar.length > 0);
+    // pointer-events-none: baris lama yang sedang diganti tidak boleh diklik (Kelola/Hapus) selagi memuat.
+    if (h) { var pudar = !!ya && S.daftar.length > 0; h.classList.toggle('opacity-60', pudar); h.classList.toggle('pointer-events-none', pudar); }
   }
 
   function skeletonTabel() {
@@ -384,9 +386,12 @@
     var sel = $('kd-tahun');
     if (!sel) return;
     var list = res.tahunTersedia || [res.tahunAktif];
-    sel.innerHTML = list.map(function (t) {
+    var html = list.map(function (t) {
       return '<option value="' + t + '"' + (Number(t) === Number(res.tahun) ? ' selected' : '') + '>' + t + (Number(t) === Number(res.tahunAktif) ? ' (Aktif)' : '') + '</option>';
     }).join('');
+    // Balasan cache lalu balasan segar sering identik: jangan bangun ulang (menutup dropdown yang sedang dibuka).
+    if (sel.dataset.isi !== html) { sel.innerHTML = html; sel.dataset.isi = html; }
+    sel.value = String(res.tahun);
   }
 
   // Stale-while-revalidate lewat api-bridge (domain 'penerima'): bila ada salinan cache, daftar tampil
@@ -511,8 +516,8 @@
     var NONAKTIF = BASE + ' bg-slate-100/60 border border-slate-200/50 text-slate-300 cursor-not-allowed';
     var ikonPrev = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>';
     var ikonNext = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>';
-    var noHal = function (n) { return '<button type="button" data-kd="hal" data-hal="' + n + '" class="' + (n === sekarang ? AKTIF : PASIF) + '">' + n + '</button>'; };
-    var h = '<button type="button" data-kd="prev"' + (sekarang === 1 ? ' disabled' : '') + ' class="' + (sekarang === 1 ? NONAKTIF : PASIF) + '" title="Halaman Sebelumnya">' + ikonPrev + '</button>';
+    var noHal = function (n) { return '<button type="button" data-kd="hal" data-hal="' + n + '" class="' + (n === sekarang ? AKTIF : PASIF) + '" aria-label="Halaman ' + n + '"' + (n === sekarang ? ' aria-current="page"' : '') + '>' + n + '</button>'; };
+    var h = '<button type="button" data-kd="prev"' + (sekarang === 1 ? ' disabled' : '') + ' class="' + (sekarang === 1 ? NONAKTIF : PASIF) + '" title="Halaman Sebelumnya" aria-label="Halaman sebelumnya">' + ikonPrev + '</button>';
     if (mulai > 1) {
       h += noHal(1);
       if (mulai > 2) h += '<span class="px-1 text-slate-400 text-xs">&hellip;</span>';
@@ -522,7 +527,7 @@
       if (akhir < total - 1) h += '<span class="px-1 text-slate-400 text-xs">&hellip;</span>';
       h += noHal(total);
     }
-    h += '<button type="button" data-kd="next"' + (sekarang === total ? ' disabled' : '') + ' class="' + (sekarang === total ? NONAKTIF : PASIF) + '" title="Halaman Berikutnya">' + ikonNext + '</button>';
+    h += '<button type="button" data-kd="next"' + (sekarang === total ? ' disabled' : '') + ' class="' + (sekarang === total ? NONAKTIF : PASIF) + '" title="Halaman Berikutnya" aria-label="Halaman berikutnya">' + ikonNext + '</button>';
     wrap.innerHTML = h;
   }
 
@@ -964,21 +969,43 @@
       tutupHapus();
       $('kd-modal-detail').classList.add('hidden');
       D.data = null; D.seq++;
-      return muat();
-    }).catch(function (e) {
-      toast(pesanDariError(e), 'gagal', 8000);
+      // Cepat: baris langsung hilang dari tabel dan overlay dilepas; daftar resmi dimuat di latar
+      // (bukan ditunggu). Bila muat ulang gagal, baris tetap sudah benar karena server sudah menghapus.
+      hapusBarisLokal(ctx.id);
+      overlay(false);
+      D.sibuk = false;
+      muat();
+    }, function (e) {
+      // Jaringan putus/timeout: server MUNGKIN sudah menghapus. Jangan menyatakan gagal pasti --
+      // muat ulang daftar (tanpa cache) supaya admin melihat keadaan sebenarnya.
+      toast('Status penghapusan belum pasti (' + pesanDariError(e) + '). Daftar dimuat ulang untuk memeriksa; jangan ulangi sebelum memastikan.', 'peringatan', 10000);
       btn.disabled = false;
+      segarkan();
+    }).catch(function (err) {
+      if (window.console) console.error('[kelola-data] hapus data:', err);
     }).then(function () {
       D.sibuk = false;
       overlay(false);
     });
   }
 
+  // Buang satu baris dari daftar yang sedang tampil tanpa menunggu server (setelah server memastikan terhapus).
+  function hapusBarisLokal(id) {
+    var sebelum = S.daftar.length;
+    S.daftar = S.daftar.filter(function (r) { return r.id !== id; });
+    if (S.daftar.length !== sebelum) S.total = Math.max(0, S.total - 1);
+    delete S.pilih[id];
+    renderDaftar();
+  }
+
   // ---------------------------------------------------------------------------
   // Seleksi baris (untuk hapus data massal)
   // ---------------------------------------------------------------------------
   var MAKS_PILIH = 100;
-  var UKURAN_PAKET = 10; // harus <= MAKS_DATA_MASSAL di kelolaData.ts
+  // Harus <= MAKS_DATA_MASSAL di kelolaData.ts. 8 = tepat 2 giliran pembersihan Drive (PARALEL_DRIVE = 4)
+  // per permintaan: lebih singkat per data daripada 10 (3 giliran) dan jauh dari batas waktu klien 58 dtk.
+  var UKURAN_PAKET = 8;
+  var MAKS_GAGAL_BERUNTUN = 2; // paket yang gagal total berturut-turut sebelum sisa pilihan dihentikan
 
   function jumlahPilih() { return Object.keys(S.pilih).length; }
 
@@ -1200,7 +1227,7 @@
   }
 
   function eksekusiMassalData(pilihan, kabar) {
-    var baris = [], sukses = 0, gagal = 0, perluDrive = 0, selesai = 0;
+    var baris = [], sukses = 0, gagal = 0, perluDrive = 0, selesai = 0, dilewati = 0, beruntun = 0;
     var paket = potong(pilihan, UKURAN_PAKET);
     var nama = {};
     pilihan.forEach(function (x) { nama[x.id] = x; });
@@ -1208,8 +1235,20 @@
 
     return paket.reduce(function (rantai, isi) {
       return rantai.then(function () {
+        // Koneksi/sesi putus: jangan menunggu tiap paket sisa sampai timeout 58 dtk. Yang belum dikirim
+        // TIDAK terhapus dan tetap terpilih, jadi bisa diulang setelah masalahnya beres.
+        if (beruntun >= MAKS_GAGAL_BERUNTUN) {
+          isi.forEach(function (x) {
+            dilewati++;
+            baris.push({ st: 'warn', t: x.nama, s: 'Dilewati: proses dihentikan setelah beberapa kegagalan beruntun. Data ini belum dihapus.' });
+          });
+          selesai += isi.length;
+          kabar(selesai, pilihan.length, 'Proses dihentikan...');
+          return;
+        }
         return api('adminHapusDataMassal', S.tahun, isi.map(function (x) { return { id: x.id, nik: x.nik }; })).then(function (res) {
           if (!res || !res.sukses) throw new Error((res && res.pesan) || 'Permintaan ditolak server.');
+          beruntun = 0;
           res.hasil.forEach(function (h) {
             var info = nama[h.id] || { nama: 'ID ' + h.id, nik: '' };
             var judul = h.nama || info.nama;
@@ -1223,6 +1262,7 @@
           });
         }).catch(function (e) {
           // Permintaan gagal/terputus: server MUNGKIN sudah memproses sebagian. Jangan menyatakan gagal pasti.
+          beruntun++;
           isi.forEach(function (x) {
             gagal++;
             baris.push({ st: 'gagal', t: x.nama, s: 'Status tidak pasti (' + pesanDariError(e) + '). Muat ulang daftar untuk memeriksa sebelum mengulang.' });
@@ -1234,7 +1274,7 @@
       });
     }, Promise.resolve()).then(function () {
       return {
-        ringkas: sukses + ' data dihapus' + (gagal ? ', ' + gagal + ' gagal' : '') +
+        ringkas: sukses + ' data dihapus' + (gagal ? ', ' + gagal + ' gagal' : '') + (dilewati ? ', ' + dilewati + ' dilewati' : '') +
           (perluDrive ? ', ' + perluDrive + ' berkasnya perlu dibereskan manual di Drive' : '') + '.',
         baris: baris
       };
@@ -1426,6 +1466,24 @@
     } else {
       muat();
     }
+  });
+
+  // Menutup/menyegarkan tab di tengah simpan, unggah, atau hapus membuat hasilnya tidak terlihat (dan
+  // hapus massal berhenti di tengah). Browser hanya menampilkan peringatan bawaannya.
+  window.addEventListener('beforeunload', function (e) {
+    if (!D.sibuk && !M.sibuk) return;
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  });
+
+  // Esc menutup modal detail (lewat tutupDetail, jadi tetap menanyakan bila ada perubahan belum
+  // disimpan). Diabaikan bila modal hapus/massal sedang terbuka di atasnya -- keduanya punya Esc sendiri.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || D.sibuk || M.sibuk) return;
+    var terbuka = function (id) { var el = $(id); return !!el && !el.classList.contains('hidden'); };
+    if (terbuka('kd-modal-hapus') || terbuka('kd-modal-massal') || !terbuka('kd-modal-detail')) return;
+    tutupDetail();
   });
 
   // Mutasi dari tab/perangkat lain (BroadcastChannel & Realtime lewat api-bridge) membuang cache domain

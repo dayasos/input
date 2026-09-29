@@ -61,6 +61,18 @@ const ID_FOLDER_DRIVE = /^[A-Za-z0-9_-]{15,}$/; // ID Drive tidak memuat "/"; pa
 // ---------------------------------------------------------------------------
 // BACA
 // ---------------------------------------------------------------------------
+
+// Daftar tahun yang punya data hanya berubah saat tahun baru mulai dipakai. Tanpa memo, setiap
+// pemuatan daftar (tiap ketikan pencarian & ganti halaman) memindai seluruh partisi `penerima`
+// hanya untuk mengisi pilihan tahun. Memo per-instance, kedaluwarsa 5 menit.
+let memoTahun: { waktu: number; daftar: number[] } | null = null;
+async function daftarTahunDiDb(): Promise<number[]> {
+  if (memoTahun && Date.now() - memoTahun.waktu < 5 * 60_000) return memoTahun.daftar;
+  const rows = await sql`select distinct tahun from penerima order by tahun desc`;
+  memoTahun = { waktu: Date.now(), daftar: rows.map((r) => Number(r.tahun)) };
+  return memoTahun.daftar;
+}
+
 export async function adminDaftarData(token: string, filter: Record<string, unknown> = {}) {
   try {
     await wajibUtama(token);
@@ -130,7 +142,7 @@ export async function adminDaftarData(token: string, filter: Record<string, unkn
         ? await sql`select count(*)::int as n from (${dasar}) t ${saringKelengkapan}`
         : await sql`select count(*)::int as n from penerima where ${where}`,
       await sql`select * from (${dasar}) t ${saringKelengkapan} order by nama, id limit ${limit} offset ${offset}`,
-      await sql`select distinct tahun from penerima order by tahun desc`,
+      await daftarTahunDiDb(),
     ];
     const total = Number(hitung[0]?.n) || 0;
 
@@ -156,7 +168,7 @@ export async function adminDaftarData(token: string, filter: Record<string, unkn
       limit,
       tahun,
       tahunAktif: TAHUN_AKTIF,
-      tahunTersedia: Array.from(new Set([TAHUN_AKTIF, ...tahunRows.map((r) => Number(r.tahun))])).sort((a, b) => b - a),
+      tahunTersedia: Array.from(new Set([TAHUN_AKTIF, ...tahunRows])).sort((a, b) => b - a),
       bolehUbah: tahun === TAHUN_AKTIF,
       opsi: { layananKecamatan: master.kecamatan, layananKemenag: master.kemenag, kecamatan: KECAMATAN_MEDAN_URUT },
     };
