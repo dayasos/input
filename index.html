@@ -178,60 +178,20 @@
   </style>
   <style>
     /* Critical Header Anti-FOUC & Anti-Blink (Instant Render 0ms) */
-    header {
-      background-color: #0f172a !important;
-      /* bg-slate-900 */
-      color: #ffffff !important;
-      /* text-white */
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 50 !important;
-    }
-
-    header h1 {
-      font-size: 1.125rem !important;
-      /* text-lg: 18px */
-      line-height: 1.375 !important;
-      /* leading-snug */
-      font-weight: 700 !important;
-      /* font-bold */
-      letter-spacing: 0.025em !important;
-      /* tracking-wide */
-      color: #ffffff !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      text-rendering: optimizeLegibility;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    header p {
-      font-size: 0.75rem !important;
-      /* text-xs: 12px */
-      color: #e0f2fe !important;
-      /* text-sky-100 */
-      margin-top: 0.125rem !important;
-      /* mt-0.5 */
-    }
-
-    @media (max-width: 640px) {
-      header h1 {
-        font-size: 0.875rem !important;
-        line-height: 1.3 !important;
-      }
-
-      header p {
-        font-size: 0.7rem !important;
-      }
-    }
-
-    /* Anti-Flicker untuk elemen yang butuh Auth / Role */
-    html:not(.is-logged-in) .auth-show {
-      display: none !important;
-    }
-
-    html:not(.role-utama) .utama-show {
-      display: none !important;
-    }
+    header { background-color: #0f172a !important; color: #ffffff !important; position: sticky !important; top: 0 !important; z-index: 50 !important; }
+    header h1 { font-size: 1.125rem !important; line-height: 1.375 !important; font-weight: 700 !important; letter-spacing: 0.025em !important; color: #ffffff !important; margin: 0 !important; padding: 0 !important; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+    header p { font-size: 0.75rem !important; color: #e0f2fe !important; margin-top: 0.125rem !important; }
+    @media (max-width: 640px) { header h1 { font-size: 0.875rem !important; line-height: 1.3 !important; } header p { font-size: 0.7rem !important; } }
+    html:not(.is-logged-in) .auth-show { display: none !important; }
+    html:not(.role-utama) .utama-show { display: none !important; }
+    .header-scroll { -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; }
+    .header-scroll::-webkit-scrollbar { display: none; }
+    header button { outline: none !important; -webkit-tap-highlight-color: transparent; }
+    header button:focus, header button:focus-visible { outline: none !important; }
+    .tab-nav-aktif { background-color: #ffffff !important; color: #0f172a !important; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 10px rgba(255, 255, 255, 0.35) !important; outline: none !important; }
+    .tab-kelola-aktif { background-color: #d97706 !important; border-color: #fde047 !important; box-shadow: inset 0 0 0 1.5px #fde047, 0 0 8px rgba(253, 224, 71, 0.45) !important; outline: none !important; }
+    .tab-kelola-user-aktif { background-color: #4f46e5 !important; border-color: #a5b4fc !important; box-shadow: inset 0 0 0 1.5px #a5b4fc, 0 0 8px rgba(165, 180, 252, 0.5) !important; outline: none !important; }
+    .tab-kelola-ibadah-aktif { background-color: #059669 !important; border-color: #6ee7b7 !important; box-shadow: inset 0 0 0 1.5px #6ee7b7, 0 0 8px rgba(110, 231, 183, 0.5) !important; outline: none !important; }
   </style>
   <script>
     (function () {
@@ -318,36 +278,37 @@
           </p>
         </div>
       </div>
-      <div class="flex items-center gap-2 sm:gap-3 flex-wrap justify-center lg:justify-end w-full lg:w-auto">
+      <div class="flex flex-col items-center lg:items-end gap-2 w-full max-w-[485px] lg:w-[485px] shrink-0">
+        <!-- Baris 1: Navigasi Modul Utama (Tinggi seragam 36px / h-9, rata kanan-kiri, scrollable di HP) -->
         <nav
-          class="flex gap-1.5 sm:gap-2 bg-slate-800 p-1 rounded-lg text-xs sm:text-sm font-medium shrink-0 max-w-full overflow-x-auto">
+          class="w-full flex items-center justify-between gap-1 sm:gap-1.5 bg-slate-800/95 p-1 rounded-xl border border-slate-700/60 shadow-inner overflow-x-auto header-scroll">
           <button id="tab-input"
-            class="px-3 sm:px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5 whitespace-nowrap">
+            class="h-9 px-2.5 sm:px-3 rounded-lg bg-white text-slate-900 shadow-sm tab-nav-aktif outline-none font-semibold text-xs transition flex items-center justify-center gap-1.5 whitespace-nowrap flex-1 min-w-[85px] sm:min-w-0">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
             </svg>
-            <span>INPUT DATA</span>
+            <span>Input Data</span>
           </button>
           <button id="tab-rekap"
-            class="px-3 sm:px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5 whitespace-nowrap">
+            class="h-9 px-2.5 sm:px-3 rounded-lg text-slate-200 hover:text-white hover:bg-slate-700/70 outline-none font-semibold text-xs transition flex items-center justify-center gap-1.5 whitespace-nowrap flex-1 min-w-[85px] sm:min-w-0">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            <span>LIHAT DATA</span>
+            <span>Lihat Data</span>
           </button>
           <button id="tab-tools"
-            class="utama-show px-3 sm:px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5 whitespace-nowrap">
+            class="utama-show h-9 px-2.5 sm:px-3 rounded-lg text-slate-200 hover:text-white hover:bg-slate-700/70 outline-none font-semibold text-xs transition flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
             </svg>
-            <span>TOOLS</span>
+            <span>Tools</span>
           </button>
           <button id="btn-retur-kematian"
-            class="auth-show px-2.5 sm:px-3 py-2 rounded-md border border-white/40 text-white hover:bg-slate-700 text-xs sm:text-sm font-medium transition flex items-center gap-1.5 whitespace-nowrap"
+            class="auth-show h-9 px-2.5 sm:px-3 rounded-lg border border-amber-400/40 text-amber-200 hover:bg-amber-400/10 hover:text-amber-100 outline-none font-semibold text-xs transition flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
             title="Laporan Retur & Kematian">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-300 flex-shrink-0" fill="none"
               viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -357,56 +318,65 @@
             <span>Retur & Kematian</span>
           </button>
         </nav>
-        <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-center sm:justify-start">
-          <button id="tab-kelola-data"
-            class="utama-show bg-amber-600/80 hover:bg-amber-600 active:scale-95 border border-amber-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap shrink-0"
-            title="Kelola Data & Berkas (Admin Utama)">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-100 shrink-0" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16M9 4v16" />
-            </svg>
-            <span>Kelola Data</span>
-          </button>
-          <button id="btn-kelola-user"
-            class="utama-show bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap shrink-0"
-            title="Kelola Pengguna (Admin Utama)">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-200 shrink-0" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-            <span>Kelola User</span>
-          </button>
-          <button id="btn-kelola-rumah-ibadah"
-            class="utama-show bg-emerald-600/80 hover:bg-emerald-600 active:scale-95 border border-emerald-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap shrink-0"
-            title="Kelola Data Rumah Ibadah (Admin Utama)">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-200 shrink-0" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-            <span>Data Ibadah</span>
-          </button>
-          <button id="fab-ganti-password"
-            class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-white w-9 h-9 sm:w-10 sm:h-10 rounded-lg shadow flex items-center justify-center text-sm transition"
-            title="Akun Saya">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-300" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-            </svg>
-          </button>
-          <button id="btn-keluar-aplikasi"
-            class="auth-show bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-2.5 sm:px-3.5 h-9 sm:h-10 rounded-lg shadow flex items-center justify-center gap-1.5 text-xs font-semibold transition"
-            title="Keluar Aplikasi">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            <span>Keluar</span>
-          </button>
+
+        <!-- Baris 2: Toolbar Admin Utama & Aksi Pengguna (Tinggi seragam 36px / h-9, rata kanan-kiri, scrollable di HP) -->
+        <div class="w-full flex items-center justify-between gap-1.5 sm:gap-2 overflow-x-auto header-scroll py-1 -my-1">
+          <div class="utama-show flex items-center gap-1 sm:gap-1.5 flex-1 min-w-[270px] sm:min-w-0">
+            <button id="tab-kelola-data"
+              class="utama-show bg-amber-600/80 hover:bg-amber-600 active:scale-95 border border-amber-500/50 text-white px-2 sm:px-2.5 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap flex-1 min-w-0"
+              title="Kelola Data & Berkas (Admin Utama)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-100 shrink-0" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16M9 4v16" />
+              </svg>
+              <span>Kelola Data</span>
+            </button>
+            <button id="btn-kelola-user"
+              class="utama-show bg-indigo-600/80 hover:bg-indigo-600 active:scale-95 border border-indigo-500/50 text-white px-2 sm:px-2.5 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap flex-1 min-w-0"
+              title="Kelola Pengguna (Admin Utama)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-200 shrink-0" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+              <span>Kelola User</span>
+            </button>
+            <button id="btn-kelola-rumah-ibadah"
+              class="utama-show bg-emerald-600/80 hover:bg-emerald-600 active:scale-95 border border-emerald-500/50 text-white px-2 sm:px-2.5 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap flex-1 min-w-0"
+              title="Kelola Data Rumah Ibadah (Admin Utama)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-200 shrink-0" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+              <span>Data Ibadah</span>
+            </button>
+          </div>
+
+          <div class="utama-show hidden sm:block w-px h-5 bg-slate-700/80 mx-0.5 shrink-0"></div>
+
+          <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+            <button id="fab-ganti-password"
+              class="auth-show bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-sky-300 w-9 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center text-sm transition shrink-0"
+              title="Akun Saya">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-300" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+              </svg>
+            </button>
+            <button id="btn-keluar-aplikasi"
+              class="auth-show bg-red-600/80 hover:bg-red-600 active:scale-95 border border-red-500/50 text-white px-3 sm:px-3.5 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center gap-1.5 text-xs font-semibold transition whitespace-nowrap shrink-0"
+              title="Keluar Aplikasi">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span>Keluar</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -451,27 +421,9 @@
             <select id="control-kecamatan" disabled
               class="w-full py-2.5 px-3.5 bg-slate-100 border border-slate-300 rounded-xl text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-medium cursor-not-allowed transition">
               <option value="">-- PILIH KECAMATAN LOKASI TUGAS --</option>
-              <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
-              <option value="MEDAN AREA">MEDAN AREA</option>
-              <option value="MEDAN BARAT">MEDAN BARAT</option>
-              <option value="MEDAN BARU">MEDAN BARU</option>
-              <option value="MEDAN BELAWAN">MEDAN BELAWAN</option>
-              <option value="MEDAN DELI">MEDAN DELI</option>
-              <option value="MEDAN DENAI">MEDAN DENAI</option>
-              <option value="MEDAN HELVETIA">MEDAN HELVETIA</option>
-              <option value="MEDAN JOHOR">MEDAN JOHOR</option>
-              <option value="MEDAN KOTA">MEDAN KOTA</option>
-              <option value="MEDAN LABUHAN">MEDAN LABUHAN</option>
-              <option value="MEDAN MAIMUN">MEDAN MAIMUN</option>
-              <option value="MEDAN MARELAN">MEDAN MARELAN</option>
-              <option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
-              <option value="MEDAN PETISAH">MEDAN PETISAH</option>
-              <option value="MEDAN POLONIA">MEDAN POLONIA</option>
-              <option value="MEDAN SELAYANG">MEDAN SELAYANG</option>
-              <option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option>
-              <option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option>
-              <option value="MEDAN TIMUR">MEDAN TIMUR</option>
-              <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
+              <option value="MEDAN AMPLAS">MEDAN AMPLAS</option><option value="MEDAN AREA">MEDAN AREA</option><option value="MEDAN BARAT">MEDAN BARAT</option><option value="MEDAN BARU">MEDAN BARU</option><option value="MEDAN BELAWAN">MEDAN BELAWAN</option><option value="MEDAN DELI">MEDAN DELI</option><option value="MEDAN DENAI">MEDAN DENAI</option>
+              <option value="MEDAN HELVETIA">MEDAN HELVETIA</option><option value="MEDAN JOHOR">MEDAN JOHOR</option><option value="MEDAN KOTA">MEDAN KOTA</option><option value="MEDAN LABUHAN">MEDAN LABUHAN</option><option value="MEDAN MAIMUN">MEDAN MAIMUN</option><option value="MEDAN MARELAN">MEDAN MARELAN</option><option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
+              <option value="MEDAN PETISAH">MEDAN PETISAH</option><option value="MEDAN POLONIA">MEDAN POLONIA</option><option value="MEDAN SELAYANG">MEDAN SELAYANG</option><option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option><option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option><option value="MEDAN TIMUR">MEDAN TIMUR</option><option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
             </select>
           </div>
         </div>
@@ -672,27 +624,9 @@
                   class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                   required>
                   <option value="">-- PILIH KECAMATAN DOMISILI --</option>
-                  <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
-                  <option value="MEDAN AREA">MEDAN AREA</option>
-                  <option value="MEDAN BARAT">MEDAN BARAT</option>
-                  <option value="MEDAN BARU">MEDAN BARU</option>
-                  <option value="MEDAN BELAWAN">MEDAN BELAWAN</option>
-                  <option value="MEDAN DELI">MEDAN DELI</option>
-                  <option value="MEDAN DENAI">MEDAN DENAI</option>
-                  <option value="MEDAN HELVETIA">MEDAN HELVETIA</option>
-                  <option value="MEDAN JOHOR">MEDAN JOHOR</option>
-                  <option value="MEDAN KOTA">MEDAN KOTA</option>
-                  <option value="MEDAN LABUHAN">MEDAN LABUHAN</option>
-                  <option value="MEDAN MAIMUN">MEDAN MAIMUN</option>
-                  <option value="MEDAN MARELAN">MEDAN MARELAN</option>
-                  <option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
-                  <option value="MEDAN PETISAH">MEDAN PETISAH</option>
-                  <option value="MEDAN POLONIA">MEDAN POLONIA</option>
-                  <option value="MEDAN SELAYANG">MEDAN SELAYANG</option>
-                  <option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option>
-                  <option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option>
-                  <option value="MEDAN TIMUR">MEDAN TIMUR</option>
-                  <option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
+                  <option value="MEDAN AMPLAS">MEDAN AMPLAS</option><option value="MEDAN AREA">MEDAN AREA</option><option value="MEDAN BARAT">MEDAN BARAT</option><option value="MEDAN BARU">MEDAN BARU</option><option value="MEDAN BELAWAN">MEDAN BELAWAN</option><option value="MEDAN DELI">MEDAN DELI</option><option value="MEDAN DENAI">MEDAN DENAI</option>
+                  <option value="MEDAN HELVETIA">MEDAN HELVETIA</option><option value="MEDAN JOHOR">MEDAN JOHOR</option><option value="MEDAN KOTA">MEDAN KOTA</option><option value="MEDAN LABUHAN">MEDAN LABUHAN</option><option value="MEDAN MAIMUN">MEDAN MAIMUN</option><option value="MEDAN MARELAN">MEDAN MARELAN</option><option value="MEDAN PERJUANGAN">MEDAN PERJUANGAN</option>
+                  <option value="MEDAN PETISAH">MEDAN PETISAH</option><option value="MEDAN POLONIA">MEDAN POLONIA</option><option value="MEDAN SELAYANG">MEDAN SELAYANG</option><option value="MEDAN SUNGGAL">MEDAN SUNGGAL</option><option value="MEDAN TEMBUNG">MEDAN TEMBUNG</option><option value="MEDAN TIMUR">MEDAN TIMUR</option><option value="MEDAN TUNTUNGAN">MEDAN TUNTUNGAN</option>
                 </select>
               </div>
             </fieldset>
@@ -1362,6 +1296,226 @@
 
     <!-- Halaman "Kelola Data & Berkas" -- khusus UTAMA. Isinya dirender oleh public/js/app-kelola-data.js -->
     <section id="panel-kelola-data" class="hidden"></section>
+
+    <!-- Halaman "Kelola Pengguna" -- khusus UTAMA. Dikelola oleh public/js/app-kelola-user.js -->
+    <section id="panel-kelola-user" class="hidden">
+      <!-- Header + Total + Toolbar -->
+      <div class="flex flex-col gap-3 mb-6 border-b border-slate-100 pb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+          <div>
+            <h2 class="text-lg sm:text-xl font-bold text-slate-800">Kelola Pengguna Sistem</h2>
+            <p class="text-xs text-slate-500 mt-1 leading-relaxed">Khusus Admin Utama. Manajemen akun admin kecamatan,
+              kemenag, KUA, guru agama, dan kontrol hak akses.</p>
+          </div>
+          <div id="ku-total-badge"
+            class="self-start sm:self-auto flex-shrink-0 whitespace-nowrap bg-sky-50 text-sky-700 px-3 py-1 rounded-lg text-xs font-semibold border-2 border-sky-400">
+            Total Pengguna: Dimuat...</div>
+        </div>
+        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
+          <button type="button" onclick="bukaModalTambahUser()" id="ku-btn-tambah"
+            class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Tambah Pengguna</span>
+          </button>
+          <button type="button" id="ku-btn-refresh"
+            class="bg-white hover:bg-slate-50 active:scale-95 border border-slate-300 text-slate-700 px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
+            title="Refresh Data">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4 Stat Cards Ringkasan Pengguna -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-5">
+        <div
+          class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">
+          <div class="min-w-0 pr-1.5">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Total
+              Pengguna</div>
+            <div id="stat-ku-total" class="text-lg sm:text-xl font-black text-slate-800 mt-0.5 tracking-tight">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5 truncate">Seluruh akun terdaftar</div>
+          </div>
+          <div
+            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">
+          <div class="min-w-0 pr-1.5">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Admin
+              Kecamatan</div>
+            <div id="stat-ku-kecamatan" class="text-lg sm:text-xl font-black text-sky-700 mt-0.5 tracking-tight">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5 truncate">21 Kecamatan Medan</div>
+          </div>
+          <div
+            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">
+          <div class="min-w-0 pr-1.5">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Kemenag &amp;
+              Layanan</div>
+            <div id="stat-ku-kemenag" class="text-lg sm:text-xl font-black text-amber-700 mt-0.5 tracking-tight">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5 truncate">Guru agama &amp; KUA</div>
+          </div>
+          <div
+            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+          </div>
+        </div>
+        <div
+          class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">
+          <div class="min-w-0 pr-1.5">
+            <div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Admin Utama
+            </div>
+            <div id="stat-ku-utama" class="text-lg sm:text-xl font-black text-purple-700 mt-0.5 tracking-tight">0</div>
+            <div class="text-[10px] text-slate-500 mt-0.5 truncate">Superadmin Kota</div>
+          </div>
+          <div
+            class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel Penyaringan & Pencarian -->
+      <div class="mb-5 bg-slate-50 p-4 rounded-xl border border-slate-200/80 shadow-2xs space-y-3">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-1.5 text-xs font-bold text-slate-700 uppercase tracking-wider">
+            <svg class="w-4 h-4 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+            </svg>
+            <span>Penyaringan &amp; Pencarian Pengguna</span>
+          </div>
+          <button type="button" id="ku-btn-reset-filter"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 active:scale-95 text-slate-600 border border-slate-300 rounded-xl text-xs font-semibold shadow-2xs transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Reset Filter</span>
+          </button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          <div>
+            <label for="cari-kelola-user" class="block text-xs font-medium text-slate-600 mb-1">Cari Pengguna</label>
+            <div class="relative">
+              <input type="text" id="cari-kelola-user" placeholder="Cari username, nama, no HP..." autocomplete="off"
+                style="text-transform:none"
+                class="w-full pl-8 pr-7 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
+              <svg xmlns="http://www.w3.org/2000/svg"
+                class="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <button type="button" id="ku-btn-clear-search"
+                class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-sm leading-none">&times;</button>
+            </div>
+          </div>
+          <div>
+            <label for="filter-role-kelola-user" class="block text-xs font-medium text-slate-600 mb-1">Filter
+              Role</label>
+            <select id="filter-role-kelola-user"
+              class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
+              <option value="">Semua Role</option>
+            </select>
+          </div>
+          <div>
+            <label for="filter-kecamatan-kelola-user" class="block text-xs font-medium text-slate-600 mb-1">Filter
+              Kecamatan</label>
+            <select id="filter-kecamatan-kelola-user"
+              class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
+              <option value="">Semua Kecamatan</option>
+            </select>
+          </div>
+          <div>
+            <label for="ku-limit" class="block text-xs font-medium text-slate-600 mb-1">Tampilkan per Halaman</label>
+            <select id="ku-limit"
+              class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
+              <option value="10">10 data per halaman</option>
+              <option value="20" selected>20 data per halaman</option>
+              <option value="50">50 data per halaman</option>
+              <option value="100">100 data per halaman</option>
+              <option value="all">Semua data</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Hint & Tabel Data -->
+      <div
+        class="sm:hidden flex items-center justify-between text-xs text-slate-500 bg-slate-50/90 px-3 py-2 rounded-xl mb-2 border border-slate-200/60 shadow-2xs">
+        <span class="flex items-center gap-1.5 font-medium">
+          <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+          <span>Geser tabel ke samping untuk melihat detail wilayah, kontak &amp; aksi</span>
+        </span>
+      </div>
+      <div id="ku-hasil"
+        class="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white shadow-2xs transition-opacity duration-150">
+        <table class="w-full min-w-[920px] text-left border-collapse bg-white table-auto">
+          <thead>
+            <tr
+              class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">
+              <th class="w-14 px-3 py-3.5 text-center whitespace-nowrap align-middle">No</th>
+              <th class="px-4 py-3.5 min-w-[180px] whitespace-nowrap align-middle">Pengguna</th>
+              <th class="px-4 py-3.5 min-w-[200px] whitespace-nowrap align-middle">Penanggung Jawab</th>
+              <th class="px-4 py-3.5 min-w-[160px] whitespace-nowrap align-middle">Peran / Role</th>
+              <th class="px-4 py-3.5 min-w-[170px] whitespace-nowrap align-middle">Wilayah Penugasan</th>
+              <th class="px-4 py-3.5 min-w-[140px] whitespace-nowrap align-middle">No. Kontak</th>
+              <th class="px-4 py-3.5 text-center min-w-[210px] whitespace-nowrap align-middle">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-kelola-user" class="text-sm text-slate-700 divide-y divide-slate-100 bg-white">
+            <tr>
+              <td colspan="7" class="text-center py-8 text-slate-400 italic">Memuat data pengguna...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="loader-kelola-user" class="hidden flex justify-center items-center py-4">
+        <div class="loader w-6 h-6 border-2"></div>
+      </div>
+
+      <!-- Footer & Paginasi -->
+      <div class="mt-5 border-t border-slate-100 pt-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <span class="text-[9px] text-slate-400 tracking-widest uppercase font-semibold">Developed by
+            &nbsp;&middot;&nbsp; <span style="color:#ca8a04;">Tim Kelembagaan Bidang Dayasos</span></span>
+          <div id="ku-info-halaman" class="text-xs text-slate-500 font-medium"></div>
+        </div>
+        <div id="ku-pagination" class="flex items-center gap-1 flex-wrap justify-center mt-3"></div>
+      </div>
+    </section>
+
+    <!-- Halaman "Data Ibadah" (Rumah Ibadah) -- khusus UTAMA. Dikelola oleh public/js/app-kelola-ibadah.js -->
+    <section id="panel-kelola-ibadah" class="hidden"></section>
   </main>
 
   <div id="modal-detail-penerima"
@@ -1988,7 +2142,7 @@
       </div>
       <div class="px-6 pt-4 flex gap-2 border-b border-slate-100">
         <button id="tab-progres-kec"
-          class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5">
+          class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5 outline-none">
           <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
@@ -1996,7 +2150,7 @@
           <span>Layanan Kecamatan</span>
         </button>
         <button id="tab-progres-kem"
-          class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5">
+          class="px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5 outline-none">
           <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round"
               d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-18 0h18M3 9v.75c0 .414.336.75.75.75h16.5a.75.75 0 00.75-.75V9M3 21h18" />
@@ -2905,112 +3059,16 @@
     </div>
   </div>
 
-  <!-- Modal Kelola Pengguna (User Management UI) - Khusus Role UTAMA -->
-  <div id="modal-kelola-user"
-    class="hidden fixed inset-0 z-[170] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
-    onclick="if(event.target===this)this.classList.add('hidden')">
-    <div
-      class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
-      <div class="flex justify-between items-center px-6 py-4 bg-slate-800 text-white shrink-0">
-        <div class="flex items-center gap-3">
-          <div
-            class="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-indigo-300" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-bold tracking-wide uppercase">Manajemen Pengguna DJPM 2027</h3>
-            <p class="text-[11px] text-slate-300">Kelola akun admin kecamatan, kemenag, dan dinas secara mandiri</p>
-          </div>
-        </div>
-        <button onclick="document.getElementById('modal-kelola-user').classList.add('hidden')"
-          class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
-      </div>
-
-      <div
-        class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 shrink-0 flex flex-wrap items-center justify-between gap-3">
-        <div class="flex items-center gap-2 flex-1 min-w-[280px]">
-          <div class="relative flex-1 min-w-0">
-            <input type="text" id="cari-kelola-user" placeholder="Cari username, nama, atau kecamatan..."
-              oninput="filterTabelKelolaUser()"
-              class="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 bg-white"
-              style="text-transform:none">
-            <svg xmlns="http://www.w3.org/2000/svg"
-              class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-          </div>
-          <select id="filter-role-kelola-user" onchange="filterTabelKelolaUser()"
-            class="px-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 bg-white">
-            <option value="">Semua Role</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button onclick="muatDaftarUserLengkap()"
-            class="px-3 py-2 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>Muat Ulang</span>
-          </button>
-          <button onclick="bukaModalTambahUser()"
-            class="px-4 py-2 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow transition flex items-center gap-1.5">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white shrink-0" fill="none"
-              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            <span>Tambah Pengguna Baru</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto p-4 sm:p-6">
-        <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
-          <table class="w-full text-left border-collapse min-w-[680px]">
-            <thead>
-              <tr
-                class="bg-slate-100 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
-                <th class="px-3 py-2.5 text-center w-12">No</th>
-                <th class="px-3 py-2.5">Username</th>
-                <th class="px-3 py-2.5">Nama Lengkap</th>
-                <th class="px-3 py-2.5">Role</th>
-                <th class="px-3 py-2.5">Kecamatan</th>
-                <th class="px-3 py-2.5">No. Kontak HP</th>
-                <th class="px-3 py-2.5 text-center w-36">Aksi</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-kelola-user" class="divide-y divide-slate-100 bg-white">
-              <tr>
-                <td colspan="7" class="text-center py-6 text-slate-400 italic">Memuat data pengguna...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div id="loader-kelola-user" class="hidden flex justify-center items-center py-4">
-          <div class="loader w-6 h-6 border-2"></div>
-        </div>
-      </div>
-
-      <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-        <button onclick="document.getElementById('modal-kelola-user').classList.add('hidden')"
-          class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">Tutup</button>
-      </div>
-    </div>
-  </div>
+  <!-- Container fallback modal-kelola-user untuk kompatibilitas verifikasi (Kelola Pengguna kini menggunakan in-page section #panel-kelola-user) -->
+  <div id="modal-kelola-user" class="hidden" style="display:none"></div>
 
   <!-- Modal Tambah Pengguna Baru -->
   <div id="modal-tambah-user"
-    class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+    class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
-      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] overflow-y-auto">
-      <div class="flex justify-between items-center px-5 py-4 bg-slate-800 text-white">
+      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
+      <div class="flex justify-between items-center px-5 py-4 bg-slate-800 text-white shrink-0">
         <div class="flex items-center gap-2.5">
           <div
             class="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shrink-0">
@@ -3025,7 +3083,8 @@
         <button onclick="document.getElementById('modal-tambah-user').classList.add('hidden')"
           class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
       </div>
-      <form id="form-tambah-user" onsubmit="simpanPenggunaBaru(event)" class="p-5 space-y-3">
+      <form id="form-tambah-user" onsubmit="simpanPenggunaBaru(event)"
+        class="p-4 sm:p-5 space-y-3 overflow-y-auto overscroll-contain flex-1">
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Username <span
               class="text-red-500">*</span></label>
@@ -3107,11 +3166,11 @@
           </div>
         </div>
         <div id="tu-pesan" class="hidden text-xs font-medium rounded-lg p-2.5"></div>
-        <div class="pt-2 flex gap-2">
+        <div class="pt-2 flex gap-2 shrink-0">
           <button type="button" onclick="document.getElementById('modal-tambah-user').classList.add('hidden')"
-            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition">BATAL</button>
+            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl active:scale-95 transition">BATAL</button>
           <button type="submit" id="btn-simpan-tambah-user"
-            class="w-1/2 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow transition flex items-center justify-center gap-1.5">
+            class="w-1/2 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -3125,11 +3184,11 @@
 
   <!-- Modal Edit Pengguna -->
   <div id="modal-edit-user"
-    class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+    class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
-      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] overflow-y-auto">
-      <div class="flex justify-between items-center px-5 py-4 bg-slate-800 text-white">
+      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
+      <div class="flex justify-between items-center px-5 py-4 bg-slate-800 text-white shrink-0">
         <div class="flex items-center gap-2.5">
           <div
             class="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shrink-0">
@@ -3145,7 +3204,8 @@
         <button onclick="document.getElementById('modal-edit-user').classList.add('hidden')"
           class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
       </div>
-      <form id="form-edit-user" onsubmit="simpanPerubahanUser(event)" class="p-5 space-y-3">
+      <form id="form-edit-user" onsubmit="simpanPerubahanUser(event)"
+        class="p-4 sm:p-5 space-y-3 overflow-y-auto overscroll-contain flex-1">
         <input type="hidden" id="eu-username-target">
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Role / Peran</label>
@@ -3212,11 +3272,11 @@
           </div>
         </div>
         <div id="eu-pesan" class="hidden text-xs font-medium rounded-lg p-2.5"></div>
-        <div class="pt-2 flex gap-2">
+        <div class="pt-2 flex gap-2 shrink-0">
           <button type="button" onclick="document.getElementById('modal-edit-user').classList.add('hidden')"
-            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition">BATAL</button>
+            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl active:scale-95 transition">BATAL</button>
           <button type="submit" id="btn-simpan-edit-user"
-            class="w-1/2 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow transition flex items-center justify-center gap-1.5">
+            class="w-1/2 py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center gap-1.5">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -3231,11 +3291,11 @@
   <!-- Modal Reset Password Pengguna (dari Kelola Akun) — terpisah dari modal "Akun Saya" supaya
        admin tidak salah mengisi form ganti password akunnya sendiri. -->
   <div id="modal-reset-sandi-user"
-    class="hidden fixed inset-0 z-[190] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+    class="hidden fixed inset-0 z-[190] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
-      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] overflow-y-auto">
-      <div class="flex justify-between items-center px-5 py-4 bg-amber-700 text-white">
+      class="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
+      <div class="flex justify-between items-center px-5 py-4 bg-amber-700 text-white shrink-0">
         <div class="flex items-center gap-2.5 min-w-0">
           <div class="w-8 h-8 rounded-lg bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24"
@@ -3249,7 +3309,8 @@
         <button type="button" onclick="document.getElementById('modal-reset-sandi-user').classList.add('hidden')"
           class="text-white/80 hover:text-white text-2xl leading-none">&times;</button>
       </div>
-      <form id="form-reset-sandi-user" onsubmit="simpanResetSandiUser(event)" class="p-5 space-y-3">
+      <form id="form-reset-sandi-user" onsubmit="simpanResetSandiUser(event)"
+        class="p-4 sm:p-5 space-y-3 overflow-y-auto overscroll-contain flex-1">
         <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
           <p class="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Akun yang direset</p>
           <p id="rsu-username-display" class="text-sm font-bold text-slate-800 break-all" style="text-transform:none">-
@@ -3272,11 +3333,11 @@
             akan diakhiri dan ia perlu login ulang.</p>
         </div>
         <div id="rsu-pesan" class="hidden text-xs font-medium rounded-lg p-2.5"></div>
-        <div class="pt-2 flex gap-2">
+        <div class="pt-2 flex gap-2 shrink-0">
           <button type="button" onclick="document.getElementById('modal-reset-sandi-user').classList.add('hidden')"
-            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-lg transition">BATAL</button>
+            class="w-1/2 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl active:scale-95 transition">BATAL</button>
           <button type="submit" id="btn-simpan-reset-sandi-user"
-            class="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs rounded-lg shadow transition">RESET
+            class="w-1/2 py-2.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow transition">RESET
             PASSWORD</button>
         </div>
       </form>
@@ -3341,32 +3402,31 @@
         class="mx-auto w-14 h-14 rounded-full flex items-center justify-center mb-4 shadow-inner ring-8 transition-colors">
         <span id="modal-konfirm-icon-svg" class="w-7 h-7 flex items-center justify-center"></span>
       </div>
-      <h3 id="modal-konfirm-judul" class="text-base font-bold text-slate-900 mb-1.5 leading-snug">Konfirmasi Aksi
-      </h3>
+      <h3 id="modal-konfirm-judul" class="text-base font-bold text-slate-900 mb-1.5 leading-snug">Konfirmasi Aksi</h3>
       <p id="modal-konfirm-pesan" class="text-xs text-slate-600 mb-5 leading-relaxed whitespace-pre-line"></p>
       <div id="modal-konfirm-wadah-tombol" class="flex gap-2.5">
         <button type="button" id="modal-konfirm-btn-batal" onclick="window._tutupModalKonfirmasiUniversal(false)"
-          class="w-1/2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs rounded-xl transition">
-          Batal
-        </button>
+          class="w-1/2 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-bold text-xs rounded-xl transition">Batal</button>
         <button type="button" id="modal-konfirm-btn-ya" onclick="window._tutupModalKonfirmasiUniversal(true)"
-          class="w-1/2 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5">
-          <span id="modal-konfirm-teks-ya">Lanjutkan</span>
-        </button>
+          class="w-1/2 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5"><span
+            id="modal-konfirm-teks-ya">Lanjutkan</span></button>
       </div>
     </div>
   </div>
 
-  <!-- Kontainer Dinamis Modal Manajemen Rumah Ibadah (Diinjeksi oleh app-admin.js) -->
-  <div id="container-modal-rumah-ibadah"></div>
+  <!-- Container fallback modal rumah ibadah untuk kompatibilitas -->
+  <div id="modal-kelola-rumah-ibadah" class="hidden" style="display:none"></div>
+  <div id="container-modal-rumah-ibadah" class="hidden" style="display:none"></div>
 
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
-  <script src="/js/app-core.js" defer></script>
-  <script src="/js/app-transaksi.js" defer></script>
-  <script src="/js/app-admin.js" defer></script>
-  <script src="/js/app-kelola-data.js" defer></script>
+  <script src="/js/app-core.js?v=20270930" defer></script>
+  <script src="/js/app-transaksi.js?v=20270930" defer></script>
+  <script src="/js/app-admin.js?v=20270930" defer></script>
+  <script src="/js/app-kelola-data.js?v=20270930" defer></script>
+  <script src="/js/app-kelola-user.js?v=20270930" defer></script>
+  <script src="/js/app-kelola-ibadah.js?v=20270930" defer></script>
 
 </body>
 

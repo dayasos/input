@@ -1408,18 +1408,21 @@
   // ---------------------------------------------------------------------------
   // Tab & Aksi Tombol Kelola Data
   // ---------------------------------------------------------------------------
-  var TAB_LAIN = ['tab-input', 'tab-rekap', 'tab-tools'];
-  var PANEL_LAIN = ['panel-input', 'panel-rekap', 'panel-tools'];
-  var KELAS_AKTIF = ['ring-2', 'ring-amber-300', 'bg-amber-600', 'shadow-md'];
+  var TAB_LAIN = ['tab-input', 'tab-rekap', 'tab-tools', 'btn-kelola-user', 'btn-kelola-rumah-ibadah'];
+  var PANEL_LAIN = ['panel-input', 'panel-rekap', 'panel-tools', 'panel-kelola-user', 'panel-kelola-ibadah'];
+  var KELAS_AKTIF = ['tab-kelola-aktif'];
   var KELAS_NORMAL = ['bg-amber-600/80'];
+  var KELAS_LEGACY = ['ring-2', 'ring-amber-300', 'shadow-md'];
 
   function nonaktifkanTab() {
     KELAS_AKTIF.forEach(function (c) { tab.classList.remove(c); });
+    KELAS_LEGACY.forEach(function (c) { tab.classList.remove(c); });
     KELAS_NORMAL.forEach(function (c) { tab.classList.add(c); });
   }
 
   function aktifkanTab() {
     KELAS_NORMAL.forEach(function (c) { tab.classList.remove(c); });
+    KELAS_LEGACY.forEach(function (c) { tab.classList.remove(c); });
     KELAS_AKTIF.forEach(function (c) { tab.classList.add(c); });
   }
 
@@ -1442,6 +1445,8 @@
       if (!el) return;
       if (typeof setTabTidakAktif === 'function') setTabTidakAktif(el);
     });
+    if (typeof window.nonaktifkanTabKelolaUser === 'function') window.nonaktifkanTabKelolaUser();
+    if (typeof window.nonaktifkanTabKelolaIbadah === 'function') window.nonaktifkanTabKelolaIbadah();
     PANEL_LAIN.forEach(function (id) { var el = $(id); if (el) el.classList.add('hidden'); });
     var refresh = $('btn-refresh-data');
     if (refresh) refresh.classList.add('hidden');

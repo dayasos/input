@@ -742,6 +742,12 @@ function terapkanHakAkses(role, kecamatan, inputDitutup) {
     const panelKelolaData = document.getElementById('panel-kelola-data');
     if (panelKelolaData) panelKelolaData.classList.add('hidden');
     if (typeof window.nonaktifkanTabKelolaData === 'function') window.nonaktifkanTabKelolaData();
+    const panelKelolaUser = document.getElementById('panel-kelola-user');
+    if (panelKelolaUser) panelKelolaUser.classList.add('hidden');
+    if (typeof window.nonaktifkanTabKelolaUser === 'function') window.nonaktifkanTabKelolaUser();
+    const panelKelolaIbadah = document.getElementById('panel-kelola-ibadah');
+    if (panelKelolaIbadah) panelKelolaIbadah.classList.add('hidden');
+    if (typeof window.nonaktifkanTabKelolaIbadah === 'function') window.nonaktifkanTabKelolaIbadah();
   }
   const btnKelolaUser = document.getElementById('btn-kelola-user');
   if (btnKelolaUser) btnKelolaUser.classList.toggle('hidden', role !== "UTAMA");
@@ -924,9 +930,9 @@ if (btnKelolaUserNav) {
       tampilkanToast("Fitur Manajemen Pengguna hanya dapat diakses oleh Admin Utama.", "gagal");
       return;
     }
-    const m = document.getElementById('modal-kelola-user');
-    if (m) m.classList.remove('hidden');
-    if (typeof muatDaftarUserLengkap === "function") {
+    if (typeof window.bukaTabKelolaUser === "function") {
+      window.bukaTabKelolaUser();
+    } else if (typeof muatDaftarUserLengkap === "function") {
       muatDaftarUserLengkap();
     } else if (typeof window.muatDaftarUserLengkap === "function") {
       window.muatDaftarUserLengkap();
@@ -942,10 +948,10 @@ if (btnKelolaRiNav) {
       tampilkanToast("Fitur Manajemen Rumah Ibadah hanya dapat diakses oleh Admin Utama.", "gagal");
       return;
     }
-    if (typeof bukaModalKelolaRumahIbadah === "function") {
-      bukaModalKelolaRumahIbadah();
-    } else if (typeof window.bukaModalKelolaRumahIbadah === "function") {
-      window.bukaModalKelolaRumahIbadah();
+    if (typeof window.bukaTabKelolaIbadah === "function") {
+      window.bukaTabKelolaIbadah();
+    } else if (typeof bukaTabKelolaIbadah === "function") {
+      bukaTabKelolaIbadah();
     }
   });
 }
@@ -1017,13 +1023,17 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function setTabTidakAktif(tabEl) {
-  tabEl.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
-  tabEl.classList.add('text-white', 'hover:bg-slate-700');
+  if (!tabEl) return;
+  tabEl.classList.remove('bg-white', 'text-slate-900', 'shadow-sm', 'tab-nav-aktif');
+  tabEl.classList.add('text-slate-200', 'hover:text-white', 'hover:bg-slate-700/70');
 }
 function setTabAktif(tabEl) {
-  tabEl.classList.remove('text-white', 'hover:bg-slate-700');
-  tabEl.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
+  if (!tabEl) return;
+  tabEl.classList.remove('text-slate-200', 'hover:text-white', 'hover:bg-slate-700/70', 'text-white', 'hover:bg-slate-700');
+  tabEl.classList.add('bg-white', 'text-slate-900', 'shadow-sm', 'tab-nav-aktif');
 }
+window.setTabTidakAktif = setTabTidakAktif;
+window.setTabAktif = setTabAktif;
 
 tabInput.addEventListener('click', () => {
   if (inputDitutupGlobal && dataPengguna.role !== "UTAMA") {
@@ -1031,13 +1041,22 @@ tabInput.addEventListener('click', () => {
     return;
   }
 
-  tabInput.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5";
-  panelAktif = "input";
-  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
+  setTabAktif(tabInput);
+  setTabTidakAktif(tabRekap);
   setTabTidakAktif(tabTools);
+  if (typeof window.nonaktifkanTabKelolaUser === 'function') window.nonaktifkanTabKelolaUser();
+  if (typeof window.nonaktifkanTabKelolaData === 'function') window.nonaktifkanTabKelolaData();
+  if (typeof window.nonaktifkanTabKelolaIbadah === 'function') window.nonaktifkanTabKelolaIbadah();
+  panelAktif = "input";
   panelInput.classList.remove('hidden');
   panelRekap.classList.add('hidden');
   panelTools.classList.add('hidden');
+  const panelKelolaUser = document.getElementById('panel-kelola-user');
+  if (panelKelolaUser) panelKelolaUser.classList.add('hidden');
+  const panelKelolaData = document.getElementById('panel-kelola-data');
+  if (panelKelolaData) panelKelolaData.classList.add('hidden');
+  const panelKelolaIbadah = document.getElementById('panel-kelola-ibadah');
+  if (panelKelolaIbadah) panelKelolaIbadah.classList.add('hidden');
   document.getElementById('btn-refresh-data').classList.add('hidden');
 
   if (dataPengguna.role === "UTAMA" || dataPengguna.role === "") {
@@ -1104,13 +1123,22 @@ tabInput.addEventListener('click', () => {
 });
 
 tabRekap.addEventListener('click', () => {
-  tabRekap.className = "px-4 py-2 rounded-md bg-white text-slate-900 shadow-sm transition flex items-center gap-1.5";
-  panelAktif = "rekap";
-  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
+  setTabAktif(tabRekap);
+  setTabTidakAktif(tabInput);
   setTabTidakAktif(tabTools);
+  if (typeof window.nonaktifkanTabKelolaUser === 'function') window.nonaktifkanTabKelolaUser();
+  if (typeof window.nonaktifkanTabKelolaData === 'function') window.nonaktifkanTabKelolaData();
+  if (typeof window.nonaktifkanTabKelolaIbadah === 'function') window.nonaktifkanTabKelolaIbadah();
+  panelAktif = "rekap";
   panelRekap.classList.remove('hidden');
   panelInput.classList.add('hidden');
   panelTools.classList.add('hidden');
+  const panelKelolaUserRekap = document.getElementById('panel-kelola-user');
+  if (panelKelolaUserRekap) panelKelolaUserRekap.classList.add('hidden');
+  const panelKelolaDataRekap = document.getElementById('panel-kelola-data');
+  if (panelKelolaDataRekap) panelKelolaDataRekap.classList.add('hidden');
+  const panelKelolaIbadahRekap = document.getElementById('panel-kelola-ibadah');
+  if (panelKelolaIbadahRekap) panelKelolaIbadahRekap.classList.add('hidden');
   document.getElementById('btn-refresh-data').classList.remove('hidden');
   const dataMasihSegar = masterDataLihat.length > 0 && (Date.now() - waktuMasterDataLihat) < TTL_CACHE_DATA_TRANSAKSI_MS;
   if (!dataMasihSegar) inisialisasiMenuLihatData();
@@ -1119,12 +1147,21 @@ tabRekap.addEventListener('click', () => {
 tabTools.addEventListener('click', () => {
   if (dataPengguna.role !== "UTAMA") return; // safeguard tambahan, tombolnya juga sudah disembunyikan
   setTabAktif(tabTools);
+  setTabTidakAktif(tabInput);
+  setTabTidakAktif(tabRekap);
+  if (typeof window.nonaktifkanTabKelolaUser === 'function') window.nonaktifkanTabKelolaUser();
+  if (typeof window.nonaktifkanTabKelolaData === 'function') window.nonaktifkanTabKelolaData();
+  if (typeof window.nonaktifkanTabKelolaIbadah === 'function') window.nonaktifkanTabKelolaIbadah();
   panelAktif = "tools";
-  tabInput.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
-  tabRekap.className = "px-4 py-2 rounded-md text-white hover:bg-slate-700 transition flex items-center gap-1.5";
   panelTools.classList.remove('hidden');
   panelInput.classList.add('hidden');
   panelRekap.classList.add('hidden');
+  const panelKelolaUserTools = document.getElementById('panel-kelola-user');
+  if (panelKelolaUserTools) panelKelolaUserTools.classList.add('hidden');
+  const panelKelolaDataTools = document.getElementById('panel-kelola-data');
+  if (panelKelolaDataTools) panelKelolaDataTools.classList.add('hidden');
+  const panelKelolaIbadahTools = document.getElementById('panel-kelola-ibadah');
+  if (panelKelolaIbadahTools) panelKelolaIbadahTools.classList.add('hidden');
   document.getElementById('btn-refresh-data').classList.add('hidden');
   inisialisasiMenuTools();
 });

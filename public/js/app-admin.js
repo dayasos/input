@@ -44,8 +44,8 @@ function bangunProgresKuotaHtml(grup) {
 }
 
 function renderTabProgresKuota() {
-  const aktifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5';
-  const pasifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5';
+  const aktifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition bg-slate-800 text-white inline-flex items-center gap-1.5 outline-none';
+  const pasifCls = 'px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-t-lg transition text-slate-500 hover:bg-slate-100 inline-flex items-center gap-1.5 outline-none';
   document.getElementById('tab-progres-kec').className = tabProgresKuotaAktif === "KECAMATAN" ? aktifCls : pasifCls;
   document.getElementById('tab-progres-kem').className = tabProgresKuotaAktif === "KEMENAG" ? aktifCls : pasifCls;
 
@@ -2115,6 +2115,7 @@ function muatDaftarUserLengkap(senyap) {
         return;
       }
       daftarAkunLengkapCache = res.daftar || [];
+      window.daftarAkunLengkapCache = daftarAkunLengkapCache;
       filterTabelKelolaUser(); // hormati kata kunci & filter role yang sedang aktif
     })
     .withFailureHandler(function (err) {
@@ -2258,7 +2259,8 @@ function simpanPenggunaBaru(e) {
 }
 
 function bukaModalEditUser(username) {
-  const u = daftarAkunLengkapCache.find(function (x) { return x.username === username; });
+  const sumber = (window.daftarAkunLengkapCache && window.daftarAkunLengkapCache.length) ? window.daftarAkunLengkapCache : daftarAkunLengkapCache;
+  const u = sumber.find(function (x) { return x.username === username; });
   if (!u) return;
 
   const modal = document.getElementById('modal-edit-user');
@@ -2360,7 +2362,8 @@ function bukaModalResetSandiUser(username) {
     tampilkanToast('Untuk akun Anda sendiri, gunakan menu Akun Saya.', 'gagal');
     return;
   }
-  const u = daftarAkunLengkapCache.find(function (x) { return x.username === username; }) || {};
+  const sumber = (window.daftarAkunLengkapCache && window.daftarAkunLengkapCache.length) ? window.daftarAkunLengkapCache : daftarAkunLengkapCache;
+  const u = sumber.find(function (x) { return x.username === username; }) || {};
   document.getElementById('rsu-username-target').value = username;
   document.getElementById('rsu-username-display').textContent = username;
   const ket = [labelRolePengguna(u.role), u.kecamatan, u.kelurahan ? 'Kel. ' + u.kelurahan : '', u.namaLengkap]
@@ -2431,7 +2434,11 @@ function simpanResetSandiUser(e) {
 // dan diekspos lewat window — dulu dipanggil langsung di sini sehingga melempar ReferenceError
 // setelah simpan berhasil.
 function segarkanDaftarAkunSetelahMutasi() {
-  muatDaftarUserLengkap();
+  if (typeof window.muatDaftarUserLengkap === 'function') {
+    window.muatDaftarUserLengkap();
+  } else {
+    muatDaftarUserLengkap();
+  }
   if (typeof window.muatDaftarUser === 'function') window.muatDaftarUser();
 }
 
@@ -2566,7 +2573,9 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       clearTimeout(window.__timerSegarKelolaAkun);
       window.__timerSegarKelolaAkun = setTimeout(function () {
         const modalKelola = document.getElementById('modal-kelola-user');
-        if (modalKelola && !modalKelola.classList.contains('hidden') && typeof muatDaftarUserLengkap === 'function') {
+        const panelKelola = document.getElementById('panel-kelola-user');
+        const panelTerbuka = (panelKelola && !panelKelola.classList.contains('hidden')) || (modalKelola && !modalKelola.classList.contains('hidden'));
+        if (panelTerbuka && typeof muatDaftarUserLengkap === 'function') {
           muatDaftarUserLengkap(true);
         }
         const resetSec = document.getElementById('gp-reset-section');
@@ -2706,563 +2715,10 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
 })();
 
 // =========================================================================
-// MODUL CRUD DATA RUMAH IBADAH KHUSUS ADMIN UTAMA (SUPERADMIN)
+// JEMBATAN KOMPATIBILITAS DATA RUMAH IBADAH (DIKELOLA app-kelola-ibadah.js)
 // =========================================================================
-
-var _LIST_KECAMATAN_MEDAN = (typeof DAFTAR_KECAMATAN_MEDAN !== 'undefined' && Array.isArray(DAFTAR_KECAMATAN_MEDAN))
-  ? DAFTAR_KECAMATAN_MEDAN
-  : [
-    'MEDAN AMPLAS', 'MEDAN AREA', 'MEDAN BARAT', 'MEDAN BARU', 'MEDAN BELAWAN',
-    'MEDAN DELI', 'MEDAN DENAI', 'MEDAN HELVETIA', 'MEDAN JOHOR', 'MEDAN KOTA',
-    'MEDAN LABUHAN', 'MEDAN MAIMUN', 'MEDAN MARELAN', 'MEDAN PERJUANGAN',
-    'MEDAN PETISAH', 'MEDAN POLONIA', 'MEDAN SELAYANG', 'MEDAN SUNGGAL',
-    'MEDAN TEMBUNG', 'MEDAN TIMUR', 'MEDAN TUNTUNGAN'
-  ];
-
-var DAFTAR_JENIS_IBADAH_ADMIN = [
-  { val: 'MASJID', label: 'Masjid' },
-  { val: 'MUSHOLLA', label: 'Musholla' },
-  { val: 'GEREJA', label: 'Gereja' },
-  { val: 'GEREJA_KATOLIK', label: 'Gereja Katolik' },
-  { val: 'VIHARA', label: 'Vihara' },
-  { val: 'KLENTENG', label: 'Klenteng' },
-  { val: 'KUIL', label: 'Kuil' }
-];
-
-let _halamanRiAktif = 1;
-let _totalHalamanRi = 1;
-let _timerDebounceRi = null;
-let _cacheBarisRi = {};
-
-function badgeJenisRumahIbadah(jenis) {
-  const j = String(jenis || '').toUpperCase();
-  if (j === 'MASJID') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">MASJID</span>';
-  if (j === 'MUSHOLLA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-teal-50 text-teal-700 border border-teal-200">MUSHOLLA</span>';
-  if (j === 'GEREJA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-sky-50 text-sky-700 border border-sky-200">GEREJA</span>';
-  if (j === 'GEREJA_KATOLIK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">GEREJA KATOLIK</span>';
-  if (j === 'VIHARA') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200">VIHARA</span>';
-  if (j === 'KLENTENG') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-50 text-rose-700 border border-rose-200">KLENTENG</span>';
-  if (j === 'KUIL') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-orange-50 text-orange-700 border border-orange-200">KUIL</span>';
-  if (j === 'VIHARA_KLENTENG_KUIL' || j === 'PGK') return '<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-800 border border-amber-300">PERLU KLASIFIKASI</span>';
-  return `<span class="px-2.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700 border border-slate-200">${typeof esc === 'function' ? esc(j) : j}</span>`;
-}
-
-function pastikanModalRumahIbadahSiap() {
-  if (document.getElementById('modal-kelola-rumah-ibadah')) return;
-
-  const target = document.getElementById('container-modal-rumah-ibadah') || document.body;
-  const optJenis = DAFTAR_JENIS_IBADAH_ADMIN.map(j => `<option value="${j.val}">${j.label}</option>`).join('');
-  const optKec = _LIST_KECAMATAN_MEDAN.map(k => `<option value="${k}">${k}</option>`).join('');
-
-  target.insertAdjacentHTML('beforeend', `
-    <!-- Modal Utama: Manajemen Data Rumah Ibadah -->
-    <div id="modal-kelola-rumah-ibadah" class="hidden fixed inset-0 z-[160] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4" onclick="if(event.target===this)this.classList.add('hidden')">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl border border-slate-100 overflow-hidden max-h-[90vh] max-h-[90dvh] flex flex-col">
-        <!-- Header -->
-        <div class="flex justify-between items-center px-5 sm:px-6 py-4 bg-slate-800 text-white shrink-0">
-          <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <div>
-              <h3 class="text-sm font-bold tracking-wide uppercase">Manajemen Data Rumah Ibadah</h3>
-              <p class="text-[11px] text-slate-300">Kelola master data rumah ibadah se-Kota Medan secara terpusat</p>
-            </div>
-          </div>
-          <button type="button" onclick="document.getElementById('modal-kelola-rumah-ibadah').classList.add('hidden')" class="text-white/70 hover:text-white text-2xl leading-none transition">&times;</button>
-        </div>
-
-        <!-- Filter & Toolbar (Full Responsive: Mobile, Tablet, Desktop) -->
-        <div class="p-3.5 sm:p-5 border-b border-slate-100 bg-slate-50 shrink-0 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3">
-          <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-1 min-w-0">
-            <div class="relative flex-1 min-w-0">
-              <input type="text" id="cari-kelola-ri" placeholder="Cari tempat ibadah, alamat, kelurahan..." oninput="filterTabelRumahIbadah()"
-                class="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white" style="text-transform:none">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <div class="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
-              <select id="filter-jenis-kelola-ri" onchange="filterTabelRumahIbadah()"
-                class="w-full sm:w-auto px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-                <option value="">Semua Jenis</option>
-                ${optJenis}
-              </select>
-              <select id="filter-kecamatan-kelola-ri" onchange="filterTabelRumahIbadah()"
-                class="w-full sm:w-auto px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-                <option value="">Semua Kecamatan</option>
-                ${optKec}
-              </select>
-              <select id="filter-status-klasifikasi-ri" onchange="filterTabelRumahIbadah()"
-                class="w-full sm:w-auto px-2.5 py-2 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-                <option value="">Semua Status</option>
-                <option value="PERLU_KLASIFIKASI">Perlu Klasifikasi</option>
-                <option value="SELESAI">Sudah Diklasifikasi</option>
-              </select>
-            </div>
-          </div>
-          <div class="flex items-center justify-end gap-2 shrink-0">
-            <button type="button" onclick="muatDaftarRumahIbadahAdmin(_halamanRiAktif)"
-              class="flex-1 sm:flex-initial justify-center px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 active:scale-95">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span>Muat Ulang</span>
-            </button>
-            <button type="button" onclick="bukaModalTambahRumahIbadah()"
-              class="flex-1 sm:flex-initial justify-center px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Tambah Rumah Ibadah</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Tabel Data (Scroll Horizontal Halus di Mobile) -->
-        <div class="flex-1 overflow-y-auto p-3 sm:p-5 overscroll-contain">
-          <div class="overflow-x-auto border border-slate-200 rounded-xl shadow-sm">
-            <table class="w-full text-left border-collapse whitespace-nowrap text-xs">
-              <thead>
-                <tr class="bg-slate-100 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider select-none">
-                  <th class="px-3 py-2.5 text-center w-12">No</th>
-                  <th class="px-3 py-2.5">Jenis</th>
-                  <th class="px-3 py-2.5">Nama Tempat Ibadah</th>
-                  <th class="px-3 py-2.5">Kecamatan</th>
-                  <th class="px-3 py-2.5">Kelurahan</th>
-                  <th class="px-3 py-2.5">Alamat</th>
-                  <th class="px-3 py-2.5 text-center w-36">Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="tbody-kelola-ri" class="divide-y divide-slate-100 bg-white text-slate-700">
-                <tr><td colspan="7" class="text-center py-8 text-slate-400 italic">Memuat data rumah ibadah...</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <div id="loader-kelola-ri" class="hidden flex justify-center items-center py-4">
-            <div class="loader w-6 h-6 border-2"></div>
-          </div>
-        </div>
-
-        <!-- Footer & Paginasi (Full Responsive) -->
-        <div class="px-4 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-2.5 sm:gap-3 shrink-0">
-          <span id="info-total-kelola-ri" class="text-xs text-slate-500 font-medium text-center sm:text-left">Total: 0 data</span>
-          <div class="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap">
-            <button type="button" id="btn-prev-page-ri" onclick="gantiHalamanRi(-1)"
-              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              <span>Sebelumnya</span>
-            </button>
-            <span id="label-halaman-ri" class="text-xs font-semibold text-slate-700 px-2.5 py-1 bg-white border border-slate-200 rounded-lg shadow-xs">1 / 1</span>
-            <button type="button" id="btn-next-page-ri" onclick="gantiHalamanRi(1)"
-              class="px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1">
-              <span>Berikutnya</span>
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            <button type="button" onclick="document.getElementById('modal-kelola-rumah-ibadah').classList.add('hidden')"
-              class="ml-1 sm:ml-2 px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition">
-              Tutup
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Modal Form Tambah / Edit Rumah Ibadah (Full Responsive) -->
-    <div id="modal-form-rumah-ibadah" class="hidden fixed inset-0 z-[170] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4" onclick="if(event.target===this)this.classList.add('hidden')">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-100 overflow-hidden max-h-[92vh] max-h-[92dvh] flex flex-col">
-        <div class="flex justify-between items-center px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-800 text-white shrink-0">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shrink-0">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-            </div>
-            <div>
-              <h3 id="judul-modal-form-ri" class="text-sm font-bold tracking-wide uppercase">Tambah Rumah Ibadah Baru</h3>
-              <p class="text-[11px] text-slate-300">Isi kelengkapan data rumah ibadah Kota Medan</p>
-            </div>
-          </div>
-          <button type="button" onclick="document.getElementById('modal-form-rumah-ibadah').classList.add('hidden')" class="text-white/70 hover:text-white text-2xl leading-none transition">&times;</button>
-        </div>
-        <form id="form-modal-ri" onsubmit="simpanRumahIbadah(event)" class="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1">
-          <input type="hidden" id="mri-id" value="">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Jenis Rumah Ibadah <span class="text-red-500">*</span></label>
-            <select id="mri-jenis" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-              <option value="">-- Pilih Jenis --</option>
-              ${optJenis}
-            </select>
-          </div>
-          <div id="mri-pesan" class="hidden text-xs font-semibold p-2.5 rounded-lg"></div>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kecamatan <span class="text-red-500">*</span></label>
-              <select id="mri-kecamatan" required onchange="handleKecamatanFormRiChange()" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-                <option value="">-- Pilih Kecamatan --</option>
-                ${optKec}
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Kelurahan <span class="text-red-500">*</span></label>
-              <select id="mri-kelurahan" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-                <option value="">-- Pilih Kelurahan --</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nama Tempat Ibadah <span class="text-red-500">*</span></label>
-            <input type="text" id="mri-nama" required placeholder="Contoh: MASJID RAYA AL-MASHUN"
-              class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Alamat Lengkap</label>
-            <textarea id="mri-alamat" rows="2" placeholder="Contoh: JL. MAHMUN AL RASYID NO. 1"
-              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white"></textarea>
-          </div>
-          <div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-            <button type="button" onclick="document.getElementById('modal-form-rumah-ibadah').classList.add('hidden')"
-              class="flex-1 sm:flex-initial px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-semibold rounded-lg transition text-center">Batal</button>
-            <button type="submit" id="btn-submit-mri"
-              class="flex-1 sm:flex-initial px-5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-sm transition text-center flex items-center justify-center gap-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-              <span>Simpan Data</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  `);
-}
-
-function bukaModalKelolaRumahIbadah() {
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') {
-      tampilkanToast('Fitur Manajemen Rumah Ibadah hanya dapat diakses oleh Admin Utama.', 'gagal');
-    }
-    return;
+window.bukaModalKelolaRumahIbadah = function () {
+  if (typeof window.bukaTabKelolaIbadah === 'function') {
+    window.bukaTabKelolaIbadah();
   }
-  pastikanModalRumahIbadahSiap();
-  const m = document.getElementById('modal-kelola-rumah-ibadah');
-  if (m) m.classList.remove('hidden');
-  muatDaftarRumahIbadahAdmin(1);
-}
-
-function filterTabelRumahIbadah() {
-  if (_timerDebounceRi) clearTimeout(_timerDebounceRi);
-  _timerDebounceRi = setTimeout(() => {
-    muatDaftarRumahIbadahAdmin(1);
-  }, 280);
-}
-
-function gantiHalamanRi(arah) {
-  const target = _halamanRiAktif + arah;
-  if (target >= 1 && target <= _totalHalamanRi) {
-    muatDaftarRumahIbadahAdmin(target);
-  }
-}
-
-function muatDaftarRumahIbadahAdmin(page) {
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') {
-      tampilkanToast('Akses ditolak: Hanya Admin Utama yang memiliki wewenang.', 'gagal');
-    }
-    return;
-  }
-  pastikanModalRumahIbadahSiap();
-  _halamanRiAktif = Math.max(1, page || 1);
-
-  const tbody = document.getElementById('tbody-kelola-ri');
-  const loader = document.getElementById('loader-kelola-ri');
-  const cari = (document.getElementById('cari-kelola-ri')?.value || '').trim();
-  const jenis = (document.getElementById('filter-jenis-kelola-ri')?.value || '').trim();
-  const kecamatan = (document.getElementById('filter-kecamatan-kelola-ri')?.value || '').trim();
-  const statusKlasifikasi = (document.getElementById('filter-status-klasifikasi-ri')?.value || '').trim();
-
-  if (loader) loader.classList.remove('hidden');
-
-  google.script.run
-    .withSuccessHandler(function (res) {
-      if (loader) loader.classList.add('hidden');
-      if (!res || !res.sukses) {
-        if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-500 font-medium">Gagal memuat: ${typeof esc === 'function' ? esc(res ? res.pesan : 'Unknown') : 'Error'}</td></tr>`;
-        return;
-      }
-
-      _totalHalamanRi = res.totalHalaman || 1;
-      _cacheBarisRi = {};
-      (res.daftar || []).forEach(row => { _cacheBarisRi[row.id] = row; });
-
-      const infoTotal = document.getElementById('info-total-kelola-ri');
-      if (infoTotal) infoTotal.textContent = `Total: ${(res.total || 0).toLocaleString('id-ID')} data rumah ibadah (Halaman ${_halamanRiAktif} dari ${_totalHalamanRi})`;
-
-      const lblHalaman = document.getElementById('label-halaman-ri');
-      if (lblHalaman) lblHalaman.textContent = `${_halamanRiAktif} / ${_totalHalamanRi}`;
-
-      const btnPrev = document.getElementById('btn-prev-page-ri');
-      const btnNext = document.getElementById('btn-next-page-ri');
-      if (btnPrev) btnPrev.disabled = _halamanRiAktif <= 1;
-      if (btnNext) btnNext.disabled = _halamanRiAktif >= _totalHalamanRi;
-
-      if (!res.daftar || res.daftar.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400 italic">Tidak ada data rumah ibadah yang sesuai filter.</td></tr>';
-        return;
-      }
-
-      const offset = (_halamanRiAktif - 1) * (res.limit || 25);
-      if (tbody) {
-        tbody.innerHTML = res.daftar.map((r, i) => `
-          <tr class="hover:bg-slate-50/80 transition">
-            <td class="px-3 py-2.5 text-center text-slate-400 font-mono">${offset + i + 1}</td>
-            <td class="px-3 py-2.5">${badgeJenisRumahIbadah(r.jenis)}</td>
-            <td class="px-3 py-2.5 font-bold text-slate-800">${typeof esc === 'function' ? esc(r.nama) : r.nama}</td>
-            <td class="px-3 py-2.5 text-slate-600 font-medium">${typeof esc === 'function' ? esc(r.kecamatan) : r.kecamatan}</td>
-            <td class="px-3 py-2.5 text-slate-600">${typeof esc === 'function' ? esc(r.kelurahan) : r.kelurahan}</td>
-            <td class="px-3 py-2.5 text-slate-500 truncate max-w-xs" title="${typeof esc === 'function' ? esc(r.alamat) : r.alamat}">${typeof esc === 'function' ? esc(r.alamat) : r.alamat}</td>
-            <td class="px-3 py-2.5 text-center">
-              <div class="flex items-center justify-center gap-1.5">
-                <button type="button" onclick="bukaModalEditRumahIbadah(${r.id})"
-                  class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
-                  title="Edit Data">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-sky-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                  <span>Edit</span>
-                </button>
-                <button type="button" onclick="konfirmasiHapusRumahIbadah(${r.id}, '${(r.nama || '').replace(/'/g, "\\'")}')"
-                  class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/80 rounded-md font-semibold text-[11px] transition flex items-center gap-1"
-                  title="Hapus Data">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-red-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                  <span>Hapus</span>
-                </button>
-              </div>
-            </td>
-          </tr>
-        `).join('');
-      }
-    })
-    .withFailureHandler(function (err) {
-      if (loader) loader.classList.add('hidden');
-      if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-red-500 font-medium">Error: ${typeof esc === 'function' ? esc(err && err.message ? err.message : err) : 'Error'}</td></tr>`;
-    })
-    .ambilDaftarRumahIbadahAdmin(dataPengguna.token, { cari, jenis, kecamatan, statusKlasifikasi, page: _halamanRiAktif, limit: 20 });
-}
-
-function bukaModalTambahRumahIbadah() {
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menambah data.', 'gagal');
-    return;
-  }
-  pastikanModalRumahIbadahSiap();
-  const form = document.getElementById('form-modal-ri');
-  if (form) form.reset();
-  document.getElementById('mri-pesan')?.classList.add('hidden');
-
-  const idEl = document.getElementById('mri-id');
-  if (idEl) idEl.value = '';
-
-  const judul = document.getElementById('judul-modal-form-ri');
-  if (judul) judul.textContent = 'Tambah Rumah Ibadah Baru';
-
-  const selectKel = document.getElementById('mri-kelurahan');
-  if (selectKel) selectKel.innerHTML = '<option value="">-- Pilih Kelurahan --</option>';
-
-  const modal = document.getElementById('modal-form-rumah-ibadah');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function handleKecamatanFormRiChange(callbackKelurahanDipilih) {
-  const kecEl = document.getElementById('mri-kecamatan');
-  const kelEl = document.getElementById('mri-kelurahan');
-  if (!kecEl || !kelEl) return;
-
-  const kec = kecEl.value;
-  if (!kec) {
-    kelEl.innerHTML = '<option value="">-- Pilih Kelurahan --</option>';
-    return;
-  }
-
-  kelEl.innerHTML = '<option value="">Memuat kelurahan...</option>';
-  kelEl.disabled = true;
-
-  google.script.run
-    .withSuccessHandler(function (daftarKel) {
-      kelEl.disabled = false;
-      const list = Array.isArray(daftarKel) ? daftarKel : [];
-      kelEl.innerHTML = '<option value="">-- Pilih Kelurahan --</option>' + list.map(k => `<option value="${k}">${k}</option>`).join('');
-      if (typeof callbackKelurahanDipilih === 'function') callbackKelurahanDipilih();
-    })
-    .withFailureHandler(function () {
-      kelEl.disabled = false;
-      kelEl.innerHTML = '<option value="">Gagal memuat kelurahan</option>';
-    })
-    .getKelurahanByKecamatan(dataPengguna.token, kec);
-}
-
-function bukaModalEditRumahIbadah(id) {
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat mengedit data.', 'gagal');
-    return;
-  }
-  const row = _cacheBarisRi[id];
-  if (!row) return;
-
-  pastikanModalRumahIbadahSiap();
-  const idEl = document.getElementById('mri-id');
-  const jenisEl = document.getElementById('mri-jenis');
-  const kecEl = document.getElementById('mri-kecamatan');
-  const kelEl = document.getElementById('mri-kelurahan');
-  const namaEl = document.getElementById('mri-nama');
-  const alamatEl = document.getElementById('mri-alamat');
-  const judul = document.getElementById('judul-modal-form-ri');
-
-  if (judul) judul.textContent = 'Edit Data Rumah Ibadah';
-  if (idEl) idEl.value = row.id;
-  const jenisResmi = DAFTAR_JENIS_IBADAH_ADMIN.some(jenis => jenis.val === row.jenis);
-  if (jenisEl) jenisEl.value = jenisResmi ? row.jenis : '';
-  if (kecEl) kecEl.value = row.kecamatan;
-  if (namaEl) namaEl.value = row.nama;
-  if (alamatEl) alamatEl.value = row.alamat;
-
-  const pesanEl = document.getElementById('mri-pesan');
-  if (jenisResmi) {
-    pesanEl?.classList.add('hidden');
-  } else if (pesanEl) {
-    pesanEl.textContent = 'Data ini memakai jenis lama "' + (row.jenis || '-') + '". Pilih salah satu dari tujuh jenis resmi sebelum menyimpan perubahan.';
-    pesanEl.className = 'text-xs font-semibold p-2.5 rounded-lg bg-amber-50 text-amber-800 border border-amber-200';
-    pesanEl.classList.remove('hidden');
-  }
-
-  handleKecamatanFormRiChange(function () {
-    if (kelEl && row.kelurahan) kelEl.value = row.kelurahan;
-  });
-
-  const modal = document.getElementById('modal-form-rumah-ibadah');
-  if (modal) modal.classList.remove('hidden');
-}
-
-function simpanRumahIbadah(event) {
-  if (event) event.preventDefault();
-
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') {
-      tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menyimpan data.', 'gagal');
-    }
-    return;
-  }
-
-  const id = document.getElementById('mri-id')?.value;
-  const jenis = (document.getElementById('mri-jenis')?.value || '').trim();
-  const kecamatan = (document.getElementById('mri-kecamatan')?.value || '').trim();
-  const kelurahan = (document.getElementById('mri-kelurahan')?.value || '').trim();
-  const nama = (document.getElementById('mri-nama')?.value || '').trim();
-  const alamat = (document.getElementById('mri-alamat')?.value || '').trim();
-
-  if (!jenis) { if (typeof tampilkanToast === 'function') tampilkanToast('Pilih jenis rumah ibadah!', 'gagal'); return; }
-  if (!kecamatan) { if (typeof tampilkanToast === 'function') tampilkanToast('Pilih kecamatan!', 'gagal'); return; }
-  if (!kelurahan) { if (typeof tampilkanToast === 'function') tampilkanToast('Pilih kelurahan!', 'gagal'); return; }
-  if (!nama || nama.length < 3) { if (typeof tampilkanToast === 'function') tampilkanToast('Nama rumah ibadah minimal 3 karakter!', 'gagal'); return; }
-
-  const btnSubmit = document.getElementById('btn-submit-mri');
-  if (btnSubmit) {
-    btnSubmit.disabled = true;
-    btnSubmit.textContent = 'Menyimpan...';
-  }
-
-  const payload = { jenis, kecamatan, kelurahan, nama, alamat };
-
-  if (id) {
-    // Mode Edit / Update
-    payload.id = Number(id);
-    google.script.run
-      .withSuccessHandler(function (res) {
-        if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = 'Simpan Data'; }
-        if (res && res.sukses) {
-          if (typeof tampilkanToast === 'function') tampilkanToast(res.pesan || 'Data berhasil diperbarui!', 'sukses');
-          document.getElementById('modal-form-rumah-ibadah')?.classList.add('hidden');
-          muatDaftarRumahIbadahAdmin(_halamanRiAktif);
-        } else {
-          if (typeof tampilkanToast === 'function') tampilkanToast(res ? res.pesan : 'Gagal memperbarui data.', 'gagal');
-        }
-      })
-      .withFailureHandler(function (err) {
-        if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = 'Simpan Data'; }
-        if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
-      })
-      .ubahRumahIbadah(dataPengguna.token, payload);
-  } else {
-    // Mode Create / Tambah Baru
-    google.script.run
-      .withSuccessHandler(function (res) {
-        if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = 'Simpan Data'; }
-        if (res && res.sukses) {
-          if (typeof tampilkanToast === 'function') tampilkanToast(res.pesan || 'Data berhasil ditambahkan!', 'sukses');
-          document.getElementById('modal-form-rumah-ibadah')?.classList.add('hidden');
-          muatDaftarRumahIbadahAdmin(1);
-        } else {
-          if (typeof tampilkanToast === 'function') tampilkanToast(res ? res.pesan : 'Gagal menambahkan data.', 'gagal');
-        }
-      })
-      .withFailureHandler(function (err) {
-        if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.textContent = 'Simpan Data'; }
-        if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
-      })
-      .tambahRumahIbadah(dataPengguna.token, payload);
-  }
-}
-
-async function konfirmasiHapusRumahIbadah(id, nama) {
-  if (!dataPengguna || dataPengguna.role !== 'UTAMA') {
-    if (typeof tampilkanToast === 'function') {
-      tampilkanToast('Akses ditolak: Hanya Admin Utama yang dapat menghapus data.', 'gagal');
-    }
-    return;
-  }
-
-  const yakin = (typeof window.konfirmasiAksi === 'function')
-    ? await window.konfirmasiAksi({
-      judul: 'Hapus Tempat Ibadah',
-      pesan: `Apakah Anda yakin ingin menghapus data tempat ibadah:\n"${nama}"?\n\nTindakan ini permanen dan tidak dapat dibatalkan.`,
-      tipe: 'danger',
-      teksKonfirmasi: 'Ya, Hapus Data',
-      teksBatal: 'Batal'
-    })
-    : window.confirm(`Hapus data "${nama}"?`);
-
-  if (!yakin) return;
-
-  if (typeof tampilkanToast === 'function') {
-    tampilkanToast(`Menghapus data "${nama}"...`, 'proses');
-  }
-
-  google.script.run
-    .withSuccessHandler(function (res) {
-      if (res && res.sukses) {
-        if (typeof tampilkanToast === 'function') tampilkanToast(res.pesan || 'Data berhasil dihapus.', 'sukses');
-        muatDaftarRumahIbadahAdmin(_halamanRiAktif);
-      } else {
-        if (typeof tampilkanToast === 'function') tampilkanToast(res ? res.pesan : 'Gagal menghapus data.', 'gagal');
-      }
-    })
-    .withFailureHandler(function (err) {
-      if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
-    })
-    .hapusRumahIbadah(dataPengguna.token, id);
-}
-
-window.bukaModalKelolaRumahIbadah = bukaModalKelolaRumahIbadah;
-window.bukaModalTambahRumahIbadah = bukaModalTambahRumahIbadah;
-window.bukaModalEditRumahIbadah = bukaModalEditRumahIbadah;
-window.konfirmasiHapusRumahIbadah = konfirmasiHapusRumahIbadah;
-window.filterTabelRumahIbadah = filterTabelRumahIbadah;
-window.muatDaftarRumahIbadahAdmin = muatDaftarRumahIbadahAdmin;
-window.handleKecamatanFormRiChange = handleKecamatanFormRiChange;
-window.simpanRumahIbadah = simpanRumahIbadah;
-window.gantiHalamanRi = gantiHalamanRi;
-
+};

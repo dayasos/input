@@ -212,6 +212,7 @@ const SWR_CONFIG = {
 
   // Akun & Audit: TTL 5 menit
   ambilDaftarAkun: { ttl: 5 * 60 * 1000, domain: 'akun' },
+  ambilDaftarAkunLengkap: { ttl: 5 * 60 * 1000, domain: 'akun' },
   ambilRiwayatEdit: { ttl: 3 * 60 * 1000, domain: 'riwayat' },
 
   // Data tahun arsip (dropdown "Tahun" di Lihat Data, tahun selain TAHUN_AKTIF): baris-baris
