@@ -702,273 +702,140 @@ function cekStatusSesiUpload(url) {
 }
 
 async function unggahBerkasLangsungKeStorage(konteks, berkasMap) {
-  const kunciListSemua = Object.keys(berkasMap);
-  if (kunciListSemua.length === 0) return { sukses: true, link: {} };
-  const nikKonteks = konteks && konteks.nik;
-  const layananKonteks = konteks && konteks.layanan;
-  const hasilDariCache = [];
-  const kunciList = [];
-  const sesiPendingDariStorage = {}; // k -> { uploadSessionUri, folderId, sig, waktu } (lihat T4)
-  kunciListSemua.forEach(function (k) {
-    const cached = ambilCacheUploadSukses(nikKonteks, layananKonteks, k, berkasMap[k]);
-    if (cached) {
-      hasilDariCache.push({ k: k, fileId: cached.fileId, gagal: null, folderIdCache: cached.folderId });
-      return;
-    }
-    kunciList.push(k);
-    const pending = ambilSesiPendingDariStorage(nikKonteks, layananKonteks, k, berkasMap[k]);
-    if (pending) sesiPendingDariStorage[k] = pending;
-  });
-  // Semua berkas sudah pernah sukses terunggah (isi sama persis) -- lompat langsung ke langkah
-  // konfirmasi, tidak perlu sentuh Drive API upload sama sekali.
-  if (kunciList.length === 0) {
-    const folderIdDariCache = hasilDariCache[0].folderIdCache;
-    const daftarFileIdCache = {};
-    hasilDariCache.forEach(function (r) { daftarFileIdCache[r.k] = r.fileId; });
-    return await panggilAksiDenganRetry('konfirmasiUploadBerkasDrive', 2, dataPengguna.token, folderIdDariCache, daftarFileIdCache);
-  }
-  const totalBerkas = kunciListSemua.length;
-  let berkasSelesai = hasilDariCache.length; // berkas dari cache sudah "selesai" sejak awal
-  // Elemen progress bar pada loadingOverlay
+  const kunciList = Object.keys(berkasMap);
+  if (kunciList.length === 0) return { sukses: true, link: {} };
+
   const progressContainer = document.getElementById('loading-progress-container');
   const progressLabel = document.getElementById('loading-progress-label');
   const progressPersen = document.getElementById('loading-progress-persen');
   const progressBar = document.getElementById('loading-progress-bar');
   const progressSub = document.getElementById('loading-progress-sub');
+  const daftarFileInfo = {};
+  const bytesTerunggah = {};
+  let berkasSelesai = 0;
+
+  kunciList.forEach(function (k) {
+    daftarFileInfo[k] = metaSatuBerkas(berkasMap[k]);
+    bytesTerunggah[k] = 0;
+  });
+
+  const totalByte = kunciList.reduce(function (jumlah, k) {
+    return jumlah + (daftarFileInfo[k].ukuranByte || 0);
+  }, 0) || 1;
+
+  function perbaruiProgress(label, selesai) {
+    if (!progressContainer) return;
+    const byteSelesai = kunciList.reduce(function (jumlah, k) {
+      return jumlah + (bytesTerunggah[k] || 0);
+    }, 0);
+    const persen = Math.min(99, Math.round((byteSelesai / totalByte) * 100));
+    if (progressPersen) progressPersen.innerText = persen + '%';
+    if (progressBar) progressBar.style.width = persen + '%';
+    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${kunciList.length})`;
+    if (progressSub) progressSub.innerText = selesai ? `Selesai: ${label}` : `Mengunggah: ${label}...`;
+  }
+
   if (progressContainer) {
     progressContainer.classList.remove('hidden');
     if (progressPersen) progressPersen.innerText = '0%';
     if (progressBar) progressBar.style.width = '0%';
-    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${totalBerkas})`;
-    if (progressSub) progressSub.innerText = 'Menyiapkan pengunggahan berkas ke Google Drive...';
+    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (0/${kunciList.length})`;
+    if (progressSub) progressSub.innerText = 'Menyiapkan penyimpanan berkas...';
   }
-  // Langkah 1: minta sesi resumable Drive -- backend resolve/buat rantai folder
-  // (Kecamatan/Layanan/Nama(NIK)) SEKALI di sini, baru inisiasi sesi upload per berkas secara
-  // paralel. Lihat domains/upload.ts::mintaUrlUploadBerkasDrive.
-  //
-  // T4: berkas yg SUDAH punya sesi pending tersimpan dari tab-life sebelumnya (reload/crash
-  // setelah PUT byte sukses tapi sebelum konfirmasi -- lihat sesiPendingDariStorage di atas)
-  // TIDAK ikut diminta sesi baru di sini. Sesi lamanya akan dicek dulu statusnya (lewat
-  // cekStatusSesiUpload di uploadSatuBerkasDenganRetry) sebelum diputuskan lanjut/reset --
-  // supaya kalau ternyata sudah (sebagian/seluruhnya) ter-upload, tidak minta sesi baru & bikin
-  // file lama jadi FILE DOBEL YATIM di Drive.
-  const metaMap = {};
-  kunciList.forEach(function (k) { metaMap[k] = metaSatuBerkas(berkasMap[k]); });
-  const kunciButuhSesiBaru = kunciList.filter(function (k) { return !sesiPendingDariStorage[k]; });
-  let folderId = null;
-  let daftarSesi = {};
-  if (kunciButuhSesiBaru.length > 0) {
-    const metaMapBaru = {};
-    kunciButuhSesiBaru.forEach(function (k) { metaMapBaru[k] = metaMap[k]; });
-    const hasilSesiAwal = await panggilAksiDenganRetry('mintaUrlUploadBerkasDrive', 2, dataPengguna.token, konteks, metaMapBaru);
-    if (!hasilSesiAwal || !hasilSesiAwal.sukses) {
-      if (progressContainer) progressContainer.classList.add('hidden');
-      return { sukses: false, pesan: hasilSesiAwal ? hasilSesiAwal.pesan : 'Tidak ada respons dari server saat menyiapkan upload.' };
-    }
-    folderId = hasilSesiAwal.folderId;
-    daftarSesi = hasilSesiAwal.daftarSesi || {};
-    kunciButuhSesiBaru.forEach(function (k) {
-      if (daftarSesi[k] && daftarSesi[k].uploadSessionUri) {
-        simpanSesiPendingKeStorage(nikKonteks, layananKonteks, k, berkasMap[k], daftarSesi[k].uploadSessionUri, folderId);
-      }
-    });
+
+  // Backend hanya menerbitkan URL upload yang singkat masa berlakunya. Byte berkas dikirim
+  // langsung dari browser ke bucket privat Supabase, sehingga tidak melewati batas body Vercel
+  // maupun proxy Edge Function dan tidak bergantung pada OAuth Google Drive.
+  const hasilMint = await panggilAksiDenganRetry(
+    'mintaUrlUploadBerkas', 2, dataPengguna.token, konteks, daftarFileInfo
+  );
+  if (!hasilMint || !hasilMint.sukses) {
+    if (progressContainer) progressContainer.classList.add('hidden');
+    return { sukses: false, pesan: hasilMint ? hasilMint.pesan : 'Gagal menyiapkan upload.' };
   }
-  // Berkas dgn sesi pending dari storage: pakai lagi URI sesi lamanya (tandai dariPending supaya
-  // uploadSatuBerkasDenganRetry SELALU cek status dulu, tidak asumsi byte 0 spt sesi baru).
-  // folderId 1 NIK+layanan seharusnya sama persis siapa pun sumbernya -- fallback ke yg tersimpan
-  // di sesi pending kalau tidak ada batch sesi-baru sama sekali (semua berkas dari pending).
-  Object.keys(sesiPendingDariStorage).forEach(function (k) {
-    daftarSesi[k] = { uploadSessionUri: sesiPendingDariStorage[k].uploadSessionUri, dariPending: true };
-    if (!folderId) folderId = sesiPendingDariStorage[k].folderId;
-  });
-  const konteksDenganFolder = Object.assign({}, konteks, { folderId: folderId });
-  // Progress agregat BYTE-LEVEL (bukan cuma lompat per-file selesai) -- total dihitung dari
-  // ukuranByte tiap berkas (sudah dikirim ke backend di langkah 1), lalu tiap berkas melaporkan
-  // bytes terkirimnya secara real-time lewat XMLHttpRequest.upload.onprogress (fetch() TIDAK
-  // punya event progress upload native, makanya PUT byte di bawah pakai XHR, bukan fetch).
-  const totalByteSemua = kunciList.reduce(function (acc, k) {
-    return acc + (metaMap[k].ukuranByte || 0);
-  }, 0) || 1;
-  const bytesTerunggahPerBerkas = {};
-  kunciList.forEach(function (k) { bytesTerunggahPerBerkas[k] = 0; });
-  function updateProgressUI(namaBerkas, sedangUnggah) {
-    if (!progressContainer) return;
-    const totalTerunggah = Object.keys(bytesTerunggahPerBerkas).reduce(function (acc, k) {
-      return acc + bytesTerunggahPerBerkas[k];
-    }, 0);
-    // Dibatasi maks 99% di sini -- 100% baru dicapai setelah langkah 3 (konfirmasi) beres,
-    // supaya progress bar tidak "selesai" sebelum proses benar-benar tuntas.
-    const persen = Math.min(99, Math.round((totalTerunggah / totalByteSemua) * 100));
-    if (progressPersen) progressPersen.innerText = persen + '%';
-    if (progressBar) progressBar.style.width = persen + '%';
-    if (progressLabel) progressLabel.innerText = `Mengunggah Berkas (${berkasSelesai}/${totalBerkas})`;
-    if (progressSub) {
-      progressSub.innerText = sedangUnggah ? `Mengunggah: ${namaBerkas}...` : `Selesai: ${namaBerkas}`;
-    }
-  }
-  // PUT byte ke Drive lewat XHR (bukan fetch) supaya bisa dapat event progress real-time.
-  // resumeFromByte>0 (T5): lanjutkan sesi resumable yg sebagian sudah ter-upload -- kirim HANYA
-  // sisa byte yg belum masuk (blob.slice), dgn header Content-Range (BUKAN Content-Type -- protokol
-  // resumable upload Drive cuma menerima Content-Type di request PEMBUKA sesi, chunk lanjutan wajib
-  // tanpa itu). onProgress selalu dipanggil dgn posisi byte ABSOLUT (relatif ke seluruh file),
-  // bukan relatif ke potongan yg dikirim, supaya progress bar tetap akurat saat resume.
-  function putBlobKeDrive(url, blob, mimeType, onProgress, resumeFromByte, totalBytes) {
+
+  function putKeStorage(url, item, k) {
     return new Promise(function (resolve, reject) {
-      const mulaiDariByte = resumeFromByte || 0;
-      const ukuranTotal = totalBytes || blob.size;
-      const bodyDikirim = mulaiDariByte > 0 ? blob.slice(mulaiDariByte) : blob;
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', url, true);
-      xhr.timeout = 120000; // 2 menit -- generus utk berkas 25MB di koneksi lambat, tapi tetap
-      // mencegah PUT menggantung tanpa batas kalau koneksi stall total (memicu retry di pemanggil).
-      if (mulaiDariByte > 0) {
-        xhr.setRequestHeader('Content-Range', `bytes ${mulaiDariByte}-${ukuranTotal - 1}/${ukuranTotal}`);
-      } else {
-        xhr.setRequestHeader('Content-Type', mimeType || 'application/octet-stream');
-      }
-      xhr.setRequestHeader('x-session-token', dataPengguna.token);
+      xhr.timeout = 180000;
+      xhr.setRequestHeader('Content-Type', item.mimeType || 'application/octet-stream');
       xhr.upload.onprogress = function (e) {
-        if (e.lengthComputable && typeof onProgress === 'function') onProgress(mulaiDariByte + e.loaded);
+        if (e.lengthComputable) {
+          bytesTerunggah[k] = e.loaded;
+          perbaruiProgress(item.label || k, false);
+        }
       };
       xhr.onload = function () {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            resolve(JSON.parse(xhr.responseText));
-          } catch (eParse) {
-            reject(new Error('Respons upload Drive tidak valid.'));
-          }
-        } else {
-          reject(new Error(`Upload ke Drive gagal (HTTP ${xhr.status})`));
-        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error('HTTP ' + xhr.status));
       };
-      xhr.onerror = function () { reject(new Error('Kendala jaringan saat upload ke Drive.')); };
-      xhr.ontimeout = function () { reject(new Error('Batas waktu upload ke Drive terlampaui.')); };
-      xhr.send(bodyDikirim);
+      xhr.onerror = function () { reject(new Error('koneksi jaringan terputus')); };
+      xhr.ontimeout = function () { reject(new Error('batas waktu upload terlampaui')); };
+      xhr.send(item.file);
     });
   }
-  // Upload satu berkas dengan auto-retry hingga 2x (3 total kesempatan). Attempt pertama pakai
-  // sesi yang sudah didapat dari langkah 1 (atau dipulihkan dari storage, lihat T4); retry
-  // (attempt>0) ATAU sesi yg dipulihkan dari tab-life sebelumnya SELALU dicek dulu statusnya ke
-  // Google (cekStatusSesiUpload) sebelum PUT -- sesi itu bisa saja sudah SEBAGIAN/SELURUHNYA
-  // ter-upload tanpa sepengetahuan kita (T5: resume dari byte yg sudah masuk, bukan restart
-  // total; T4: kalau ternyata sudah lengkap, langsung dianggap selesai tanpa PUT ulang sama
-  // sekali). Sesi BENAR-BENAR baru (baru diminta di attempt ini) tidak perlu dicek -- pasti byte 0.
-  async function uploadSatuBerkasDenganRetry(k, item, maxRetries) {
-    const limitRetry = typeof maxRetries === 'number' ? maxRetries : 2;
-    const labelBerkas = item.label || k;
-    const totalByteBerkas = metaMap[k].ukuranByte || (item.file ? item.file.size : 0);
-    function tandaiSelesai(fileId) {
-      bytesTerunggahPerBerkas[k] = totalByteBerkas || bytesTerunggahPerBerkas[k];
-      berkasSelesai++;
-      updateProgressUI(labelBerkas, false);
-      simpanCacheUploadSukses(nikKonteks, layananKonteks, k, item, fileId, folderId);
-      hapusSesiPendingDariStorage(nikKonteks, layananKonteks, k); // T4: tuntas, jejak sesi pending tidak perlu lagi
-      return { k: k, fileId: fileId, gagal: null };
+
+  async function uploadSatu(k) {
+    const item = berkasMap[k];
+    const info = hasilMint.daftarUrl && hasilMint.daftarUrl[k];
+    const label = item.label || k;
+    if (!info || !info.uploadUrl) {
+      return { k: k, gagal: `URL upload "${label}" tidak tersedia.` };
     }
-    let lastErrorMsg = null;
-    let sesiUriAktif = daftarSesi[k] && daftarSesi[k].uploadSessionUri;
-    // Sesi yg dipulihkan dari storage (tab-life sebelumnya) belum diketahui progressnya -- WAJIB
-    // dicek dulu walau ini baru attempt pertama di run ini.
-    let sesiPerluDicekStatusnya = Boolean(daftarSesi[k] && daftarSesi[k].dariPending);
-    for (let attempt = 0; attempt <= limitRetry; attempt++) {
-      bytesTerunggahPerBerkas[k] = 0; // reset progress berkas ini kalau ini percobaan ulang
+
+    let pesanTerakhir = 'gagal tanpa keterangan';
+    for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) {
-        if (progressSub) progressSub.innerText = `Koneksi terganggu. Mencoba ulang (${attempt}/${limitRetry}): ${labelBerkas}... ⏱️`;
-        await new Promise(function (res) { setTimeout(res, 1000 * attempt); });
-        sesiPerluDicekStatusnya = true; // sesi ini sudah pernah dipakai PUT di attempt sebelumnya
-      } else {
-        updateProgressUI(labelBerkas, true);
-      }
-      let resumeFromByte = 0;
-      if (sesiUriAktif && sesiPerluDicekStatusnya) {
-        const status = await cekStatusSesiUpload(sesiUriAktif);
-        if (status.complete) return tandaiSelesai(status.fileId);
-        if (status.partial) {
-          resumeFromByte = status.resumeFromByte || 0;
-        } else {
-          sesiUriAktif = null; // sesi sudah tak valid (gone) -- minta baru di bawah
-        }
+        bytesTerunggah[k] = 0;
+        if (progressSub) progressSub.innerText = `Mencoba ulang (${attempt}/2): ${label}...`;
+        await new Promise(function (resolve) { setTimeout(resolve, 1000 * attempt); });
       }
       try {
-        let uploadSessionUri = sesiUriAktif;
-        if (!uploadSessionUri) {
-          const metaSatu = {};
-          metaSatu[k] = metaSatuBerkas(item);
-          const hasilUlang = await panggilAksiPromise('mintaUrlUploadBerkasDrive', dataPengguna.token, konteksDenganFolder, metaSatu);
-          if (!hasilUlang || !hasilUlang.sukses || !hasilUlang.daftarSesi || !hasilUlang.daftarSesi[k]) {
-            throw new Error(hasilUlang ? hasilUlang.pesan : 'Gagal menyiapkan ulang sesi upload.');
-          }
-          uploadSessionUri = hasilUlang.daftarSesi[k].uploadSessionUri;
-          resumeFromByte = 0; // sesi baru, pasti mulai dari 0
-        }
-        sesiUriAktif = uploadSessionUri;
-        sesiPerluDicekStatusnya = true; // kalau attempt berikutnya perlu, sesi ini sudah "dipakai"
-        simpanSesiPendingKeStorage(nikKonteks, layananKonteks, k, item, uploadSessionUri, folderId);
-        const dataPut = await putBlobKeDrive(uploadSessionUri, item.file, item.mimeType, function (bytesAbsolut) {
-          bytesTerunggahPerBerkas[k] = bytesAbsolut;
-          updateProgressUI(labelBerkas, true);
-        }, resumeFromByte, totalByteBerkas);
-        if (!dataPut || !dataPut.id) throw new Error('Respons upload Drive tidak berisi ID berkas.');
-        return tandaiSelesai(dataPut.id);
-      } catch (eSatu) {
-        lastErrorMsg = 'Kendala jaringan (' + pesanErrorRamah(eSatu) + ').';
+        await putKeStorage(info.uploadUrl, item, k);
+        bytesTerunggah[k] = daftarFileInfo[k].ukuranByte || item.file.size || 0;
+        berkasSelesai++;
+        perbaruiProgress(label, true);
+        return { k: k, path: info.path, gagal: null };
+      } catch (e) {
+        pesanTerakhir = pesanErrorRamah(e);
       }
     }
-    return { k: k, fileId: null, gagal: `Gagal mengunggah "${labelBerkas}": ${lastErrorMsg}` };
+    return { k: k, gagal: `Gagal mengunggah "${label}": ${pesanTerakhir}` };
   }
-  // Concurrency adaptif: 2 untuk jaringan seluler lemah/save-data agar bebas bufferbloat, 4 untuk wifi/kencang
-  const isKoneksiLambat = typeof navigator !== 'undefined' && navigator.connection &&
+
+  const koneksiLambat = typeof navigator !== 'undefined' && navigator.connection &&
     (navigator.connection.saveData || navigator.connection.effectiveType === '2g' || navigator.connection.effectiveType === '3g');
-  const CONCURRENCY_LIMIT = isKoneksiLambat ? 2 : 4;
-  const hasilList = [];
-  let indexAntrean = 0;
-  let adaGagalFatal = false;
-  async function antreanWorker() {
-    while (indexAntrean < kunciList.length && !adaGagalFatal) {
-      const idx = indexAntrean++;
-      const k = kunciList[idx];
-      const item = berkasMap[k];
-      const hasil = await uploadSatuBerkasDenganRetry(k, item, 2);
-      hasilList.push(hasil);
-      if (hasil.gagal) {
-        adaGagalFatal = true;
-        break;
-      }
+  const batasParalel = koneksiLambat ? 2 : 4;
+  const hasilPut = [];
+  let nomorAntrean = 0;
+
+  async function worker() {
+    while (nomorAntrean < kunciList.length) {
+      const k = kunciList[nomorAntrean++];
+      hasilPut.push(await uploadSatu(k));
     }
   }
-  const workerCount = Math.min(CONCURRENCY_LIMIT, kunciList.length);
+
   const workers = [];
-  for (let w = 0; w < workerCount; w++) {
-    workers.push(antreanWorker());
-  }
+  for (let i = 0; i < Math.min(batasParalel, kunciList.length); i++) workers.push(worker());
   await Promise.all(workers);
-  const gagalPertama = hasilList.find(function (r) { return r.gagal; });
+
+  const gagalPertama = hasilPut.find(function (hasil) { return hasil.gagal; });
   if (gagalPertama) {
     if (progressContainer) progressContainer.classList.add('hidden');
     return { sukses: false, pesan: gagalPertama.gagal };
   }
-  // Langkah 3: konfirmasi -- set izin akses "anyone with link" per berkas & bentuk link tampilan.
-  if (progressPersen) progressPersen.innerText = '99%';
-  if (progressBar) progressBar.style.width = '99%';
-  if (progressSub) progressSub.innerText = 'Menyelesaikan unggahan...';
-  const daftarFileId = {};
-  hasilDariCache.forEach(function (r) { daftarFileId[r.k] = r.fileId; });
-  hasilList.forEach(function (r) { if (r.fileId) daftarFileId[r.k] = r.fileId; });
-  // Retry di sini lebih penting dari langkah 1 -- byte SEMUA berkas sudah sukses terkirim ke
-  // Drive di titik ini, tinggal set izin akses. panggilAksiDenganRetry aman dipanggil ulang
-  // (permissions.create bersifat idempoten dalam praktik -- lihat _shared/driveApi.ts).
-  const hasilKonfirmasi = await panggilAksiDenganRetry('konfirmasiUploadBerkasDrive', 2, dataPengguna.token, folderId, daftarFileId);
-  if (!hasilKonfirmasi || !hasilKonfirmasi.sukses) {
-    if (progressContainer) progressContainer.classList.add('hidden');
-    return {
-      sukses: false,
-      pesan: 'Berkas sudah tersimpan di Drive, tapi gagal menyelesaikan konfirmasi: ' +
-        (hasilKonfirmasi ? hasilKonfirmasi.pesan : 'Tidak ada respons dari server.') +
-        ' Silakan coba simpan data sekali lagi.'
-    };
-  }
+
+  const daftarPath = {};
+  hasilPut.forEach(function (hasil) { daftarPath[hasil.k] = hasil.path; });
+  if (progressSub) progressSub.innerText = 'Menyelesaikan dan mengamankan berkas...';
+
+  const hasilKonfirmasi = await panggilAksiDenganRetry(
+    'konfirmasiUploadBerkas', 2, dataPengguna.token, hasilMint.prefix, daftarPath
+  );
   if (progressContainer) progressContainer.classList.add('hidden');
-  return hasilKonfirmasi;
+  return hasilKonfirmasi || { sukses: false, pesan: 'Tidak ada respons saat konfirmasi upload.' };
 }
 
 async function kumpulkanDataForm() {
