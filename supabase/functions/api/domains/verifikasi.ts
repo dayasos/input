@@ -38,11 +38,14 @@ export async function verifikasiSatuData(
   const id = Number(nomorBarisAsli);
   if (!id) return { sukses: false, pesan: "Nomor baris tidak valid." };
 
-  const statusValid = ["Tidak Memenuhi Syarat", "Berkas Tidak Lengkap"];
+  const statusValid = ["Memenuhi Syarat", "Tidak Memenuhi Syarat", "Berkas Tidak Lengkap"];
   if (!statusValid.includes(statusBaru)) return { sukses: false, pesan: "Status tidak valid." };
 
-  const keteranganBersih = (keterangan || "").toString().trim();
-  if (!keteranganBersih) return { sukses: false, pesan: "Keterangan hasil verifikasi wajib diisi." };
+  // "Memenuhi Syarat": keterangan tidak dipakai (dikosongkan) dan laporan perbaikan ikut direset,
+  // sama seperti tandaiSudahDiperbaiki. Dua status lain tetap wajib berketerangan.
+  const memenuhi = statusBaru === "Memenuhi Syarat";
+  const keteranganBersih = memenuhi ? "" : (keterangan || "").toString().trim();
+  if (!memenuhi && !keteranganBersih) return { sukses: false, pesan: "Keterangan hasil verifikasi wajib diisi." };
 
   let batasWaktuBersih = "";
   if (statusBaru === "Berkas Tidak Lengkap") {
@@ -69,7 +72,9 @@ export async function verifikasiSatuData(
         keterangan_verifikasi = ${keteranganBersih},
         tanggal_verifikasi = ${waktuVerifikasi},
         diverifikasi_oleh = ${namaVerifikator},
-        batas_waktu_perbaikan = ${batasWaktuBersih || null}
+        batas_waktu_perbaikan = ${batasWaktuBersih || null},
+        tanggal_lapor_perbaikan = case when ${memenuhi}::boolean then null else tanggal_lapor_perbaikan end,
+        dilapor_oleh = case when ${memenuhi}::boolean then null else dilapor_oleh end
       where id = ${id} and tahun = ${TAHUN_AKTIF}
         and (${statusDiharapkan} = '' or status_verifikasi = ${statusDiharapkan})
       returning id

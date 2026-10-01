@@ -1125,10 +1125,11 @@ function invalidateCacheDataTransaksi() {
   try { sessionStorage.removeItem('dana_jasa_lihat_cache'); } catch (e) { }
 }
 
-function perbaruiStatusDiMasterData(nomorBaris, statusBaru) {
+function perbaruiStatusDiMasterData(nomorBaris, statusBaru, tandaLapor) {
   for (let i = 0; i < masterDataLihat.length; i++) {
     if (masterDataLihat[i][0] === nomorBaris) {
       masterDataLihat[i][18] = statusBaru;
+      if (tandaLapor !== undefined) masterDataLihat[i][19] = tandaLapor; // penanda "sudah dilaporkan" (reset saat Memenuhi Syarat)
       break;
     }
   }
@@ -1960,10 +1961,13 @@ function halamanBerikutnya() {
       }
       h += `<div class="mb-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
         <p class="text-xs font-bold text-amber-900 uppercase mb-2">Verifikasi Admin Utama</p>
-        <textarea id="input-keterangan-verifikasi" rows="2" placeholder="Tulis alasan jika data ini TIDAK memenuhi syarat..." class="w-full text-xs p-2 border border-amber-300 rounded-md mb-2"></textarea>
+        <textarea id="input-keterangan-verifikasi" rows="2" placeholder="Tulis alasan jika data ini TIDAK memenuhi syarat atau berkasnya tidak lengkap (tidak perlu diisi untuk Memenuhi Syarat)..." class="w-full text-xs p-2 border border-amber-300 rounded-md mb-2"></textarea>
         <label class="block text-[10px] font-semibold text-amber-800 mb-1">Batas Waktu Perbaikan (khusus jika pilih "Berkas Tidak Lengkap")</label>
         <input type="date" id="input-batas-waktu-verifikasi" class="w-full text-xs p-2 border border-amber-300 rounded-md mb-2">
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          ${statusVerif !== "Memenuhi Syarat" ? `<button id="btn-tandai-memenuhi" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
+            Tandai Memenuhi Syarat
+          </button>` : ''}
           <button id="btn-tandai-berkas-tidak-lengkap" class="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">
             Tandai Berkas Tidak Lengkap
           </button>
@@ -2018,8 +2022,10 @@ function halamanBerikutnya() {
     }
     isiKonten.innerHTML = h;
     function jalankanVerifikasi(statusBaru, tombolAktif, teksAsliTombol) {
-      const ket = document.getElementById('input-keterangan-verifikasi').value.trim().toUpperCase();
-      if (!ket) { tampilkanToast('Keterangan hasil verifikasi wajib diisi.', 'gagal'); return; }
+      const memenuhi = statusBaru === "Memenuhi Syarat";
+      // Memenuhi Syarat: keterangan tidak diperlukan (dikosongkan, sama seperti "Tandai Sudah Diperbaiki").
+      const ket = memenuhi ? "" : document.getElementById('input-keterangan-verifikasi').value.trim().toUpperCase();
+      if (!memenuhi && !ket) { tampilkanToast('Keterangan hasil verifikasi wajib diisi.', 'gagal'); return; }
       let batasWaktu = "";
       if (statusBaru === "Berkas Tidak Lengkap") {
         batasWaktu = document.getElementById('input-batas-waktu-verifikasi').value;
@@ -2037,22 +2043,23 @@ function halamanBerikutnya() {
       // statusDiharapkan (deteksi konflik admin lain) -- HARUS diambil sebelum dataAktif diubah.
       const nomorTarget = nomorBarisAktif;
       const statusLama = dataAktif[32] || "";
-      const snapshotLama = dataAktif.slice(32, 37);
+      const snapshotLama = dataAktif.slice(32, 40); // status..batas waktu, catatan nama, tgl lapor, dilapor oleh
       const statusTabelLama = statusLama || "Proses Verifikasi";
       dataAktif[32] = statusBaru;
       dataAktif[33] = ket;
       dataAktif[34] = "menyimpan...";
       dataAktif[35] = (dataPengguna.username || "").toString().toUpperCase();
       dataAktif[36] = batasWaktu;
+      if (memenuhi) { dataAktif[38] = ""; dataAktif[39] = ""; } // laporan perbaikan ikut direset server
       renderBaca(dataAktif);
-      perbaruiStatusDiMasterData(nomorTarget, statusBaru);
+      perbaruiStatusDiMasterData(nomorTarget, statusBaru, memenuhi ? "" : undefined);
       function selesai() { _verifSedangJalan = false; }
       // statusServer: status terkini di server bila diketahui (konflik). sinkronPenuh: hasil request
       // tidak pasti (timeout/putus -- bisa saja sudah tersimpan), jadi tarik ulang daftar dari server.
       function batalkan(pesan, statusServer, sinkronPenuh) {
         selesai();
         window._abaikanMuatUlangLihatSampai = 0; // refresh normal boleh jalan lagi
-        perbaruiStatusDiMasterData(nomorTarget, statusServer || statusTabelLama);
+        perbaruiStatusDiMasterData(nomorTarget, statusServer || statusTabelLama, memenuhi ? (snapshotLama[6] || "") : undefined);
         if (statusServer || sinkronPenuh) {
           invalidateCacheDataTransaksi();
           if (sinkronPenuh && typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
@@ -2063,9 +2070,9 @@ function halamanBerikutnya() {
           renderBaca(dataAktif);
           // renderBaca membangun ulang form: kembalikan isian agar tidak perlu mengetik ulang.
           const elKet = document.getElementById('input-keterangan-verifikasi');
-          if (elKet) elKet.value = ket;
+          if (elKet && ket) elKet.value = ket;
           const elBatas = document.getElementById('input-batas-waktu-verifikasi');
-          if (elBatas) elBatas.value = batasWaktu;
+          if (elBatas && batasWaktu) elBatas.value = batasWaktu;
         }
         tampilkanToast(pesan, 'gagal');
       }
@@ -2077,13 +2084,14 @@ function halamanBerikutnya() {
             return;
           }
           selesai();
-          perbaruiStatusDiMasterData(nomorTarget, res.status);
+          perbaruiStatusDiMasterData(nomorTarget, res.status, memenuhi ? "" : undefined);
           if (nomorBarisAktif === nomorTarget) {
             dataAktif[32] = res.status;
             dataAktif[33] = res.keterangan;
             dataAktif[34] = res.tanggal;
             dataAktif[35] = res.verifikator;
             dataAktif[36] = res.batasWaktu || "";
+            if (memenuhi) { dataAktif[38] = ""; dataAktif[39] = ""; }
             renderBaca(dataAktif);
           }
           // Cache dibuang, tapi data di memori sudah benar: tahan muat ulang penuh Lihat Data dari event
@@ -2101,6 +2109,24 @@ function halamanBerikutnya() {
     if (btnTandai) {
       btnTandai.addEventListener('click', function () {
         jalankanVerifikasi('Tidak Memenuhi Syarat', btnTandai, 'Tandai Tidak Memenuhi Syarat');
+      });
+    }
+    const btnMemenuhi = document.getElementById('btn-tandai-memenuhi');
+    if (btnMemenuhi) {
+      btnMemenuhi.addEventListener('click', function () {
+        const mulai = function () { jalankanVerifikasi('Memenuhi Syarat', btnMemenuhi, 'Tandai Memenuhi Syarat'); };
+        // Membalik keputusan "Tidak Memenuhi Syarat" -> minta konfirmasi dulu; status lain langsung jalan.
+        if ((dataAktif[32] || "") === "Tidak Memenuhi Syarat") {
+          konfirmasiAksi({
+            judul: "Ubah ke Memenuhi Syarat",
+            pesan: "Data ini sebelumnya berstatus 'Tidak Memenuhi Syarat'. Yakin ingin mengubahnya menjadi 'Memenuhi Syarat'?",
+            tipe: "warning",
+            teksBatal: "Batal",
+            teksKonfirmasi: "Ya, Ubah"
+          }).then(function (setuju) { if (setuju) mulai(); });
+        } else {
+          mulai();
+        }
       });
     }
     const btnBerkasKurang = document.getElementById('btn-tandai-berkas-tidak-lengkap');
@@ -2149,7 +2175,7 @@ function halamanBerikutnya() {
             dataAktif[38] = "";
             dataAktif[39] = "";
             renderBaca(dataAktif);
-            perbaruiStatusDiMasterData(nomorBarisAktif, res.status);
+            perbaruiStatusDiMasterData(nomorBarisAktif, res.status, "");
             invalidateCacheDataTransaksi();
             tampilkanToast('Data ditandai sudah diperbaiki.', 'sukses');
           })
