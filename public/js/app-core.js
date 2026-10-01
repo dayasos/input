@@ -1213,6 +1213,7 @@ tabTools.addEventListener('click', () => {
     }
     const thAksiEl = document.getElementById('th-aksi-lihat');
     if (thAksiEl) thAksiEl.classList.toggle('hidden', tahunDipilih !== tahunAktif);
+    aturFilterStatusUntukTahun(tahunDipilih);
 
     const btnSync2026 = document.getElementById('btn-sync-sheet-2026');
     if (btnSync2026) {
@@ -1232,15 +1233,77 @@ tabTools.addEventListener('click', () => {
     }
   };
 
-  function muatDataTahunHistoris(tahun) {
+  // Filter "Status": tahun aktif memakai opsi verifikasi bawaan index.html; tahun historis memakai
+  // nilai unik kolom Status tahun itu (diisi di renderTabelTahunHistoris). Label mengikuti tahun
+  // yang dipilih, sama seperti header kolom "Status <tahun>".
+  var htmlFilterStatusAktif = null;
+  function aturFilterStatusUntukTahun(tahun) {
+    var elStatus = document.getElementById('filter-verifikasi');
+    var elLabel = document.getElementById('label-filter-verifikasi');
+    if (!elStatus) return;
+    if (htmlFilterStatusAktif === null) htmlFilterStatusAktif = elStatus.innerHTML; // markup asli, belum pernah diubah
+    if (tahun === tahunAktif) {
+      elStatus.innerHTML = htmlFilterStatusAktif;
+      if (elLabel) elLabel.textContent = 'Filter Status Verifikasi';
+    } else {
+      elStatus.innerHTML = '<option value="">-- Semua Status --</option>';
+      if (elLabel) elLabel.textContent = 'Filter Status ' + tahun;
+    }
+    elStatus.value = '';
+  }
+
+  // Cascade Kecamatan -> Kelurahan bersama untuk tahun aktif (membangunOpsiFilter) dan tahun
+  // historis. Handler dipasang lewat properti onchange (bukan addEventListener) supaya tidak menumpuk
+  // tiap data dimuat ulang dan handler milik tahun lain tidak ikut tertinggal memakai peta lamanya.
+  // petaKel: { KECAMATAN: Set(kelurahan) }. Mengembalikan fungsi isiKelurahan(kec) untuk dipakai manual.
+  window.pasangCascadeKecKel = function (petaKel, onGanti) {
+    var dKec = document.getElementById('filter-kecamatan');
+    var dKel = document.getElementById('filter-kelurahan');
+    if (!dKec || !dKel) return function () { };
+    var semua = new Set();
+    Object.keys(petaKel).forEach(function (k) { petaKel[k].forEach(function (v) { semua.add(v); }); });
+    function isiKelurahan(kec) {
+      var daftar = Array.from(kec ? (petaKel[kec] || []) : semua).sort();
+      dKel.innerHTML = '<option value="">-- Semua Kelurahan --</option>';
+      daftar.forEach(function (v) {
+        var o = document.createElement('option');
+        o.value = o.textContent = v;
+        dKel.appendChild(o);
+      });
+      dKel.value = '';
+    }
+    dKec.onchange = function () {
+      isiKelurahan(this.value);
+      if (typeof onGanti === 'function') onGanti();
+    };
+    isiKelurahan(dKec.value);
+    window._isiKelurahanLihat = isiKelurahan; // dipakai resetSemuaFilter (app-transaksi.js)
+    return isiKelurahan;
+  };
+
+  function ambilStateFilterLihat() {
+    function nilai(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+    return {
+      cari: nilai('input-cari-global'), kec: nilai('filter-kecamatan'), kel: nilai('filter-kelurahan'),
+      lay: nilai('filter-layanan'), status: nilai('filter-verifikasi')
+    };
+  }
+
+  // pertahankan (opsional): state filter yang dipulihkan setelah data dimuat ulang di latar
+  // (realtime / sinkron Sheet), supaya filter yang sedang dipakai tidak tiba-tiba hilang.
+  function muatDataTahunHistoris(tahun, pertahankan) {
     var elCari = document.getElementById('input-cari-global');
     var elKec = document.getElementById('filter-kecamatan');
     var elKel = document.getElementById('filter-kelurahan');
     var elLay = document.getElementById('filter-layanan');
-    if (elCari) elCari.value = '';
-    if (elKec) { elKec.innerHTML = '<option value="">-- Semua Kecamatan --</option>'; elKec.value = ''; }
-    if (elKel) { elKel.innerHTML = '<option value="">-- Semua Kelurahan --</option>'; elKel.value = ''; }
-    if (elLay) { elLay.innerHTML = '<option value="">-- Semua Layanan --</option>'; elLay.value = ''; }
+    var elStatus = document.getElementById('filter-verifikasi');
+    if (!pertahankan) {
+      if (elCari) elCari.value = '';
+      if (elKec) { elKec.innerHTML = '<option value="">-- Semua Kecamatan --</option>'; elKec.value = ''; }
+      if (elKel) { elKel.innerHTML = '<option value="">-- Semua Kelurahan --</option>'; elKel.value = ''; }
+      if (elLay) { elLay.innerHTML = '<option value="">-- Semua Layanan --</option>'; elLay.value = ''; }
+      if (elStatus) { elStatus.innerHTML = '<option value="">-- Semua Status --</option>'; elStatus.value = ''; }
+    }
 
     const tbody = document.getElementById('body-tabel-lihat');
     tbody.innerHTML = htmlSkeletonBaris(8, 5);
@@ -1255,7 +1318,9 @@ tabTools.addEventListener('click', () => {
             return;
           }
           masterDataTahun[tahun] = res.rows || [];
-          renderTabelTahunHistoris(masterDataTahun[tahun], tahun);
+          // Pengguna sudah pindah tahun selagi menunggu: simpan cache saja, jangan menimpa tampilan/filter tahun lain.
+          if (tahun !== tahunDipilih) return;
+          renderTabelTahunHistoris(masterDataTahun[tahun], tahun, pertahankan);
         } catch (e) {
           tbody.innerHTML = `<tr><td colspan="8" class="px-4 py-8 text-center text-red-400">Error: ${e.message}</td></tr>`;
         }
@@ -1266,32 +1331,63 @@ tabTools.addEventListener('click', () => {
       .ambilDataTahunHakAkses(dataPengguna.token, tahun);
   }
 
-  function renderTabelTahunHistoris(data, tahun) {
-    const setKec = new Set(), setKel = new Set(), setLay = new Set();
+  function renderTabelTahunHistoris(data, tahun, pertahankan) {
+    const setKec = new Set(), setLay = new Set(), setStatus = new Set();
+    const petaKelurahan = {}; // KECAMATAN -> Set(kelurahan), untuk cascade Kecamatan -> Kelurahan
     data.forEach(function (r) {
-      if (r[3]) setKec.add(r[3]);
-      if (r[4]) setKel.add(r[4]);
+      if (r[3]) {
+        setKec.add(r[3]);
+        if (!petaKelurahan[r[3]]) petaKelurahan[r[3]] = new Set();
+        if (r[4]) petaKelurahan[r[3]].add(r[4]);
+      }
       if (r[2]) setLay.add(r[2]);
+      var st = (r[5] || '').toString().trim().toUpperCase();
+      if (st) setStatus.add(st);
     });
 
-    function isiFilter(id, set) {
+    function isiFilter(id, set, teksSemua) {
       var el = document.getElementById(id);
       if (!el) return;
-      el.innerHTML = '<option value="">-- Semua --</option>';
+      el.innerHTML = '<option value="">' + teksSemua + '</option>';
       [...set].sort().forEach(function (v) {
         var o = document.createElement('option');
         o.value = o.textContent = v;
         el.appendChild(o);
       });
     }
-    isiFilter('filter-kecamatan', setKec);
-    isiFilter('filter-kelurahan', setKel);
-    isiFilter('filter-layanan', setLay);
+    isiFilter('filter-kecamatan', setKec, '-- Semua Kecamatan --');
+    isiFilter('filter-layanan', setLay, '-- Semua Layanan --');
+    isiFilter('filter-verifikasi', setStatus, '-- Semua Status --');
+    const elLabelStatus = document.getElementById('label-filter-verifikasi');
+    if (elLabelStatus) elLabelStatus.textContent = 'Filter Status ' + tahun;
+    // Daftar Kelurahan mengikuti Kecamatan terpilih (peta dari data tahun ini, bukan tahun aktif).
+    const isiKelurahan = window.pasangCascadeKecKel(petaKelurahan, function () {
+      halamanSekarang = 1;
+      saringDanTampilkanTabel();
+    });
 
-    const dKecHist = document.getElementById('filter-kecamatan');
-    if (dKecHist && dataPengguna.kecamatan) {
-      const cocokKecHist = Array.from(dKecHist.options).some(o => o.value.toUpperCase().trim() === dataPengguna.kecamatan.toUpperCase().trim());
-      if (cocokKecHist) dKecHist.value = dataPengguna.kecamatan;
+    function pilihJikaAda(id, nilai) {
+      var el = document.getElementById(id);
+      if (!el || !nilai) return false;
+      var cocok = Array.from(el.options).find(function (o) { return o.value.toUpperCase().trim() === nilai.toString().toUpperCase().trim(); });
+      if (cocok) { el.value = cocok.value; return true; }
+      return false;
+    }
+
+    if (pertahankan) {
+      // Muat ulang di latar (realtime/sinkron): pulihkan filter yang sedang dipakai kalau nilainya masih ada.
+      if (pertahankan.cari) document.getElementById('input-cari-global').value = pertahankan.cari;
+      if (pilihJikaAda('filter-kecamatan', pertahankan.kec)) isiKelurahan(document.getElementById('filter-kecamatan').value);
+      pilihJikaAda('filter-kelurahan', pertahankan.kel);
+      pilihJikaAda('filter-layanan', pertahankan.lay);
+      pilihJikaAda('filter-verifikasi', pertahankan.status);
+    }
+    // Pengguna Kecamatan / Kelurahan terkunci: arahkan filter ke wilayahnya (sama seperti tahun aktif)
+    // kalau belum ada pilihan kecamatan (muat awal, atau setelah Refresh yang mengosongkan filter).
+    if (!document.getElementById('filter-kecamatan').value && dataPengguna.kecamatan &&
+      pilihJikaAda('filter-kecamatan', dataPengguna.kecamatan)) {
+      isiKelurahan(document.getElementById('filter-kecamatan').value);
+      if (dataPengguna.kelurahanTerkunci) pilihJikaAda('filter-kelurahan', dataPengguna.kelurahanTerkunci);
     }
 
     window._dataHistorisSedang = { data: data, tahun: tahun };
@@ -1310,11 +1406,14 @@ tabTools.addEventListener('click', () => {
     var kec = (document.getElementById('filter-kecamatan').value || "").toUpperCase();
     var kel = (document.getElementById('filter-kelurahan').value || "").toUpperCase();
     var lay = (document.getElementById('filter-layanan').value || "").toUpperCase();
+    var elStatusFilter = document.getElementById('filter-verifikasi');
+    var statusFilter = elStatusFilter ? (elStatusFilter.value || "").toString().trim().toUpperCase() : "";
 
     var filtered = data.filter(function (r) {
       if (kec && r[3] !== kec) return false;
       if (kel && r[4] !== kel) return false;
       if (lay && r[2] !== lay) return false;
+      if (statusFilter && (r[5] || "").toString().trim().toUpperCase() !== statusFilter) return false;
       if (cari) {
         var gabung = (r[0] || "").toLowerCase() + (r[1] || "").toLowerCase();
         if (!gabung.includes(cari)) return false;
@@ -1372,7 +1471,8 @@ tabTools.addEventListener('click', () => {
     }
     if (tahunDipilih && tahunDipilih !== tahunAktif) {
       if (!tahun || String(tahun) === String(tahunDipilih)) {
-        muatDataTahunHistoris(tahunDipilih);
+        // Muat ulang di latar: pertahankan filter yang sedang dipakai (dipulihkan setelah data tiba).
+        muatDataTahunHistoris(tahunDipilih, ambilStateFilterLihat());
       }
     }
   };

@@ -1362,27 +1362,13 @@ function membangunOpsiFilter(rows) {
   let htmlKec = '<option value="">-- Semua Kecamatan --</option>';
   Array.from(setKecamatan).sort().forEach(v => htmlKec += `<option value="${v}">${v}</option>`);
   dKec.innerHTML = htmlKec;
-  let htmlKel = '<option value="">-- Semua Kelurahan --</option>';
-  const semuaKelurahan = new Set();
-  Object.values(petaKelurahan).forEach(setKel => setKel.forEach(k => semuaKelurahan.add(k)));
-  Array.from(semuaKelurahan).sort().forEach(v => htmlKel += `<option value="${v}">${v}</option>`);
-  dKel.innerHTML = htmlKel;
   let htmlLay = '<option value="">-- Semua Layanan --</option>';
   Array.from(setLayanan).sort().forEach(v => htmlLay += `<option value="${v}">${v}</option>`);
   dLay.innerHTML = htmlLay;
-  dKec.addEventListener('change', function () {
-    const kecTerpilih = this.value;
-    dKel.value = "";
-    if (!kecTerpilih) {
-      let htmlKelSemua = '<option value="">-- Semua Kelurahan --</option>';
-      Array.from(semuaKelurahan).sort().forEach(v => htmlKelSemua += `<option value="${v}">${v}</option>`);
-      dKel.innerHTML = htmlKelSemua;
-    } else {
-      const kelF = petaKelurahan[kecTerpilih] ? Array.from(petaKelurahan[kecTerpilih]).sort() : [];
-      let htmlKelFilter = '<option value="">-- Semua Kelurahan --</option>';
-      kelF.forEach(v => htmlKelFilter += `<option value="${v}">${v}</option>`);
-      dKel.innerHTML = htmlKelFilter;
-    }
+  // Cascade Kecamatan -> Kelurahan (satu handler onchange, tidak menumpuk tiap data dimuat ulang;
+  // lihat pasangCascadeKecKel di app-core.js). Kecamatan sudah direset ke "Semua" di atas, jadi
+  // daftar Kelurahan awal berisi semua kelurahan.
+  window.pasangCascadeKecKel(petaKelurahan, function () {
     halamanSekarang = 1;
     saringDanTampilkanTabel();
   });
@@ -1415,6 +1401,9 @@ function resetSemuaFilter() {
       elKec.value = '';
     }
   }
+  // Kecamatan diubah lewat kode (tanpa event change), jadi daftar Kelurahan harus disamakan manual;
+  // kalau tidak, setelah Reset daftarnya masih terbatas ke kecamatan yang dipilih sebelumnya.
+  if (elKec && typeof window._isiKelurahanLihat === 'function') window._isiKelurahanLihat(elKec.value);
   if (elKel) {
     if (typeof dataPengguna !== 'undefined' && dataPengguna.kelurahanTerkunci) {
       elKel.value = dataPengguna.kelurahanTerkunci;
@@ -2461,7 +2450,11 @@ function ambilDataLolosFilter() {
   const valKec = document.getElementById('filter-kecamatan').value;
   const valKel = document.getElementById('filter-kelurahan').value;
   const valLay = document.getElementById('filter-layanan').value;
-  const valVerif = document.getElementById('filter-verifikasi') ? document.getElementById('filter-verifikasi').value : "";
+  // Filter Status hanya bermakna untuk tahun aktif; di tahun historis isinya status tahun itu (mis. AKTIF),
+  // sedangkan ekspor ini memakai data tahun aktif.
+  const tahunAktifEkspor = window._tahunAktifGetter ? window._tahunAktifGetter() : null;
+  const sedangTahunAktif = !window._tahunDipilihGetter || !tahunAktifEkspor || window._tahunDipilihGetter() === tahunAktifEkspor;
+  const valVerif = (sedangTahunAktif && document.getElementById('filter-verifikasi')) ? document.getElementById('filter-verifikasi').value : "";
   const kataKunci = document.getElementById('input-cari-global')?.value.toLowerCase() || "";
   const dataLolos = [];
   let nomor = 1;
