@@ -381,29 +381,29 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-          <div>
+          <div class="flex flex-col justify-between">
             <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Pilih Instansi Pengelola <span class="text-red-500">*</span>
             </label>
             <div class="grid grid-cols-2 gap-2">
               <button type="button" id="btn-instansi-kec"
-                class="w-full py-3 px-4 rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
+                class="w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
                 KECAMATAN
               </button>
               <button type="button" id="btn-instansi-kem"
-                class="w-full py-3 px-4 rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
+                class="w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
                 KEMENAG
               </button>
             </div>
           </div>
 
-          <div>
+          <div class="flex flex-col justify-between">
             <label for="control-kecamatan"
               class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Kecamatan Lokasi Tugas / Rumah Ibadah <span class="text-red-500">*</span>
             </label>
             <select id="control-kecamatan" disabled
-              class="w-full py-2.5 px-3.5 bg-slate-100 border border-slate-300 rounded-xl text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-medium cursor-not-allowed transition">
+              class="w-full py-3 px-4 min-h-[46px] bg-slate-100 border border-slate-300 rounded-xl text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-medium cursor-not-allowed transition">
               <option value="">-- PILIH KECAMATAN LOKASI TUGAS --</option>
               <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
               <option value="MEDAN AREA">MEDAN AREA</option>
@@ -1130,7 +1130,8 @@
             </select>
           </div>
           <div>
-            <label id="label-filter-verifikasi" class="block text-xs font-medium text-slate-600 mb-1">Filter Status Verifikasi</label>
+            <label id="label-filter-verifikasi" class="block text-xs font-medium text-slate-600 mb-1">Filter Status
+              Verifikasi</label>
             <select id="filter-verifikasi" onchange="saringDanTampilkanTabel()"
               class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
               <option value="">-- Semua Status --</option>

@@ -1596,8 +1596,8 @@ function murniGantiInstansi(instansi, targetBtn, otherBtn) {
   formPembayaran.reset();
   inputUmur.value = "";
   instansiAktif = instansi;
-  targetBtn.className = "w-full py-3 px-4 rounded-xl font-bold text-sm border-2 border-sky-600 bg-sky-600 text-white shadow-sm transition duration-200 active:scale-95";
-  otherBtn.className = "w-full py-3 px-4 rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200 active:scale-95 shadow-2xs";
+  targetBtn.className = "w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border-2 border-sky-600 bg-sky-600 text-white shadow-sm transition duration-200 active:scale-95";
+  otherBtn.className = "w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 transition duration-200 active:scale-95 shadow-2xs";
   controlKecamatan.disabled = false;
   controlKecamatan.classList.remove('bg-slate-100', 'cursor-not-allowed');
   controlKecamatan.classList.add('bg-white');
