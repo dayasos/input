@@ -314,7 +314,7 @@
       '</table>' +
       '</div>' +
       '<div id="loader-kelola-ri" class="hidden flex justify-center items-center py-4">' +
-      '<div class="loader w-6 h-6 border-2"></div>' +
+      '<div class="bar-tak-tentu w-28"></div>' +
       '</div>' +
 
       '<!-- Footer & Paginasi -->' +
@@ -565,8 +565,11 @@
 
     var limitNum = S.limit === 'all' ? 100 : (Number(S.limit) || 20);
 
+    // Refresh senyap (realtime/revalidasi latar) tidak menampilkan bar; hanya muat yang dipicu pengguna.
+    var akhiriProgres = (!senyap && typeof progresSekali === 'function') ? progresSekali() : function () { };
     google.script.run
       .withSuccessHandler(function (res) {
+        akhiriProgres();
         if (seq !== S.seq) return;
         setMemuat(false);
 
@@ -598,6 +601,7 @@
         }
       })
       .withFailureHandler(function (err) {
+        akhiriProgres();
         if (seq !== S.seq) return;
         setMemuat(false);
         if (!senyap && tbody) {

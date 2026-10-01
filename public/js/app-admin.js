@@ -68,7 +68,7 @@ document.getElementById('tab-progres-kem').addEventListener('click', function ()
 
 function muatProgresKuota() {
   const isi = document.getElementById('isi-progres-kuota');
-  isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Menghitung progres kuota...</p></div>`;
+  isi.innerHTML = htmlSkeletonPanel('dashboard');
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Gagal memuat: ${res ? esc(res.pesan) : 'tidak diketahui'}</p>`; return; }
@@ -1801,7 +1801,7 @@ function loadDataToModal(sheetName) {
     return;
   }
 
-  contentArea.innerHTML = "<p class='text-center p-4 text-slate-500 text-sm animate-pulse'>Sedang memuat data dari database...</p>";
+  contentArea.innerHTML = htmlSkeletonPanel('list');
 
   google.script.run
     .withSuccessHandler(function (data) {
@@ -2103,7 +2103,7 @@ function muatDaftarUserLengkap(senyap) {
   clearTimeout(window.__timerSegarKelolaAkun);
   if (!senyap) {
     if (loader) loader.classList.remove('hidden');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400 italic">Memuat data pengguna...</td></tr>';
+    if (tbody) tbody.innerHTML = htmlSkeletonBaris(7, 5);
   }
 
   google.script.run

@@ -597,7 +597,7 @@ function setTombolMemuat(btn, teksMemuat) {
   if (btn.dataset.teksAsli === undefined) btn.dataset.teksAsli = btn.innerHTML;
   btn.disabled = true;
   btn.classList.add("opacity-70", "cursor-not-allowed");
-  btn.innerHTML = '<span class="inline-flex items-center gap-1.5">⏳ ' + (teksMemuat || "Memproses...") + '</span>';
+  btn.innerHTML = '<span class="inline-flex items-center gap-1.5"><span class="spinner-tombol" aria-hidden="true"></span>' + (teksMemuat || "Memproses...") + '</span>';
 }
 
 function pulihkanTombol(btn) {
@@ -610,16 +610,126 @@ function pulihkanTombol(btn) {
   }
 }
 
+// Overlay proses (simpan/unggah/verifikasi). Teks diisi lewat textContent/innerText, bukan HTML.
+function tampilLoading(judul, pesan) {
+  const o = document.getElementById("loading-overlay");
+  if (!o) return;
+  setJudulLoading(judul);
+  if (pesan !== undefined) {
+    const p = document.getElementById("loading-overlay-pesan");
+    if (p) p.textContent = pesan;
+  }
+  o.classList.remove("hidden");
+}
+
+function setJudulLoading(judul) {
+  const j = document.getElementById("loading-overlay-judul");
+  if (j && judul) j.textContent = judul;
+}
+
+function sembunyiLoading() {
+  const o = document.getElementById("loading-overlay");
+  if (o) o.classList.add("hidden");
+}
+
 function htmlSkeletonBaris(kolom, jumlahBaris) {
   kolom = kolom || 5;
   jumlahBaris = jumlahBaris || 3;
   let baris = "";
   for (let i = 0; i < jumlahBaris; i++) {
     baris += '<tr><td colspan="' + kolom + '" class="p-3">' +
-      '<div class="h-3.5 rounded bg-slate-200 animate-pulse" style="width:' + (60 + (i * 12) % 30) + '%"></div>' +
+      '<div class="h-3.5 rounded skeleton" style="width:' + (60 + (i * 12) % 30) + '%"></div>' +
       '</td></tr>';
   }
   return baris;
+}
+
+// Skeleton untuk panel non-tabel (dashboard, progres kuota, detail, daftar).
+// Sengaja tanpa data dinamis, jadi aman disisipkan lewat innerHTML.
+function htmlSkeletonPanel(tipe) {
+  const k = function (tinggi, lebar) {
+    return '<div class="skeleton rounded-xl ' + tinggi + '" style="' + (lebar ? 'width:' + lebar : '') + '"></div>';
+  };
+  let isi = "";
+  if (tipe === "dashboard") {
+    isi = '<div class="grid grid-cols-2 lg:grid-cols-4 gap-3">' + k("h-20") + k("h-20") + k("h-20") + k("h-20") + '</div>' +
+      '<div class="space-y-3 mt-4">' + k("h-14") + k("h-14") + k("h-14") + k("h-14") + '</div>';
+  } else if (tipe === "detail") {
+    isi = '<div class="space-y-2.5">' + k("h-4", "40%") + k("h-11") + k("h-11") + k("h-11") + k("h-11") + k("h-11") + '</div>';
+  } else {
+    isi = '<div class="space-y-3">' + k("h-12") + k("h-12") + k("h-12") + k("h-12") + '</div>';
+  }
+  return '<div role="status" aria-label="Memuat data" class="py-2">' + isi + '</div>';
+}
+
+// Progress bar tipis di atas layar (non-blocking). Berbasis penghitung supaya beberapa permintaan
+// paralel tidak saling menutup bar. Bar baru tampil bila permintaan belum selesai setelah JEDA_PROGRES_MS,
+// jadi data dari cache yang datang seketika tidak memunculkan kedipan. Ada batas waktu pengaman.
+const JEDA_PROGRES_MS = 120;
+const progresAtas = { hitung: 0, tampil: false, timer: null, tunda: null, pengaman: null, lebar: 0 };
+
+function progresMulai() {
+  const el = document.getElementById("progres-atas");
+  if (!el) return;
+  progresAtas.hitung++;
+  clearTimeout(progresAtas.pengaman);
+  progresAtas.pengaman = setTimeout(function () { progresAtas.hitung = 1; progresSelesai(); }, 30000);
+  if (progresAtas.hitung > 1) return;
+  clearTimeout(progresAtas.tunda);
+  clearInterval(progresAtas.timer);
+  progresAtas.tunda = setTimeout(function () {
+    progresAtas.tunda = null;
+    if (progresAtas.hitung === 0) return;
+    progresAtas.tampil = true;
+    progresAtas.lebar = 8;
+    // mulai dari 0 tanpa transisi supaya tidak "menyusut" dari sisa bar sebelumnya
+    el.style.transition = "none";
+    el.style.width = "0";
+    void el.offsetWidth;
+    el.style.transition = "";
+    el.style.opacity = "1";
+    el.style.width = "8%";
+    progresAtas.timer = setInterval(function () {
+      // merayap melambat mendekati 90%, tidak pernah selesai sendiri
+      progresAtas.lebar += (90 - progresAtas.lebar) * 0.12;
+      el.style.width = progresAtas.lebar + "%";
+    }, 350);
+  }, JEDA_PROGRES_MS);
+}
+
+function progresSelesai() {
+  const el = document.getElementById("progres-atas");
+  if (!el || progresAtas.hitung === 0) return;
+  progresAtas.hitung = Math.max(0, progresAtas.hitung - 1);
+  if (progresAtas.hitung > 0) return;
+  clearInterval(progresAtas.timer);
+  clearTimeout(progresAtas.pengaman);
+  if (progresAtas.tunda) { // selesai sebelum sempat tampil: tidak ada yang perlu ditutup
+    clearTimeout(progresAtas.tunda);
+    progresAtas.tunda = null;
+    return;
+  }
+  if (!progresAtas.tampil) return;
+  progresAtas.tampil = false;
+  el.style.width = "100%";
+  setTimeout(function () {
+    if (progresAtas.hitung > 0) return; // ada permintaan baru yang mulai
+    el.style.opacity = "0";
+    setTimeout(function () { if (progresAtas.hitung === 0 && !progresAtas.tampil) el.style.width = "0"; }, 260);
+  }, 200);
+}
+
+// Memulai bar untuk satu permintaan dan mengembalikan fungsi penutup yang aman dipanggil berkali-kali.
+// Wajib dipakai untuk google.script.run: bridge SWR bisa memanggil successHandler dua kali (cache lalu data
+// segar), dan error di dalam successHandler membuat failureHandler ikut terpanggil.
+function progresSekali() {
+  let aktif = true;
+  progresMulai();
+  return function () {
+    if (!aktif) return;
+    aktif = false;
+    progresSelesai();
+  };
 }
 
 const DAFTAR_KECAMATAN_MEDAN = [
@@ -997,7 +1107,6 @@ const inputUmur = document.getElementById('input-umur');
 const btnResetForm = document.getElementById('btn-reset-form');
 const modalUsia = document.getElementById('modal-usia-alert');
 const btnModalUsiaOk = document.getElementById('btn-modal-usia-ok');
-const loadingOverlay = document.getElementById('loading-overlay');
 const wrapperPlank = document.getElementById('wrapper-foto-plank');
 const wrapperIbadah = document.getElementById('wrapper-foto-ibadah');
 const wrapperKegiatan = document.getElementById('wrapper-foto-kegiatan');

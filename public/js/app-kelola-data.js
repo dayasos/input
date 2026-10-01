@@ -397,9 +397,12 @@
     tampilError('');
     if (S.daftar.length === 0) skeletonTabel();
     setMemuat(true);
+    // Progress bar atas: selesai pada balasan pertama (cache/server) -- dipanggil sekali saja per muat().
+    var akhiriProgres = typeof progresSekali === 'function' ? progresSekali() : function () { };
 
     return new Promise(function (selesai) {
       apiSWR('adminDaftarData', [filter], function (res) {
+        akhiriProgres();
         if (seq !== S.seq) return selesai();
         setMemuat(false);
         if (!res || !res.sukses) {
@@ -547,8 +550,8 @@
   }
 
   function skeletonDetail() {
-    var kotak = '<div class="h-14 rounded-xl bg-slate-100 animate-pulse"></div>';
-    var baris = '<div class="h-11 rounded-xl bg-slate-100 animate-pulse"></div>';
+    var kotak = '<div class="h-14 rounded-xl skeleton"></div>';
+    var baris = '<div class="h-11 rounded-xl skeleton"></div>';
     var isi = function (n, s) { var o = ''; for (var i = 0; i < n; i++) o += s; return o; };
     return '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">' + isi(9, kotak) + '</div>' +
       '<div class="mt-5 border-t border-slate-200/80 pt-4 grid grid-cols-1 lg:grid-cols-2 gap-2.5">' + isi(6, baris) + '</div>';
@@ -890,7 +893,7 @@
   function bukaHapus(id, tahun) {
     hapusCtx = { id: id, tahun: tahun, detail: null };
     var isi = $('kd-hapus-isi');
-    isi.innerHTML = '<div class="flex justify-center py-6"><div class="loader"></div></div>';
+    isi.innerHTML = typeof htmlSkeletonPanel === 'function' ? htmlSkeletonPanel('list') : '<div class="flex justify-center py-6"><div class="loader"></div></div>';
     $('kd-hapus-ya').disabled = true;
     $('kd-modal-hapus').classList.remove('hidden');
     var ctx = hapusCtx;

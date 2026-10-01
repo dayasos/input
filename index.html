@@ -1520,7 +1520,7 @@
         </table>
       </div>
       <div id="loader-kelola-user" class="hidden flex justify-center items-center py-4">
-        <div class="loader w-6 h-6 border-2"></div>
+        <div class="bar-tak-tentu w-28"></div>
       </div>
 
       <!-- Footer & Paginasi -->
@@ -1660,32 +1660,36 @@
     </div>
   </div>
 
-  <div id="loading-overlay"
-    class="hidden fixed inset-0 z-[200] bg-slate-900/75 backdrop-blur-sm flex flex-col items-center justify-center p-4 transition-all duration-300">
-    <div class="loader mb-4"></div>
-    <h3 id="loading-overlay-judul" class="text-white font-bold text-lg tracking-wide text-center">MENGIRIM DATA...
-    </h3>
-    <p id="loading-overlay-pesan" class="text-sky-200 text-sm mt-2 text-center max-w-sm">
-      Mohon tunggu, sedang memverifikasi dan<br>mengunggah berkas ke Google Drive.
-    </p>
+  <div id="loading-overlay" role="status" aria-live="polite"
+    class="hidden fixed inset-0 z-[200] bg-slate-900/30 flex items-center justify-center p-4">
+    <div class="w-full max-w-xs bg-white rounded-2xl shadow-2xl border border-slate-200/80 px-5 py-5 text-center">
+      <h3 id="loading-overlay-judul" class="text-slate-800 font-bold text-sm tracking-wide">MENGIRIM DATA...</h3>
+      <p id="loading-overlay-pesan" class="text-slate-500 text-xs mt-1.5 leading-relaxed">
+        Mohon tunggu, sedang memverifikasi dan<br>mengunggah berkas ke Google Drive.
+      </p>
 
-    <!-- Container Progress Bar Upload Detail -->
-    <div id="loading-progress-container"
-      class="hidden w-full max-w-sm mt-4 bg-slate-800/90 p-3.5 rounded-xl border border-slate-700/80 shadow-xl">
-      <div class="flex justify-between items-center text-xs text-slate-300 font-semibold mb-1.5">
-        <span id="loading-progress-label">Mengunggah Berkas...</span>
-        <span id="loading-progress-persen" class="text-sky-400">0%</span>
+      <!-- Container Progress Bar Upload Detail -->
+      <div id="loading-progress-container" class="hidden mt-4 text-left">
+        <div class="flex justify-between items-center text-xs text-slate-600 font-semibold mb-1.5">
+          <span id="loading-progress-label">Mengunggah Berkas...</span>
+          <span id="loading-progress-persen" class="text-sky-600">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div id="loading-progress-bar"
+            class="bg-gradient-to-r from-sky-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div id="loading-progress-sub" class="text-[11px] text-slate-400 mt-2 text-center truncate">
+          Menyiapkan berkas...
+        </div>
       </div>
-      <div class="w-full bg-slate-700/80 rounded-full h-2.5 overflow-hidden p-0.5">
-        <div id="loading-progress-bar"
-          class="bg-gradient-to-r from-sky-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
-          style="width: 0%"></div>
-      </div>
-      <div id="loading-progress-sub" class="text-[11px] text-slate-400 mt-2 text-center truncate">
-        Menyiapkan berkas...
-      </div>
+
+      <!-- Harus tetap setelah #loading-progress-container (CSS sibling menyembunyikannya saat progres tampil) -->
+      <div class="bar-tak-tentu mt-4"></div>
     </div>
   </div>
+
+  <div id="progres-atas" aria-hidden="true"></div>
 
   <!-- Kontainer Toast/Notifikasi Elegan & Responsif -->
   <div id="toast-container"
@@ -2560,7 +2564,13 @@
 
       <!-- Daftar user (scrollable) -->
       <div id="ku-daftar-wrap" class="flex-1 overflow-y-auto px-5 py-3">
-        <div id="ku-loading" class="text-center py-8 text-sm text-slate-500">Memuat daftar user...</div>
+        <div id="ku-loading" role="status" aria-label="Memuat daftar user" class="space-y-2.5 py-2">
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+        </div>
         <div id="ku-daftar-khusus" class="hidden mb-4">
           <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-600 shrink-0" fill="none"
@@ -3441,12 +3451,12 @@
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
-  <script src="/js/app-core.js?v=20271002" defer></script>
-  <script src="/js/app-transaksi.js?v=20271003" defer></script>
-  <script src="/js/app-admin.js?v=20270930" defer></script>
-  <script src="/js/app-kelola-data.js?v=20270930" defer></script>
+  <script src="/js/app-core.js?v=20271004" defer></script>
+  <script src="/js/app-transaksi.js?v=20271004" defer></script>
+  <script src="/js/app-admin.js?v=20271004" defer></script>
+  <script src="/js/app-kelola-data.js?v=20271004" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
-  <script src="/js/app-kelola-ibadah.js?v=20270930" defer></script>
+  <script src="/js/app-kelola-ibadah.js?v=20271004" defer></script>
 
 </body>
 
