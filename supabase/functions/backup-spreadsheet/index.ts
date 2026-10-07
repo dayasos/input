@@ -264,26 +264,45 @@ function smartMergeKuota(
   return { values: result, stats: { updated, appended, preserved } };
 }
 
-async function pastikanSheetTersedia(spreadsheetId: string, accessToken: string, daftarJudul: string[]) {
+// kolomMinimal: judul sheet -> jumlah kolom minimal. Sheet baru default-nya cuma 26 kolom (A:Z), dan
+// Sheets API menolak penulisan di luar grid ("exceeds grid limits"), jadi grid dilebarkan dulu.
+async function pastikanSheetTersedia(
+  spreadsheetId: string,
+  accessToken: string,
+  daftarJudul: string[],
+  kolomMinimal: Record<string, number> = {},
+) {
   try {
     const metaRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title,sheetId,gridProperties.columnCount)`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!metaRes.ok) return;
     const meta = await metaRes.json();
-    const sheetsAda = new Set(
-      ((meta && meta.sheets) || []).map((s: { properties?: { title?: string } }) => s.properties?.title),
-    );
+    type PropSheet = { title?: string; sheetId?: number; gridProperties?: { columnCount?: number } };
+    const daftarSheet: PropSheet[] = ((meta && meta.sheets) || []).map((s: { properties?: PropSheet }) => s.properties || {});
+    const sheetsAda = new Set(daftarSheet.map((p) => p.title));
 
-    const requests = [];
+    // deno-lint-ignore no-explicit-any
+    const requests: any[] = [];
     for (const judul of daftarJudul) {
+      const minKolom = kolomMinimal[judul];
       if (!sheetsAda.has(judul)) {
         requests.push({
           addSheet: {
-            properties: { title: judul },
+            properties: minKolom ? { title: judul, gridProperties: { columnCount: Math.max(minKolom, 26) } } : { title: judul },
           },
         });
+      } else if (minKolom) {
+        const ada = daftarSheet.find((p) => p.title === judul);
+        if (ada && ada.sheetId !== undefined && (ada.gridProperties?.columnCount ?? 0) < minKolom) {
+          requests.push({
+            updateSheetProperties: {
+              properties: { sheetId: ada.sheetId, gridProperties: { columnCount: minKolom } },
+              fields: "gridProperties.columnCount",
+            },
+          });
+        }
       }
     }
 
@@ -440,7 +459,7 @@ Deno.serve(async (req: Request) => {
       sheetDataDetail,
       sheetKuota,
       sheetLog,
-    ]);
+    ], { [sheetPenerima]: HEADER_PENERIMA_41_KOLOM.length });
 
     // 6. Baca data eksisting dari Google Sheets (1x batchGet tunggal)
     const rangesToRead = [
