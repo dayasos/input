@@ -2520,10 +2520,20 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       // dibuka -- mis. baris dihapus/diubah lewat Kelola Data atau admin lain -- supaya saat tab dibuka
       // lagi data dimuat ulang, bukan menampilkan baris yang sudah tidak ada.
       if (typeof invalidateCacheDataTransaksi === 'function') invalidateCacheDataTransaksi();
-      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap' && !(window._abaikanMuatUlangLihatSampai > Date.now())) {
-        const modalDetail = document.getElementById('modal-detail-penerima');
-        if (!modalDetail || modalDetail.classList.contains('hidden')) {
-          if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
+      // Tabel Lihat Data yang sedang dibuka ikut diperbarui. Perubahan dari tab/admin LAIN:
+      //  - membawa id baris (mutasi satu baris) -> tarik & tambal hanya baris itu (cepat, tanpa
+      //    menyentuh filter/halaman/modal Detail);
+      //  - tanpa id (massal, hapus, sinyal database) -> muat ulang penuh yang digabung & DITUNDA
+      //    (bukan dibuang) selagi modal Detail terbuka; sinyal tanpa id yang jatuh tepat setelah
+      //    verifikasi milik sendiri tetap diabaikan karena itu hanya gema perubahan sendiri.
+      // Perubahan dari tab INI (lokal) tidak dimuat ulang di sini: pemanggilnya sudah menambal
+      // tabel sendiri (lihat perbaruiStatusDiMasterData / simpanEdit).
+      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap' && !(ev.detail && ev.detail.lokal)) {
+        const idsBaris = ev.detail && ev.detail.ids;
+        if (!isAll && Array.isArray(idsBaris) && idsBaris.length > 0 && typeof sinkronBarisLihatData === 'function') {
+          sinkronBarisLihatData(idsBaris);
+        } else if (!(window._abaikanMuatUlangLihatSampai > Date.now()) && typeof jadwalkanMuatUlangLihat === 'function') {
+          jadwalkanMuatUlangLihat();
         }
       }
     }
@@ -2679,7 +2689,7 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
         .on('broadcast', { event: 'MUTATION' }, function (msg) {
           const payload = msg && msg.payload;
           const domains = (payload && payload.domains) || ['*'];
-          if (window.djpmCache) window.djpmCache.invalidate(domains, false);
+          if (window.djpmCache) window.djpmCache.invalidate(domains, false, payload && payload.ids);
         })
         .subscribe(function (status) {
           if (status === 'SUBSCRIBED') {

@@ -1121,8 +1121,12 @@ function invalidateCacheDataTransaksi() {
 }
 
 function perbaruiStatusDiMasterData(nomorBaris, statusBaru, tandaLapor) {
+  // id baris dari server bisa berupa string (kolom bigint), sedangkan nomorBaris dari tombol Detail
+  // berupa angka -- dibandingkan sebagai string supaya tidak pernah meleset (sebelumnya === membuat
+  // kolom Verifikasi di tabel tidak berubah sampai halaman di-refresh).
+  const target = String(nomorBaris);
   for (let i = 0; i < masterDataLihat.length; i++) {
-    if (masterDataLihat[i][0] === nomorBaris) {
+    if (String(masterDataLihat[i][0]) === target) {
       masterDataLihat[i][18] = statusBaru;
       if (tandaLapor !== undefined) masterDataLihat[i][19] = tandaLapor; // penanda "sudah dilaporkan" (reset saat Memenuhi Syarat)
       break;
@@ -1130,6 +1134,117 @@ function perbaruiStatusDiMasterData(nomorBaris, statusBaru, tandaLapor) {
   }
   if (typeof saringDanTampilkanTabel === 'function') saringDanTampilkanTabel();
 }
+// --- Sinkron realtime Lihat Data -------------------------------------------------------------
+// Dua jalur, dipicu listener 'djpm:swr-invalidated' (app-admin.js):
+//  1. sinkronBarisLihatData(ids): perubahan SATU/BEBERAPA baris oleh admin lain -> tarik hanya baris itu
+//     (aksi ambilBarisLihatDataByIds) lalu tambal tabel di tempat. Cepat dan tidak mengganggu filter,
+//     halaman, maupun modal Detail yang sedang terbuka.
+//  2. jadwalkanMuatUlangLihat(): perubahan tanpa daftar id (massal, hapus, dll) -> muat ulang penuh,
+//     digabung jadi satu dan DITUNDA (bukan dibuang) selagi modal Detail terbuka atau selagi
+//     verifikasi milik sendiri berjalan; dijalankan begitu aman. Gagal menambal -> jatuh ke jalur ini.
+let _lihatTertunda = false;
+let _timerLihatTertunda = null;
+let _idsLihatTertunda = new Set();
+let _timerIdsLihat = null;
+let _sinkronBarisGagalSampai = 0; // backend belum mendukung / sedang error -> langsung muat ulang penuh dulu
+
+function _modalDetailTerbuka() {
+  const m = document.getElementById('modal-detail-penerima');
+  return !!m && !m.classList.contains('hidden');
+}
+
+window.jadwalkanMuatUlangLihat = function () {
+  _lihatTertunda = true;
+  if (_timerLihatTertunda) return;
+  _timerLihatTertunda = setTimeout(_cekMuatUlangLihat, 300);
+};
+
+function _cekMuatUlangLihat() {
+  _timerLihatTertunda = null;
+  if (!_lihatTertunda) return;
+  if (typeof panelAktif !== 'undefined' && panelAktif !== 'rekap') {
+    // Tab lain sedang aktif: tidak perlu memuat sekarang. Cache sudah dibuang, jadi saat tab Lihat
+    // Data dibuka lagi datanya otomatis dimuat ulang.
+    _lihatTertunda = false;
+    return;
+  }
+  if (_modalDetailTerbuka() || window._abaikanMuatUlangLihatSampai > Date.now()) {
+    _timerLihatTertunda = setTimeout(_cekMuatUlangLihat, 1500);
+    return;
+  }
+  _lihatTertunda = false;
+  inisialisasiMenuLihatData();
+}
+
+window.sinkronBarisLihatData = function (ids) {
+  const adaData = Array.isArray(masterDataLihat) && masterDataLihat.length > 0;
+  const adaSesi = typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token;
+  if (!adaData || !adaSesi || Date.now() < _sinkronBarisGagalSampai) { window.jadwalkanMuatUlangLihat(); return; }
+  (Array.isArray(ids) ? ids : []).forEach(function (id) {
+    const n = Number(id);
+    if (Number.isInteger(n) && n > 0) _idsLihatTertunda.add(n);
+  });
+  if (_idsLihatTertunda.size === 0) return;
+  if (_idsLihatTertunda.size > 200) { _idsLihatTertunda.clear(); window.jadwalkanMuatUlangLihat(); return; }
+  if (_timerIdsLihat) return;
+  _timerIdsLihat = setTimeout(_jalankanSinkronBarisLihat, 250);
+};
+
+function _jalankanSinkronBarisLihat() {
+  _timerIdsLihat = null;
+  const ids = Array.from(_idsLihatTertunda);
+  _idsLihatTertunda.clear();
+  if (ids.length === 0) return;
+  google.script.run
+    .withSuccessHandler(function (jsonResponse) {
+      let berhasil = false;
+      try {
+        const res = typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse;
+        if (res && res.sukses && Array.isArray(res.rows)) berhasil = _terapkanPatchBarisLihat(res.rows, res.hilang || []);
+      } catch (e) { berhasil = false; }
+      if (!berhasil) window.jadwalkanMuatUlangLihat();
+    })
+    .withFailureHandler(function () {
+      _sinkronBarisGagalSampai = Date.now() + 60000;
+      window.jadwalkanMuatUlangLihat();
+    })
+    .ambilBarisLihatDataByIds(dataPengguna.token, ids);
+}
+
+// Tambal baris di masterDataLihat dengan hasil dari server. Mengembalikan false bila ada yang tidak
+// bisa ditambal dengan aman (mis. baris baru dari admin lain, bentuk baris tak dikenal) -> pemanggil
+// jatuh ke muat ulang penuh, yang juga membangun ulang opsi filter.
+function _terapkanPatchBarisLihat(rowsBaru, hilang) {
+  const peta = new Map();
+  for (let i = 0; i < masterDataLihat.length; i++) peta.set(Number(masterDataLihat[i][0]), i);
+  for (let k = 0; k < rowsBaru.length; k++) {
+    const r = rowsBaru[k];
+    if (!Array.isArray(r) || r.length < 20 || !peta.has(Number(r[0]))) return false;
+  }
+  for (let k = 0; k < rowsBaru.length; k++) {
+    const r = rowsBaru[k];
+    r[0] = Number(r[0]);
+    masterDataLihat[peta.get(r[0])] = r;
+  }
+  if (hilang.length > 0) {
+    const buang = new Set(hilang.map(Number));
+    masterDataLihat = masterDataLihat.filter(function (r) { return !buang.has(Number(r[0])); });
+  }
+  if (rowsBaru.length === 0 && hilang.length === 0) return true;
+  masterDataLihat = urutkanDanIndexDataLihat(masterDataLihat); // urutan layanan/kecamatan/kelurahan bisa ikut berubah
+  waktuMasterDataLihat = Date.now();
+  saringDanTampilkanTabel(); // halaman & filter yang sedang dipakai dipertahankan
+  return true;
+}
+
+// Jaring pengaman: tab Lihat Data kembali terlihat setelah lama (koneksi realtime bisa tertidur saat
+// tab di-background) -> segarkan senyap bila data sudah lebih dari semenit.
+window.addEventListener('djpm:swr-window-focus', function () {
+  if (typeof panelAktif === 'undefined' || panelAktif !== 'rekap') return;
+  if (_modalDetailTerbuka() || !masterDataLihat || masterDataLihat.length === 0) return;
+  if (Date.now() - waktuMasterDataLihat > 60000) window.jadwalkanMuatUlangLihat();
+});
+
 let penandaWaktuKetik;
 let _verifSedangJalan = false; // cegah verifikasi ganda selagi request sebelumnya belum selesai
 
@@ -1669,6 +1784,8 @@ window.resetSemuaFilter = resetSemuaFilter;
 function urutkanDanIndexDataLihat(rows) {
   if (!Array.isArray(rows)) return [];
   rows.forEach(function (r) {
+    const idAngka = Number(r[0]);
+    if (Number.isFinite(idAngka)) r[0] = idAngka; // seragamkan tipe id (server mengirim bigint sebagai string)
     r._cari = (String(r[1] || '') + ' ' + String(r[2] || '') + ' ' + String(r[15] || '') + ' ' + String(r[8] || '')).toLowerCase();
   });
   return rows.sort(function (a, b) {
@@ -2381,6 +2498,7 @@ function halamanBerikutnya() {
             dataAktif[38] = res.tanggalLapor;
             dataAktif[39] = res.dilaporOleh;
             renderBaca(dataAktif);
+            perbaruiStatusDiMasterData(nomorBarisAktif, dataAktif[32] || "Berkas Tidak Lengkap", res.tanggalLapor);
             invalidateCacheDataTransaksi();
             tampilkanToast('Perbaikan berkas berhasil dilaporkan.', 'sukses');
           })

@@ -289,6 +289,32 @@ const MUTATION_INVALIDATIONS = {
   adminHapusDataMassal: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
 };
 
+// Mutasi SATU baris penerima: posisi argumen yang berisi id baris (args[0] selalu token). Id ini ikut
+// disiarkan ke admin lain (tanpa data pribadi) supaya tabel Lihat Data mereka cukup menarik ulang
+// baris itu saja (aksi ambilBarisLihatDataByIds) -- bukan seluruh daftar. Mutasi massal/tanpa id
+// sengaja tidak terdaftar di sini: penerima memuat ulang penuh.
+const MUTATION_ID_ARG = {
+  verifikasiSatuData: 1,
+  laporkanPerbaikanBerkas: 1,
+  tandaiSudahDiperbaiki: 1,
+  editDataPenerima: 1,
+  adminUbahData: 1,
+  adminHapusData: 1,
+};
+
+// Ambil hanya bilangan bulat positif, unik, maksimal 200 -- id berasal dari argumen lokal ATAU dari
+// siaran pihak lain, jadi selalu disaring sebelum dipakai. Hasil null = tidak ada id valid.
+function _bersihkanIdBaris(ids) {
+  if (!Array.isArray(ids)) return null;
+  const hasil = [];
+  const sudah = new Set();
+  for (let i = 0; i < ids.length && hasil.length < 200; i++) {
+    const n = Number(ids[i]);
+    if (Number.isInteger(n) && n > 0 && !sudah.has(n)) { sudah.add(n); hasil.push(n); }
+  }
+  return hasil.length ? hasil : null;
+}
+
 // Daftar PUTIH (whitelist) aksi baca murni yang aman diulang otomatis kalau koneksi timeout/putus
 // -- lihat _fetchAksiDenganTimeout(). SENGAJA berupa whitelist eksplisit, BUKAN "semua aksi yang
 // tidak terdaftar di MUTATION_INVALIDATIONS": daftar mutasi di atas tidak lengkap (mis.
@@ -306,6 +332,7 @@ const AKSI_BACA_AMAN_DIRETRY = new Set([
   'cekKuotaRealtime',
   'cekKuotaTersedia',
   'validasiDataBaru',
+  'ambilBarisLihatDataByIds',
   'pulihkanSesi',
   'ambilDetailBatchPembayaran',
   'getDaftarBerkasTidakLengkapUntukWA',
@@ -330,7 +357,7 @@ class SWRCacheManager {
         this._broadcastChannel = new BroadcastChannel('djpm_realtime_bus');
         this._broadcastChannel.onmessage = (event) => {
           if (event && event.data && event.data.type === 'INVALIDATE') {
-            this.invalidate(event.data.domains, false);
+            this.invalidate(event.data.domains, false, event.data.ids);
           }
         };
       } catch (_e) {
@@ -465,8 +492,12 @@ class SWRCacheManager {
     }
   }
 
-  invalidate(domains, broadcast = true) {
+  // Parameter broadcast: true = mutasi/aksi dari tab INI (juga disiarkan ke tab & admin lain);
+  // false = kabar dari pihak lain. Parameter ids (opsional) = id baris penerima yang berubah,
+  // hanya untuk mutasi satu baris.
+  invalidate(domains, broadcast = true, ids = null) {
     if (!domains || !domains.length) return;
+    const idsBersih = _bersihkanIdBaris(ids);
 
     const domainList = Array.isArray(domains) ? domains : [domains];
     const isAll = domainList.includes('*');
@@ -482,7 +513,7 @@ class SWRCacheManager {
 
     if (broadcast && this._broadcastChannel) {
       try {
-        this._broadcastChannel.postMessage({ type: 'INVALIDATE', domains: domainList });
+        this._broadcastChannel.postMessage({ type: 'INVALIDATE', domains: domainList, ids: idsBersih });
       } catch (_e) { }
     }
 
@@ -491,13 +522,13 @@ class SWRCacheManager {
         window.djpmRealtimeChannel.send({
           type: 'broadcast',
           event: 'MUTATION',
-          payload: { domains: domainList, timestamp: Date.now() },
+          payload: { domains: domainList, ids: idsBersih, timestamp: Date.now() },
         });
       } catch (_e) { }
     }
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('djpm:swr-invalidated', { detail: { domains: domainList } }));
+      window.dispatchEvent(new CustomEvent('djpm:swr-invalidated', { detail: { domains: domainList, ids: idsBersih, lokal: Boolean(broadcast) } }));
     }
   }
 
@@ -681,7 +712,9 @@ class GoogleScriptRunProxy {
                 }
                 const mutasiGagal = hasilMutasi && typeof hasilMutasi === 'object' && hasilMutasi.sukses === false;
                 if (!mutasiGagal) {
-                  swrCache.invalidate(mutationDomains, true);
+                  const posisiId = MUTATION_ID_ARG[action];
+                  const idMutasi = posisiId !== undefined ? [args[posisiId]] : null;
+                  swrCache.invalidate(mutationDomains, true, idMutasi);
                 }
               }
 

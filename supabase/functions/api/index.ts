@@ -22,6 +22,7 @@ import {
   validasiDataBaru,
 } from "./domains/validasi.ts";
 import {
+  ambilBarisLihatDataByIds,
   ambilDataLihatDataHakAkses,
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
@@ -112,6 +113,7 @@ const ALLOWED: Record<string, Handler> = {
   cekKuotaTersedia,
   validasiDataBaru,
   ambilDataLihatDataHakAkses,
+  ambilBarisLihatDataByIds,
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
   editDataPenerima,
