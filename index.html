@@ -59,7 +59,7 @@
   <!-- Tailwind di-compile saat build (npm run build:css), BUKAN Play CDN -- CDN itu
        eksplisit tidak direkomendasikan untuk production oleh Tailwind sendiri: JIT-compile
        ulang di browser tiap render + 1 request blocking ke CDN pihak ketiga. -->
-  <link rel="stylesheet" href="/css/tailwind.css">
+  <link rel="stylesheet" href="/css/tailwind.css?v=20271005">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link
@@ -211,7 +211,7 @@
        -- jangan hapus defer dari salah satu tanpa menambahkannya ke semua, lihat urutan sama
        di penutup body. -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
-  <script src="/js/api-bridge.js" defer></script>
+  <script src="/js/api-bridge.js?v=20271008" defer></script>
 </head>
 
 <body class="bg-slate-100 min-h-screen flex flex-col overflow-x-hidden">
@@ -381,29 +381,29 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-          <div>
+          <div class="flex flex-col justify-between">
             <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Pilih Instansi Pengelola <span class="text-red-500">*</span>
             </label>
             <div class="grid grid-cols-2 gap-2">
               <button type="button" id="btn-instansi-kec"
-                class="w-full py-3 px-4 rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
+                class="w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
                 KECAMATAN
               </button>
               <button type="button" id="btn-instansi-kem"
-                class="w-full py-3 px-4 rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
+                class="w-full py-3 px-4 min-h-[46px] rounded-xl font-bold text-sm border border-slate-300 bg-slate-200 text-slate-600 hover:bg-slate-300/70 active:scale-95 transition duration-200 shadow-2xs">
                 KEMENAG
               </button>
             </div>
           </div>
 
-          <div>
+          <div class="flex flex-col justify-between">
             <label for="control-kecamatan"
               class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
               Kecamatan Lokasi Tugas / Rumah Ibadah <span class="text-red-500">*</span>
             </label>
             <select id="control-kecamatan" disabled
-              class="w-full py-2.5 px-3.5 bg-slate-100 border border-slate-300 rounded-xl text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-medium cursor-not-allowed transition">
+              class="w-full py-3 px-4 min-h-[46px] bg-slate-100 border border-slate-300 rounded-xl text-sm shadow-2xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-medium cursor-not-allowed transition">
               <option value="">-- PILIH KECAMATAN LOKASI TUGAS --</option>
               <option value="MEDAN AMPLAS">MEDAN AMPLAS</option>
               <option value="MEDAN AREA">MEDAN AREA</option>
@@ -528,7 +528,7 @@
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Nama Tempat Tugas <span class="text-red-500">*</span>
                 </label>
-                <input type="text" name="inputTempatTugas" id="input-tempat-tugas"
+                <input type="text" name="inputTempatTugas" id="input-tempat-tugas" maxlength="100"
                   placeholder="KETIK NAMA TEMPAT TUGAS ATAU RUMAH IBADAH"
                   class="w-full py-2.5 px-3.5 bg-white border border-slate-300 rounded-xl text-sm font-medium uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                   required>
@@ -539,7 +539,7 @@
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Alamat Tempat Tugas <span class="text-red-500">*</span>
                 </label>
-                <input type="text" name="inputAlamatTugas" id="input-almt-tugas" placeholder="MASUKKAN ALAMAT LENGKAP"
+                <input type="text" name="inputAlamatTugas" id="input-almt-tugas" maxlength="100" placeholder="MASUKKAN ALAMAT LENGKAP"
                   class="w-full py-2.5 px-3.5 bg-white border border-slate-300 rounded-xl text-sm font-medium uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                   required>
                 <button type="button" id="btn-ganti-tempat-tugas"
@@ -572,7 +572,7 @@
                 <div class="sm:col-span-2 lg:col-span-2">
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Nama Lengkap (Sesuai KTP) <span
                       class="text-red-500">*</span></label>
-                  <input type="text" name="inputNama" id="input-nama" placeholder="Masukkan nama lengkap"
+                  <input type="text" name="inputNama" id="input-nama" maxlength="100" placeholder="Masukkan nama lengkap"
                     class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                     required>
                 </div>
@@ -602,7 +602,7 @@
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1.5">Tempat Lahir <span
                     class="text-red-500">*</span></label>
-                <input type="text" name="inputTempatLahir" id="input-tmpt-lahir" placeholder="Kota Lahir"
+                <input type="text" name="inputTempatLahir" id="input-tmpt-lahir" maxlength="100" placeholder="Kota Lahir"
                   class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                   required>
               </div>
@@ -656,7 +656,7 @@
                 <div class="sm:col-span-2 lg:col-span-3">
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Alamat Domisili Lengkap (Sesuai KTP)
                     <span class="text-red-500">*</span></label>
-                  <input type="text" name="inputAlamat" id="input-alamat"
+                  <input type="text" name="inputAlamat" id="input-alamat" maxlength="100"
                     placeholder="Masukkan nama jalan, nomor rumah, lingkungan"
                     class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                     required>
@@ -687,7 +687,7 @@
                   <div class="sm:col-span-1 lg:col-span-3">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nama Pemilik Rekening (Harus Sesuai
                       Buku Tabungan) <span class="text-red-500">*</span></label>
-                    <input type="text" name="inputNamaRekening" id="input-nama-rek" placeholder="Nama pemilik rekening"
+                    <input type="text" name="inputNamaRekening" id="input-nama-rek" maxlength="100" placeholder="Nama pemilik rekening"
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
                   </div>
@@ -703,7 +703,7 @@
                   <div class="sm:col-span-1 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Kantor Cabang Bank Sumut <span
                         class="text-red-500">*</span></label>
-                    <input type="text" name="inputKantorCabang" id="input-cabang-bank"
+                    <input type="text" name="inputKantorCabang" id="input-cabang-bank" maxlength="100"
                       placeholder="Masukkan nama kantor cabang / cabang pembantu"
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
@@ -1130,7 +1130,8 @@
             </select>
           </div>
           <div>
-            <label id="label-filter-verifikasi" class="block text-xs font-medium text-slate-600 mb-1">Filter Status Verifikasi</label>
+            <label id="label-filter-verifikasi" class="block text-xs font-medium text-slate-600 mb-1">Filter Status
+              Verifikasi</label>
             <select id="filter-verifikasi" onchange="saringDanTampilkanTabel()"
               class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 text-slate-700 shadow-2xs transition">
               <option value="">-- Semua Status --</option>
@@ -1520,7 +1521,7 @@
         </table>
       </div>
       <div id="loader-kelola-user" class="hidden flex justify-center items-center py-4">
-        <div class="loader w-6 h-6 border-2"></div>
+        <div class="bar-tak-tentu w-28"></div>
       </div>
 
       <!-- Footer & Paginasi -->
@@ -1616,9 +1617,10 @@
         <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
           class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
       </div>
-      <div class="flex-1 p-4 sm:p-6 overflow-y-auto text-sm text-slate-700 overscroll-contain">
-        <div class="overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
-          <table class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
+      <div id="wadah-data-detail" class="relative flex-1 min-h-0 flex flex-col p-4 sm:p-6 text-sm text-slate-700">
+        <div id="scroll-data-detail" tabindex="0" aria-label="Tabel Data Detail, geser kiri-kanan dengan drag, Shift + roda mouse, atau tombol panah"
+          class="flex-1 min-h-0 overflow-auto overscroll-contain rounded-xl border border-slate-200/80 shadow-2xs cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+          <table id="tabel-data-detail" class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
             <thead>
               <tr
                 class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">
@@ -1648,44 +1650,61 @@
             </tbody>
           </table>
         </div>
+        <!-- Tombol geser kiri/kanan (khusus layar lebar/PC; klik = geser 400px, tahan = gulir terus) -->
+        <button id="dd-gulir-kiri" type="button" aria-label="Geser tabel ke kiri" title="Geser ke kiri"
+          class="hidden md:flex absolute left-9 top-1/2 -translate-y-1/2 z-40 w-9 h-9 items-center justify-center rounded-full bg-white/95 border border-slate-200 shadow-md text-slate-600 hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition opacity-0 pointer-events-none">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        </button>
+        <button id="dd-gulir-kanan" type="button" aria-label="Geser tabel ke kanan" title="Geser ke kanan"
+          class="hidden md:flex absolute right-10 top-1/2 -translate-y-1/2 z-40 w-9 h-9 items-center justify-center rounded-full bg-white/95 border border-slate-200 shadow-md text-slate-600 hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition opacity-0 pointer-events-none">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+        </button>
       </div>
       <div
-        class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex justify-between items-center rounded-b-2xl sm:rounded-b-3xl">
-        <span id="info-total-data-detail" class="text-xs text-slate-500 font-medium"></span>
+        class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex flex-wrap justify-between items-center gap-x-4 gap-y-2.5 rounded-b-2xl sm:rounded-b-3xl">
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span id="info-total-data-detail" class="text-xs text-slate-500 font-medium"></span>
+          <span id="info-halaman-data-detail" class="text-[11px] text-slate-400 font-medium"></span>
+        </div>
+        <div id="pagination-data-detail" class="flex items-center gap-1 flex-wrap justify-center order-last sm:order-none w-full sm:w-auto"></div>
         <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
-          class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
+          class="ml-auto px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
           Tutup
         </button>
       </div>
     </div>
   </div>
 
-  <div id="loading-overlay"
-    class="hidden fixed inset-0 z-[200] bg-slate-900/75 backdrop-blur-sm flex flex-col items-center justify-center p-4 transition-all duration-300">
-    <div class="loader mb-4"></div>
-    <h3 id="loading-overlay-judul" class="text-white font-bold text-lg tracking-wide text-center">MENGIRIM DATA...
-    </h3>
-    <p id="loading-overlay-pesan" class="text-sky-200 text-sm mt-2 text-center max-w-sm">
-      Mohon tunggu, sedang memverifikasi dan<br>mengunggah berkas ke Google Drive.
-    </p>
+  <div id="loading-overlay" role="status" aria-live="polite"
+    class="hidden fixed inset-0 z-[200] bg-slate-900/30 flex items-center justify-center p-4">
+    <div class="w-full max-w-xs bg-white rounded-2xl shadow-2xl border border-slate-200/80 px-5 py-5 text-center">
+      <h3 id="loading-overlay-judul" class="text-slate-800 font-bold text-sm tracking-wide">MENGIRIM DATA...</h3>
+      <p id="loading-overlay-pesan" class="text-slate-500 text-xs mt-1.5 leading-relaxed">
+        Mohon tunggu, sedang memverifikasi dan<br>mengunggah berkas ke Google Drive.
+      </p>
 
-    <!-- Container Progress Bar Upload Detail -->
-    <div id="loading-progress-container"
-      class="hidden w-full max-w-sm mt-4 bg-slate-800/90 p-3.5 rounded-xl border border-slate-700/80 shadow-xl">
-      <div class="flex justify-between items-center text-xs text-slate-300 font-semibold mb-1.5">
-        <span id="loading-progress-label">Mengunggah Berkas...</span>
-        <span id="loading-progress-persen" class="text-sky-400">0%</span>
+      <!-- Container Progress Bar Upload Detail -->
+      <div id="loading-progress-container" class="hidden mt-4 text-left">
+        <div class="flex justify-between items-center text-xs text-slate-600 font-semibold mb-1.5">
+          <span id="loading-progress-label">Mengunggah Berkas...</span>
+          <span id="loading-progress-persen" class="text-sky-600">0%</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+          <div id="loading-progress-bar"
+            class="bg-gradient-to-r from-sky-500 to-indigo-500 h-2 rounded-full transition-all duration-300"
+            style="width: 0%"></div>
+        </div>
+        <div id="loading-progress-sub" class="text-[11px] text-slate-400 mt-2 text-center truncate">
+          Menyiapkan berkas...
+        </div>
       </div>
-      <div class="w-full bg-slate-700/80 rounded-full h-2.5 overflow-hidden p-0.5">
-        <div id="loading-progress-bar"
-          class="bg-gradient-to-r from-sky-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300"
-          style="width: 0%"></div>
-      </div>
-      <div id="loading-progress-sub" class="text-[11px] text-slate-400 mt-2 text-center truncate">
-        Menyiapkan berkas...
-      </div>
+
+      <!-- Harus tetap setelah #loading-progress-container (CSS sibling menyembunyikannya saat progres tampil) -->
+      <div class="bar-tak-tentu mt-4"></div>
     </div>
   </div>
+
+  <div id="progres-atas" aria-hidden="true"></div>
 
   <!-- Kontainer Toast/Notifikasi Elegan & Responsif -->
   <div id="toast-container"
@@ -2560,7 +2579,13 @@
 
       <!-- Daftar user (scrollable) -->
       <div id="ku-daftar-wrap" class="flex-1 overflow-y-auto px-5 py-3">
-        <div id="ku-loading" class="text-center py-8 text-sm text-slate-500">Memuat daftar user...</div>
+        <div id="ku-loading" role="status" aria-label="Memuat daftar user" class="space-y-2.5 py-2">
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+          <div class="skeleton rounded-xl h-14"></div>
+        </div>
         <div id="ku-daftar-khusus" class="hidden mb-4">
           <h4 class="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2 flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-indigo-600 shrink-0" fill="none"
@@ -3441,12 +3466,12 @@
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
-  <script src="/js/app-core.js?v=20271002" defer></script>
-  <script src="/js/app-transaksi.js?v=20271003" defer></script>
-  <script src="/js/app-admin.js?v=20270930" defer></script>
-  <script src="/js/app-kelola-data.js?v=20270930" defer></script>
+  <script src="/js/app-core.js?v=20271004" defer></script>
+  <script src="/js/app-transaksi.js?v=20271007" defer></script>
+  <script src="/js/app-admin.js?v=20271007" defer></script>
+  <script src="/js/app-kelola-data.js?v=20271007" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
-  <script src="/js/app-kelola-ibadah.js?v=20270930" defer></script>
+  <script src="/js/app-kelola-ibadah.js?v=20271007" defer></script>
 
 </body>
 

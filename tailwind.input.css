@@ -107,3 +107,192 @@ header button:focus-visible {
    box-shadow: inset 0 0 0 1.5px #6ee7b7, 0 0 8px rgba(110, 231, 183, 0.5) !important;
    outline: none !important;
 }
+
+/* Loading UI: skeleton, progress bar atas, overlay proses, spinner tombol */
+/* Skeleton shimmer: pengganti spinner untuk memuat konten */
+.skeleton {
+  background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes skeletonShimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Progress bar tipis di tepi atas layar: indikator sinkronisasi tanpa memblokir */
+#progres-atas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0;
+  opacity: 0;
+  z-index: 600;
+  pointer-events: none;
+  background: linear-gradient(90deg, #0ea5e9, #6366f1);
+  box-shadow: 0 0 8px rgba(14, 165, 233, .5);
+  transition: width .4s ease-out, opacity .25s ease-out;
+}
+
+/* Overlay proses: muncul dengan jeda 150ms supaya aksi cepat tidak memunculkan kedipan.
+   Lapisan tetap memblokir klik selama jeda (form tidak boleh diubah di tengah proses simpan). */
+#loading-overlay:not(.hidden) {
+  animation: overlayMasuk .2s ease-out .15s both;
+}
+
+@keyframes overlayMasuk {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Bar indeterminate di kartu overlay; otomatis disembunyikan saat bar progres unggah tampil */
+.bar-tak-tentu {
+  position: relative;
+  height: 4px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.bar-tak-tentu::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0ea5e9, #6366f1);
+  animation: barTakTentu 1.1s ease-in-out infinite;
+}
+
+@keyframes barTakTentu {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+#loading-progress-container:not(.hidden)~.bar-tak-tentu {
+  display: none;
+}
+
+/* Spinner mungil untuk tombol: mengikuti warna teks tombol */
+.spinner-tombol {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #loading-overlay:not(.hidden) {
+    animation: none;
+  }
+
+  .bar-tak-tentu::after {
+    width: 100%;
+    opacity: .5;
+    animation: none;
+  }
+
+  .skeleton {
+    animation: none;
+  }
+
+  #progres-atas {
+    transition: opacity .25s ease-out;
+  }
+}
+
+
+/* Data Detail: header tabel selalu menempel di atas saat digulir, sehingga scrollbar horizontal
+   ada di dasar area gulir yang terlihat. Dua kolom pertama (No, Nama) hanya menempel di layar
+   >= 768px -- di HP kolom Nama saja sudah hampir selebar tabel, jadi kolom lain tak akan
+   kelihatan. Lebar kolom No dikunci 56px; kolom Nama menempel di left:56px tepat di sebelahnya. */
+#tabel-data-detail thead th {
+   position: sticky;
+   top: 0;
+   z-index: 20;
+   background-color: #1e293b;
+   box-shadow: inset 0 -1px 0 #334155;
+}
+/* Kolom Nama dibatasi lebarnya (dipotong dengan ellipsis, nama lengkap ada di tooltip) supaya
+   kolom berikutnya tetap terlihat di HP sebagai petunjuk bahwa tabel bisa digeser. */
+#tabel-data-detail th:nth-child(2),
+#tabel-data-detail td:nth-child(2):not([colspan]) {
+   max-width: 11.5rem;
+   overflow: hidden;
+   text-overflow: ellipsis;
+}
+@media (min-width: 768px) {
+   #tabel-data-detail thead th:nth-child(-n+2),
+   #tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+      position: sticky;
+   }
+   #tabel-data-detail thead th:nth-child(-n+2) { z-index: 30; }
+   #tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+      z-index: 10;
+      background-color: #ffffff;
+      box-shadow: inset 0 -1px 0 #f1f5f9;
+   }
+   #tabel-data-detail tbody tr:hover td:nth-child(-n+2):not([colspan]) { background-color: #f8fafc; }
+   #tabel-data-detail th:nth-child(1),
+   #tabel-data-detail td:nth-child(1):not([colspan]) {
+      left: 0;
+      width: 56px;
+      min-width: 56px;
+      max-width: 56px;
+   }
+   #tabel-data-detail th:nth-child(2),
+   #tabel-data-detail td:nth-child(2):not([colspan]) {
+      left: 56px;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+   }
+   #tabel-data-detail thead th:nth-child(2) {
+      box-shadow: inset 0 -1px 0 #334155, 3px 0 4px -2px rgba(15, 23, 42, 0.18);
+   }
+   #tabel-data-detail tbody td:nth-child(2):not([colspan]) {
+      box-shadow: inset 0 -1px 0 #f1f5f9, 3px 0 4px -2px rgba(15, 23, 42, 0.12);
+   }
+}
+
+/* Geser tabel dengan drag mouse (lihat _siapkanGulirDataDetail di app-transaksi.js). */
+#scroll-data-detail.dd-menggeser {
+   cursor: grabbing;
+   user-select: none;
+   -webkit-user-select: none;
+}
+
+/* Data Detail di layar pendek (mis. HP landscape, tinggi <= 480px): rapatkan header, footer, dan
+   bantalan supaya lebih banyak baris terlihat. Ditulis di luar @layer sehingga menimpa utilitas. */
+@media (max-height: 480px) {
+   #modal-data-detail { padding: 0.25rem; }
+   #modal-data-detail > div { max-height: 100%; border-radius: 0.75rem; }
+   #modal-data-detail > div > div:first-child { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+   #subjudul-data-detail,
+   #info-halaman-data-detail { display: none; }
+   #wadah-data-detail { padding: 0.5rem 1rem; }
+   #modal-data-detail > div > div:last-child { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+}

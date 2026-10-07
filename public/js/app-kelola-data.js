@@ -9,20 +9,20 @@
   // Konfigurasi
   // ---------------------------------------------------------------------------
   var FIELD = [
-    { k: 'nama', d: 'nama', l: 'Nama Lengkap', lebar: 2 },
+    { k: 'nama', d: 'nama', l: 'Nama Lengkap', lebar: 2, maks: 100 },
     { k: 'nik', d: 'nik', l: 'NIK (16 digit)', mentah: true, maks: 16, mode: 'numeric' },
     { k: 'jenis_kelamin', d: 'jenisKelamin', l: 'Jenis Kelamin', pilih: ['LAKI-LAKI', 'PEREMPUAN'] },
-    { k: 'tempat_lahir', d: 'tempatLahir', l: 'Tempat Lahir' },
+    { k: 'tempat_lahir', d: 'tempatLahir', l: 'Tempat Lahir', maks: 100 },
     { k: 'tanggal_lahir', d: 'tanggalLahir', l: 'Tanggal Lahir (DD-MM-YYYY)', mentah: true, maks: 10, mode: 'numeric' },
-    { k: 'alamat', d: 'alamat', l: 'Alamat Domisili', lebar: 2, area: true },
+    { k: 'alamat', d: 'alamat', l: 'Alamat Domisili', lebar: 2, area: true, maks: 100 },
     { k: 'layanan', d: 'layanan', l: 'Layanan', sel: 'layanan' },
-    { k: 'tempat_tugas', d: 'tempatTugas', l: 'Tempat Tugas' },
-    { k: 'alamat_tugas', d: 'alamatTugas', l: 'Alamat Tugas', lebar: 2, area: true },
+    { k: 'tempat_tugas', d: 'tempatTugas', l: 'Tempat Tugas', maks: 100 },
+    { k: 'alamat_tugas', d: 'alamatTugas', l: 'Alamat Tugas', lebar: 2, area: true, maks: 100 },
     { k: 'kecamatan', d: 'kecamatan', l: 'Kecamatan', sel: 'kecamatan' },
     { k: 'kelurahan', d: 'kelurahan', l: 'Kelurahan', sel: 'kelurahan' },
-    { k: 'nama_rekening', d: 'namaRekening', l: 'Nama Rekening' },
+    { k: 'nama_rekening', d: 'namaRekening', l: 'Nama Rekening', maks: 100 },
     { k: 'nomor_rekening', d: 'nomorRekening', l: 'Nomor Rekening (14 digit)', mentah: true, maks: 14, mode: 'numeric' },
-    { k: 'kantor_cabang', d: 'kantorCabang', l: 'Kantor Cabang' },
+    { k: 'kantor_cabang', d: 'kantorCabang', l: 'Kantor Cabang', maks: 100 },
     { k: 'no_kontak', d: 'noKontak', l: 'No. Kontak', mentah: true, maks: 20, mode: 'tel' },
     { k: 'status_bpjs_tk', d: 'statusBpjs', l: 'Status BPJS TK', pilih: ['YA', 'TIDAK'] }
   ];
@@ -397,9 +397,12 @@
     tampilError('');
     if (S.daftar.length === 0) skeletonTabel();
     setMemuat(true);
+    // Progress bar atas: selesai pada balasan pertama (cache/server) -- dipanggil sekali saja per muat().
+    var akhiriProgres = typeof progresSekali === 'function' ? progresSekali() : function () { };
 
     return new Promise(function (selesai) {
       apiSWR('adminDaftarData', [filter], function (res) {
+        akhiriProgres();
         if (seq !== S.seq) return selesai();
         setMemuat(false);
         if (!res || !res.sukses) {
@@ -547,8 +550,8 @@
   }
 
   function skeletonDetail() {
-    var kotak = '<div class="h-14 rounded-xl bg-slate-100 animate-pulse"></div>';
-    var baris = '<div class="h-11 rounded-xl bg-slate-100 animate-pulse"></div>';
+    var kotak = '<div class="h-14 rounded-xl skeleton"></div>';
+    var baris = '<div class="h-11 rounded-xl skeleton"></div>';
     var isi = function (n, s) { var o = ''; for (var i = 0; i < n; i++) o += s; return o; };
     return '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">' + isi(9, kotak) + '</div>' +
       '<div class="mt-5 border-t border-slate-200/80 pt-4 grid grid-cols-1 lg:grid-cols-2 gap-2.5">' + isi(6, baris) + '</div>';
@@ -613,7 +616,7 @@
     } else if (f.sel) {
       kontrol = '<select id="' + id + '" class="' + KELAS_INPUT + '"' + dis + '><option value="' + esc(nilai) + '" selected>' + esc(nilai || '-- Pilih --') + '</option></select>';
     } else if (f.area) {
-      kontrol = '<textarea id="' + id + '" rows="2" class="' + KELAS_INPUT + '"' + dis + '>' + esc(nilai) + '</textarea>';
+      kontrol = '<textarea id="' + id + '" rows="2"' + (f.maks ? ' maxlength="' + f.maks + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>' + esc(nilai) + '</textarea>';
     } else {
       kontrol = '<input type="text" id="' + id + '" value="' + esc(nilai) + '" autocomplete="off"' +
         (f.maks ? ' maxlength="' + f.maks + '"' : '') + (f.mode ? ' inputmode="' + f.mode + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>';
@@ -890,7 +893,7 @@
   function bukaHapus(id, tahun) {
     hapusCtx = { id: id, tahun: tahun, detail: null };
     var isi = $('kd-hapus-isi');
-    isi.innerHTML = '<div class="flex justify-center py-6"><div class="loader"></div></div>';
+    isi.innerHTML = typeof htmlSkeletonPanel === 'function' ? htmlSkeletonPanel('list') : '<div class="flex justify-center py-6"><div class="loader"></div></div>';
     $('kd-hapus-ya').disabled = true;
     $('kd-modal-hapus').classList.remove('hidden');
     var ctx = hapusCtx;

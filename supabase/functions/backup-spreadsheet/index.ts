@@ -7,7 +7,7 @@
 
 import { sql } from "../_shared/db.ts";
 import { SS_ID_PENYIMPANAN, TAHUN_AKTIF } from "../_shared/config.ts";
-import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
+import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
 import { ambilAccessTokenGoogleSheets } from "../_shared/googleAuth.ts";
 
 const HEADER_PENERIMA_40_KOLOM = [
@@ -371,6 +371,11 @@ Deno.serve(async (req: Request) => {
       order by id asc
     `;
 
+    // 2b. Tanggal SK Wali Kota (Tools > Tanggal SK): kolom "Tgl Status" Data Detail untuk baris AKTIF
+    // diselaraskan dengan layar Data Detail (fungsi yang sama: tentukanTglStatusDataDetail).
+    const refSk = await sql`select tanggal_sk from referensi_sk_walikota where id = 1`;
+    const tanggalSk = refSk[0]?.tanggal_sk ?? null;
+
     // 3. Ambil data snapshot kuota dari PostgreSQL
     const rowsKuota = await sql`
       select kecamatan, layanan, kuota_maks
@@ -402,7 +407,13 @@ Deno.serve(async (req: Request) => {
       String(r.status_bpjs_tk || ""),
       r.umur ?? "",
       String(r.status || ""),
-      formatTanggalWaktuWIB((r.tgl_status || r.tanggal_verifikasi) as string),
+      tentukanTglStatusDataDetail({
+        tahunBaris: r.tahun as number,
+        tahunAktif: TAHUN_AKTIF,
+        status: r.status,
+        tglStatus: (r.tgl_status || r.tanggal_verifikasi) as string,
+        tanggalSk: tanggalSk as string | Date | null,
+      }),
     ]);
 
     const freshKuotaRows = rowsKuota.map((r: Record<string, unknown>) => [

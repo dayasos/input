@@ -178,6 +178,100 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
   }
 }
 
+// Ambil ULANG hanya beberapa baris daftar "Lihat Data" (dipakai sinkronisasi realtime: admin lain
+// mengubah status/data satu-dua baris -> klien cukup menarik baris itu saja, bukan seluruh ribuan
+// baris lewat ambilDataLihatDataHakAkses). Bentuk baris SAMA PERSIS dengan ambilDataLihatDataHakAkses
+// (20 kolom, urutan sama) supaya klien bisa langsung menimpa baris di tabelnya -- kalau kolom di
+// fungsi itu berubah, ubah juga `petakanBarisLihat` di bawah. Akses memakai helper yang sama dengan
+// ambilDetailPenerimaPerBaris (lolosAksesBarisLihatData) -- baris di luar hak akses TIDAK pernah
+// dikembalikan, dan id yang tidak ditemukan/tidak berhak dilaporkan di `hilang` (klien menghapusnya
+// dari tabel; ini juga yang membuat baris yang dihapus admin lain langsung hilang).
+// Hanya baca: tidak ada insert/update/delete di sini.
+// deno-lint-ignore no-explicit-any
+function petakanBarisLihat(row: any): unknown[] {
+  return [
+    row.id,
+    row.nama,
+    row.nik,
+    row.jenis_kelamin,
+    row.tempat_lahir,
+    formatTanggalDDMMYYYY(row.tanggal_lahir),
+    row.alamat,
+    row.layanan,
+    row.tempat_tugas,
+    row.alamat_tugas,
+    row.kecamatan,
+    row.kelurahan,
+    row.nama_rekening,
+    row.nomor_rekening,
+    row.kantor_cabang,
+    (row.no_kontak || "").toString().replace(/^'+/, "").trim(),
+    row.status_bpjs_tk,
+    row.umur ?? "",
+    row.status_verifikasi || "Proses Verifikasi",
+    formatTanggalWaktuWIB(row.tanggal_lapor_perbaikan),
+  ];
+}
+
+const MAKS_ID_BARIS_LIHAT = 200;
+
+export async function ambilBarisLihatDataByIds(token: string, ids: unknown) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return JSON.stringify({ sukses: false, pesan: e instanceof Error ? e.message : String(e) });
+  }
+
+  try {
+    const daftarId = Array.from(
+      new Set((Array.isArray(ids) ? ids : []).map((v) => Number(v)).filter((n) => Number.isInteger(n) && n > 0)),
+    ).slice(0, MAKS_ID_BARIS_LIHAT);
+    if (daftarId.length === 0) return JSON.stringify({ sukses: true, rows: [], hilang: [] });
+
+    const { instansiPengguna, layananPengguna, listLayananKemenag } = await resolveInstansiPengguna(sesi.role);
+    if (!instansiPengguna) {
+      return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
+    }
+    const namaKecamatanPengguna = sesi.kecamatan || "";
+    const kelurahanTerkunci = kelurahanTerkunciDari(sesi);
+    const subFilterGsm = subFilterGsmDari(sesi);
+
+    const rows = await sql`
+      select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+             tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+             kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+      from penerima
+      where tahun = ${TAHUN_AKTIF} and id in ${sql(daftarId)}
+    `;
+
+    const resultRows: unknown[][] = [];
+    const ditemukan = new Set<number>();
+    for (const row of rows) {
+      const lolos = lolosAksesBarisLihatData({
+        instansiPengguna,
+        layananPengguna,
+        namaKecamatanPengguna,
+        kelurahanTerkunci,
+        subFilterGsm,
+        listLayananKemenag,
+        layananSheet: (row.layanan || "").toUpperCase(),
+        kecamatanSheet: (row.kecamatan || "").toUpperCase(),
+        kelurahanSheet: (row.kelurahan || "").toUpperCase(),
+        tempatTugasSheet: (row.tempat_tugas || "").toUpperCase(),
+      });
+      if (!lolos) continue;
+      ditemukan.add(Number(row.id));
+      resultRows.push(petakanBarisLihat(row));
+    }
+    const hilang = daftarId.filter((id) => !ditemukan.has(id));
+
+    return JSON.stringify({ sukses: true, rows: resultRows, hilang });
+  } catch (error) {
+    return JSON.stringify({ sukses: false, pesan: String(error) });
+  }
+}
+
 // Port dari ambilDetailPenerimaPerBaris() — `nomorBarisAsli` sekarang ditafsirkan sebagai
 // `penerima.id` (lihat catatan arsitektur di atas), BUKAN nomor baris fisik sheet.
 //

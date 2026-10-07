@@ -68,7 +68,7 @@ document.getElementById('tab-progres-kem').addEventListener('click', function ()
 
 function muatProgresKuota() {
   const isi = document.getElementById('isi-progres-kuota');
-  isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Menghitung progres kuota...</p></div>`;
+  isi.innerHTML = htmlSkeletonPanel('dashboard');
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Gagal memuat: ${res ? esc(res.pesan) : 'tidak diketahui'}</p>`; return; }
@@ -1752,14 +1752,14 @@ function renderGmmContent(jenis) {
         <div class="space-y-4 mt-2">
           <div class="text-xs font-semibold text-slate-500 uppercase">Tempat Tugas Terisi Otomatis:</div>
           <input type="text" id="manual-tempat" value="RUMAH" readonly class="w-full p-2 border rounded bg-slate-100 font-medium cursor-not-allowed">
-          <input type="text" id="manual-alamat" placeholder="Masukkan Alamat Rumah Lengkap" class="w-full p-2 border rounded text-sm">
+          <input type="text" id="manual-alamat" maxlength="100" placeholder="Masukkan Alamat Rumah Lengkap" class="w-full p-2 border rounded text-sm">
           <button onclick="submitManual()" class="w-full bg-sky-600 text-white p-2 rounded text-sm font-semibold hover:bg-sky-700 transition">Simpan Data</button>
         </div>`;
   } else if (jenis === "LAINNYA") {
     contentArea.innerHTML = `
         <div class="space-y-4 mt-2">
-          <input type="text" id="manual-tempat" placeholder="Masukkan Nama Tempat Tugas / Lembaga" class="w-full p-2 border rounded text-sm">
-          <input type="text" id="manual-alamat" placeholder="Masukkan Alamat Tempat Tugas Lengkap" class="w-full p-2 border rounded text-sm">
+          <input type="text" id="manual-tempat" maxlength="100" placeholder="Masukkan Nama Tempat Tugas / Lembaga" class="w-full p-2 border rounded text-sm">
+          <input type="text" id="manual-alamat" maxlength="100" placeholder="Masukkan Alamat Tempat Tugas Lengkap" class="w-full p-2 border rounded text-sm">
           <button onclick="submitManual()" class="w-full bg-sky-600 text-white p-2 rounded text-sm font-semibold hover:bg-sky-700 transition">Simpan Data</button>
         </div>`;
   } else if (jenis !== "") {
@@ -1776,8 +1776,8 @@ function renderUstadzContent(jenis) {
   if (jenis === "LAINNYA") {
     contentArea.innerHTML = `
         <div class="space-y-4 mt-2">
-          <input type="text" id="manual-tempat" placeholder="Masukkan Nama Tempat Tugas / Lembaga" class="w-full p-2 border rounded text-sm">
-          <input type="text" id="manual-alamat" placeholder="Masukkan Alamat Tempat Tugas Lengkap" class="w-full p-2 border rounded text-sm">
+          <input type="text" id="manual-tempat" maxlength="100" placeholder="Masukkan Nama Tempat Tugas / Lembaga" class="w-full p-2 border rounded text-sm">
+          <input type="text" id="manual-alamat" maxlength="100" placeholder="Masukkan Alamat Tempat Tugas Lengkap" class="w-full p-2 border rounded text-sm">
           <button onclick="submitManual()" class="w-full bg-sky-600 text-white p-2 rounded text-sm font-semibold hover:bg-sky-700 transition">Simpan Data</button>
         </div>`;
   } else if (jenis !== "") {
@@ -1801,7 +1801,7 @@ function loadDataToModal(sheetName) {
     return;
   }
 
-  contentArea.innerHTML = "<p class='text-center p-4 text-slate-500 text-sm animate-pulse'>Sedang memuat data dari database...</p>";
+  contentArea.innerHTML = htmlSkeletonPanel('list');
 
   google.script.run
     .withSuccessHandler(function (data) {
@@ -2103,7 +2103,7 @@ function muatDaftarUserLengkap(senyap) {
   clearTimeout(window.__timerSegarKelolaAkun);
   if (!senyap) {
     if (loader) loader.classList.remove('hidden');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-6 text-slate-400 italic">Memuat data pengguna...</td></tr>';
+    if (tbody) tbody.innerHTML = htmlSkeletonBaris(7, 5);
   }
 
   google.script.run
@@ -2520,10 +2520,20 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
       // dibuka -- mis. baris dihapus/diubah lewat Kelola Data atau admin lain -- supaya saat tab dibuka
       // lagi data dimuat ulang, bukan menampilkan baris yang sudah tidak ada.
       if (typeof invalidateCacheDataTransaksi === 'function') invalidateCacheDataTransaksi();
-      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap' && !(window._abaikanMuatUlangLihatSampai > Date.now())) {
-        const modalDetail = document.getElementById('modal-detail-penerima');
-        if (!modalDetail || modalDetail.classList.contains('hidden')) {
-          if (typeof inisialisasiMenuLihatData === 'function') inisialisasiMenuLihatData();
+      // Tabel Lihat Data yang sedang dibuka ikut diperbarui. Perubahan dari tab/admin LAIN:
+      //  - membawa id baris (mutasi satu baris) -> tarik & tambal hanya baris itu (cepat, tanpa
+      //    menyentuh filter/halaman/modal Detail);
+      //  - tanpa id (massal, hapus, sinyal database) -> muat ulang penuh yang digabung & DITUNDA
+      //    (bukan dibuang) selagi modal Detail terbuka; sinyal tanpa id yang jatuh tepat setelah
+      //    verifikasi milik sendiri tetap diabaikan karena itu hanya gema perubahan sendiri.
+      // Perubahan dari tab INI (lokal) tidak dimuat ulang di sini: pemanggilnya sudah menambal
+      // tabel sendiri (lihat perbaruiStatusDiMasterData / simpanEdit).
+      if (typeof panelAktif !== 'undefined' && panelAktif === 'rekap' && !(ev.detail && ev.detail.lokal)) {
+        const idsBaris = ev.detail && ev.detail.ids;
+        if (!isAll && Array.isArray(idsBaris) && idsBaris.length > 0 && typeof sinkronBarisLihatData === 'function') {
+          sinkronBarisLihatData(idsBaris);
+        } else if (!(window._abaikanMuatUlangLihatSampai > Date.now()) && typeof jadwalkanMuatUlangLihat === 'function') {
+          jadwalkanMuatUlangLihat();
         }
       }
     }
@@ -2679,7 +2689,7 @@ window.konfirmasiHapusUser = konfirmasiHapusUser;
         .on('broadcast', { event: 'MUTATION' }, function (msg) {
           const payload = msg && msg.payload;
           const domains = (payload && payload.domains) || ['*'];
-          if (window.djpmCache) window.djpmCache.invalidate(domains, false);
+          if (window.djpmCache) window.djpmCache.invalidate(domains, false, payload && payload.ids);
         })
         .subscribe(function (status) {
           if (status === 'SUBSCRIBED') {

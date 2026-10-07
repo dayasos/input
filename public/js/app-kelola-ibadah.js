@@ -314,7 +314,7 @@
       '</table>' +
       '</div>' +
       '<div id="loader-kelola-ri" class="hidden flex justify-center items-center py-4">' +
-      '<div class="loader w-6 h-6 border-2"></div>' +
+      '<div class="bar-tak-tentu w-28"></div>' +
       '</div>' +
 
       '<!-- Footer & Paginasi -->' +
@@ -386,11 +386,11 @@
       '</div>' +
       '<div>' +
       '<label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nama Tempat Ibadah <span class="text-red-500">*</span></label>' +
-      '<input type="text" id="mri-nama" required placeholder="Contoh: MASJID RAYA AL-MASHUN" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">' +
+      '<input type="text" id="mri-nama" required maxlength="100" placeholder="Contoh: MASJID RAYA AL-MASHUN" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white">' +
       '</div>' +
       '<div>' +
       '<label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Alamat Lengkap</label>' +
-      '<textarea id="mri-alamat" rows="2" placeholder="Contoh: JL. MAHMUN AL RASYID NO. 1" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white"></textarea>' +
+      '<textarea id="mri-alamat" rows="2" maxlength="100" placeholder="Contoh: JL. MAHMUN AL RASYID NO. 1" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 bg-white"></textarea>' +
       '</div>' +
       '<div class="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">' +
       '<button type="button" onclick="window.tutupModalFormRumahIbadah()" class="flex-1 sm:flex-initial px-4 py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-semibold rounded-xl transition text-center">Batal</button>' +
@@ -565,8 +565,11 @@
 
     var limitNum = S.limit === 'all' ? 100 : (Number(S.limit) || 20);
 
+    // Refresh senyap (realtime/revalidasi latar) tidak menampilkan bar; hanya muat yang dipicu pengguna.
+    var akhiriProgres = (!senyap && typeof progresSekali === 'function') ? progresSekali() : function () { };
     google.script.run
       .withSuccessHandler(function (res) {
+        akhiriProgres();
         if (seq !== S.seq) return;
         setMemuat(false);
 
@@ -598,6 +601,7 @@
         }
       })
       .withFailureHandler(function (err) {
+        akhiriProgres();
         if (seq !== S.seq) return;
         setMemuat(false);
         if (!senyap && tbody) {

@@ -7,7 +7,7 @@ import {
   resolveInstansiPengguna,
   subFilterGsmDari,
 } from "../_shared/akses.ts";
-import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
+import { formatTanggalDDMMYYYY, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
 
 // ---------------------------------------------------------------------------
 // Fitur "Data Detail" — dibangun ulang 2026-09-15 sebagai fitur murni Supabase (pengganti
@@ -19,6 +19,11 @@ import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB } from "../_shared/tanggal
 // `status`/`tgl_status` pada tabel `data_detail` SENGAJA tidak pernah ditulis di sini setelah
 // baris dibuat (selalu default 'AKTIF') — itu wewenang Aplikasi Retur begitu nanti tersambung
 // ke database yang sama.
+//
+// Kolom "Tgl Status" yang TAMPIL mengikuti Tanggal SK Wali Kota (Tools > Tanggal SK) untuk baris
+// berstatus AKTIF tahun aktif -- dihitung saat membaca (lihat tentukanTglStatusDataDetail di
+// _shared/tanggal.ts), bukan ditulis ke database, jadi begitu Tanggal SK disimpan tampilan langsung
+// ikut (simpanReferensiSkWalikota membuang cache domain data_detail, lihat api-bridge.js).
 //
 // Parameter `tahun` (2026-09-22): awalnya fungsi ini SELALU terkunci ke TAHUN_AKTIF, tidak
 // peduli tahun yang sedang dipilih user di dropdown "Lihat Data" — akibatnya tombol "Data Detail"
@@ -80,6 +85,10 @@ export async function ambilDataDetail(token: string, tahun?: number) {
       return { sukses: false, pesan: "Peran tidak dikenali." };
     }
 
+    // Tanggal SK Wali Kota (satu baris referensi, bukan per tahun) -- sumber nilai "Tgl Status".
+    const refSk = await sql`select tanggal_sk from referensi_sk_walikota where id = 1`;
+    const tanggalSk = refSk[0]?.tanggal_sk ?? null;
+
     // Sengaja TIDAK mendorong filter kecamatan/layanan ke WHERE SQL (beda dari optimasi yang
     // pernah dicoba di ambilDataLihatDataHakAkses dan menyebabkan insiden produksi) — tarik
     // semua baris tahun aktif, filter akses di kode, sampai ada cara uji lokal yang layak
@@ -134,7 +143,13 @@ export async function ambilDataDetail(token: string, tahun?: number) {
         statusBpjsTk: row.status_bpjs_tk,
         umur: row.umur ?? "",
         status: row.status,
-        tglStatus: formatTanggalWaktuWIB(row.tgl_status),
+        tglStatus: tentukanTglStatusDataDetail({
+          tahunBaris: tahunDiminta,
+          tahunAktif: TAHUN_AKTIF,
+          status: row.status,
+          tglStatus: row.tgl_status,
+          tanggalSk,
+        }),
       });
     }
 

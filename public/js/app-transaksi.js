@@ -776,7 +776,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
     google.script.run
       .withSuccessHandler(function (response) {
         if (typeof pulihkanTombol === 'function') pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         if (response.sukses) {
           // Setelah sukses, reset kunci — pengiriman berikutnya harus pakai kunci baru.
           idempotencyKeySimpan = null;
@@ -793,7 +793,7 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
       })
       .withFailureHandler(function (errSimpan) {
         if (typeof pulihkanTombol === 'function') pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         // Jika error karena koneksi putus/timeout (bukan error validasi dari server),
         // tampilkan panduan khusus agar operator tidak panik dan tahu apa yang harus dilakukan.
         const pesanError = errSimpan && errSimpan.message ? errSimpan.message : String(errSimpan);
@@ -822,11 +822,11 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   const berkasMentah = dataObjek.__berkas || {};
   const adaBerkas = Object.keys(berkasMentah).some(function (k) { return berkasMentah[k] && berkasMentah[k].file; });
   if (!adaBerkas) {
-    loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
+    setJudulLoading("MENYIMPAN DATA...");
     eksekusiSimpan();
     return;
   }
-  loadingOverlay.querySelector('h3').innerText = "MENGUNGGAH BERKAS...";
+  setJudulLoading("MENGUNGGAH BERKAS...");
   const label = labelBerkasSimpanBaru(dataObjek.selectLayanan);
   const berkasUntukUpload = {};
   Object.keys(berkasMentah).forEach(function (k) {
@@ -846,40 +846,35 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   ).then(function (hasilUpload) {
     if (!hasilUpload || !hasilUpload.sukses) {
       if (typeof pulihkanTombol === 'function') pulihkanTombol();
-      loadingOverlay.classList.add('hidden');
+      sembunyiLoading();
       tampilkanToast("Gagal mengunggah berkas: " + (hasilUpload ? hasilUpload.pesan : "Tidak ada respons."), 'gagal', { durasi: 6000 });
       return;
     }
     dataObjek.__linkBerkas = hasilUpload.link;
     delete dataObjek.__berkas;
-    loadingOverlay.querySelector('h3').innerText = "MENYIMPAN DATA...";
+    setJudulLoading("MENYIMPAN DATA...");
     eksekusiSimpan();
   }).catch(function (errUpload) {
     if (typeof pulihkanTombol === 'function') pulihkanTombol();
-    loadingOverlay.classList.add('hidden');
+    sembunyiLoading();
     tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
   });
 }
 
 function prosesValidasiDanSimpan() {
   const btnSimpan = document.getElementById('btn-simpan-data');
-  if (btnSimpan) {
-    btnSimpan.disabled = true;
-    btnSimpan.classList.add('opacity-50', 'cursor-not-allowed');
-  }
+  if (btnSimpan) setTombolMemuat(btnSimpan, 'Memproses...');
   function pulihkanTombol() {
-    if (btnSimpan) {
-      btnSimpan.disabled = false;
-      btnSimpan.classList.remove('opacity-50', 'cursor-not-allowed');
-    }
+    // Versi global (app-core.js) mengembalikan isi tombol + ikon aslinya; nama lokal ini menimpanya, jadi dipanggil lewat window.
+    if (btnSimpan) window.pulihkanTombol(btnSimpan);
   }
-  loadingOverlay.classList.remove('hidden');
-  loadingOverlay.querySelector('h3').innerText = "MEMVERIFIKASI DATA...";
+  tampilLoading();
+  setJudulLoading("MEMVERIFIKASI DATA...");
   google.script.run
     .withSuccessHandler(function (status) {
       if (!status.valid && status.tolakCapil) {
         pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         document.getElementById('teks-nama-capil').textContent = status.namaCapil || '-';
         document.getElementById('teks-nik-capil').textContent = status.nikCapil || inputNik.value || '-';
         document.getElementById('teks-alamat-capil').textContent = status.alamatDomisiliCapil || '-';
@@ -890,7 +885,7 @@ function prosesValidasiDanSimpan() {
       }
       if (!status.valid && status.tolakStatus2026) {
         pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         document.getElementById('teks-nama-2026').textContent = status.nama2026 || '-';
         document.getElementById('teks-nik-2026').textContent = inputNik.value || '-';
         document.getElementById('teks-layanan-2026').textContent = status.layanan2026 || '-';
@@ -900,14 +895,14 @@ function prosesValidasiDanSimpan() {
       }
       if (!status.valid && status.kuotaHabis) {
         pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         document.getElementById('pesan-kuota-habis').textContent = status.pesan;
         document.getElementById('modal-kuota-habis').classList.remove('hidden');
         return;
       }
       if (!status.valid && status.temuan && status.temuan.length > 0) {
         pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         const wrap = document.getElementById('daftar-temuan-duplikat');
         wrap.innerHTML = status.temuan.map(function (t) {
           return '<div class="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">' +
@@ -923,25 +918,25 @@ function prosesValidasiDanSimpan() {
       }
       if (!status.valid) {
         pulihkanTombol();
-        loadingOverlay.classList.add('hidden');
+        sembunyiLoading();
         tampilkanToast(status.pesan, 'gagal', { durasi: 6000 });
         return;
       }
       // Validasi lolos -> baca berkas jadi base64, lalu kirim sebagai OBJEK (bukan elemen form).
-      loadingOverlay.querySelector('h3').innerText = "MEMBACA BERKAS...";
+      setJudulLoading("MEMBACA BERKAS...");
       kumpulkanDataForm()
         .then(function (dataObjek) {
           panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol);
         })
         .catch(function (errBaca) {
           pulihkanTombol();
-          loadingOverlay.classList.add('hidden');
+          sembunyiLoading();
           tampilkanToast("Gagal membaca berkas: " + (errBaca && errBaca.message ? errBaca.message : errBaca), 'gagal');
         });
     })
     .withFailureHandler(function (err) {
       pulihkanTombol();
-      loadingOverlay.classList.add('hidden');
+      sembunyiLoading();
       tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
     })
     .validasiDataBaru(dataPengguna.token, inputNik.value, selectLayanan.value, inputTempatTugas.value, instansiAktif, inputNoRek.value, document.getElementById('control-kecamatan').value, document.getElementById('input-almt-tugas').value);
@@ -1126,8 +1121,12 @@ function invalidateCacheDataTransaksi() {
 }
 
 function perbaruiStatusDiMasterData(nomorBaris, statusBaru, tandaLapor) {
+  // id baris dari server bisa berupa string (kolom bigint), sedangkan nomorBaris dari tombol Detail
+  // berupa angka -- dibandingkan sebagai string supaya tidak pernah meleset (sebelumnya === membuat
+  // kolom Verifikasi di tabel tidak berubah sampai halaman di-refresh).
+  const target = String(nomorBaris);
   for (let i = 0; i < masterDataLihat.length; i++) {
-    if (masterDataLihat[i][0] === nomorBaris) {
+    if (String(masterDataLihat[i][0]) === target) {
       masterDataLihat[i][18] = statusBaru;
       if (tandaLapor !== undefined) masterDataLihat[i][19] = tandaLapor; // penanda "sudah dilaporkan" (reset saat Memenuhi Syarat)
       break;
@@ -1135,6 +1134,127 @@ function perbaruiStatusDiMasterData(nomorBaris, statusBaru, tandaLapor) {
   }
   if (typeof saringDanTampilkanTabel === 'function') saringDanTampilkanTabel();
 }
+// --- Sinkron realtime Lihat Data -------------------------------------------------------------
+// Dua jalur, dipicu listener 'djpm:swr-invalidated' (app-admin.js):
+//  1. sinkronBarisLihatData(ids): perubahan SATU/BEBERAPA baris oleh admin lain -> tarik hanya baris itu
+//     (aksi ambilBarisLihatDataByIds) lalu tambal tabel di tempat. Cepat dan tidak mengganggu filter,
+//     halaman, maupun modal Detail yang sedang terbuka.
+//  2. jadwalkanMuatUlangLihat(): perubahan tanpa daftar id (massal, hapus, dll) -> muat ulang penuh,
+//     digabung jadi satu dan DITUNDA (bukan dibuang) selagi modal Detail terbuka atau selagi
+//     verifikasi milik sendiri berjalan; dijalankan begitu aman. Gagal menambal -> jatuh ke jalur ini.
+let _lihatTertunda = false;
+let _timerLihatTertunda = null;
+let _idsLihatTertunda = new Set();
+let _timerIdsLihat = null;
+let _sinkronBarisGagalSampai = 0; // backend belum mendukung / sedang error -> langsung muat ulang penuh dulu
+
+function _modalDetailTerbuka() {
+  const m = document.getElementById('modal-detail-penerima');
+  return !!m && !m.classList.contains('hidden');
+}
+
+// Sedang melihat tahun arsip? Daftar yang ditampilkan bukan masterDataLihat (tahun aktif), jadi
+// sinkron realtime tidak perlu jalan -- cache sudah dibuang dan data tahun aktif otomatis dimuat
+// ulang saat pengguna kembali memilih tahun aktif (lihat pemilih tahun di app-core.js). Memuat
+// ulang di sini malah mengacak opsi filter tahun arsip.
+function _sedangLihatTahunHistoris() {
+  return !!(window._tahunDipilihGetter && window._tahunAktifGetter &&
+    window._tahunDipilihGetter() !== window._tahunAktifGetter());
+}
+
+window.jadwalkanMuatUlangLihat = function () {
+  _lihatTertunda = true;
+  if (_timerLihatTertunda) return;
+  _timerLihatTertunda = setTimeout(_cekMuatUlangLihat, 300);
+};
+
+function _cekMuatUlangLihat() {
+  _timerLihatTertunda = null;
+  if (!_lihatTertunda) return;
+  if ((typeof panelAktif !== 'undefined' && panelAktif !== 'rekap') || _sedangLihatTahunHistoris()) {
+    // Tab lain / tahun arsip sedang aktif: tidak perlu memuat sekarang. Cache sudah dibuang, jadi saat
+    // tab Lihat Data (tahun aktif) dibuka lagi datanya otomatis dimuat ulang.
+    _lihatTertunda = false;
+    return;
+  }
+  if (_modalDetailTerbuka() || window._abaikanMuatUlangLihatSampai > Date.now()) {
+    _timerLihatTertunda = setTimeout(_cekMuatUlangLihat, 1500);
+    return;
+  }
+  _lihatTertunda = false;
+  inisialisasiMenuLihatData();
+}
+
+window.sinkronBarisLihatData = function (ids) {
+  if (_sedangLihatTahunHistoris()) return;
+  const adaData = Array.isArray(masterDataLihat) && masterDataLihat.length > 0;
+  const adaSesi = typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token;
+  if (!adaData || !adaSesi || Date.now() < _sinkronBarisGagalSampai) { window.jadwalkanMuatUlangLihat(); return; }
+  (Array.isArray(ids) ? ids : []).forEach(function (id) {
+    const n = Number(id);
+    if (Number.isInteger(n) && n > 0) _idsLihatTertunda.add(n);
+  });
+  if (_idsLihatTertunda.size === 0) return;
+  if (_idsLihatTertunda.size > 200) { _idsLihatTertunda.clear(); window.jadwalkanMuatUlangLihat(); return; }
+  if (_timerIdsLihat) return;
+  _timerIdsLihat = setTimeout(_jalankanSinkronBarisLihat, 250);
+};
+
+function _jalankanSinkronBarisLihat() {
+  _timerIdsLihat = null;
+  const ids = Array.from(_idsLihatTertunda);
+  _idsLihatTertunda.clear();
+  if (ids.length === 0) return;
+  google.script.run
+    .withSuccessHandler(function (jsonResponse) {
+      let berhasil = false;
+      try {
+        const res = typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse;
+        if (res && res.sukses && Array.isArray(res.rows)) berhasil = _terapkanPatchBarisLihat(res.rows, res.hilang || []);
+      } catch (e) { berhasil = false; }
+      if (!berhasil) window.jadwalkanMuatUlangLihat();
+    })
+    .withFailureHandler(function () {
+      _sinkronBarisGagalSampai = Date.now() + 60000;
+      window.jadwalkanMuatUlangLihat();
+    })
+    .ambilBarisLihatDataByIds(dataPengguna.token, ids);
+}
+
+// Tambal baris di masterDataLihat dengan hasil dari server. Mengembalikan false bila ada yang tidak
+// bisa ditambal dengan aman (mis. baris baru dari admin lain, bentuk baris tak dikenal) -> pemanggil
+// jatuh ke muat ulang penuh, yang juga membangun ulang opsi filter.
+function _terapkanPatchBarisLihat(rowsBaru, hilang) {
+  const peta = new Map();
+  for (let i = 0; i < masterDataLihat.length; i++) peta.set(Number(masterDataLihat[i][0]), i);
+  for (let k = 0; k < rowsBaru.length; k++) {
+    const r = rowsBaru[k];
+    if (!Array.isArray(r) || r.length < 20 || !peta.has(Number(r[0]))) return false;
+  }
+  for (let k = 0; k < rowsBaru.length; k++) {
+    const r = rowsBaru[k];
+    r[0] = Number(r[0]);
+    masterDataLihat[peta.get(r[0])] = r;
+  }
+  if (hilang.length > 0) {
+    const buang = new Set(hilang.map(Number));
+    masterDataLihat = masterDataLihat.filter(function (r) { return !buang.has(Number(r[0])); });
+  }
+  if (rowsBaru.length === 0 && hilang.length === 0) return true;
+  masterDataLihat = urutkanDanIndexDataLihat(masterDataLihat); // urutan layanan/kecamatan/kelurahan bisa ikut berubah
+  waktuMasterDataLihat = Date.now();
+  saringDanTampilkanTabel(); // halaman & filter yang sedang dipakai dipertahankan
+  return true;
+}
+
+// Jaring pengaman: tab Lihat Data kembali terlihat setelah lama (koneksi realtime bisa tertidur saat
+// tab di-background) -> segarkan senyap bila data sudah lebih dari semenit.
+window.addEventListener('djpm:swr-window-focus', function () {
+  if (typeof panelAktif === 'undefined' || panelAktif !== 'rekap' || _sedangLihatTahunHistoris()) return;
+  if (_modalDetailTerbuka() || !masterDataLihat || masterDataLihat.length === 0) return;
+  if (Date.now() - waktuMasterDataLihat > 60000) window.jadwalkanMuatUlangLihat();
+});
+
 let penandaWaktuKetik;
 let _verifSedangJalan = false; // cegah verifikasi ganda selagi request sebelumnya belum selesai
 
@@ -1167,8 +1287,10 @@ function inisialisasiMenuLihatData() {
   if (tbodyLihat && (!masterDataLihat || masterDataLihat.length === 0)) {
     tbodyLihat.innerHTML = htmlSkeletonBaris(8, 5);
   }
+  const akhiriProgres = progresSekali();
   google.script.run
     .withSuccessHandler(function (jsonResponse) {
+      akhiriProgres();
       try {
         const response = jsonResponse ? (typeof jsonResponse === 'string' ? JSON.parse(jsonResponse) : jsonResponse) : null;
         if (response && response.sukses) {
@@ -1189,15 +1311,23 @@ function inisialisasiMenuLihatData() {
         } else { tampilkanToast("Gagal memuat data: " + (response ? response.pesan : "Error JSON"), "gagal"); }
       } catch (err) { tampilkanToast("Error Render: " + err.message, "gagal"); }
     })
-    .withFailureHandler(function (error) { tampilkanToast(pesanErrorRamah(error), "gagal", { durasi: 6000 }); })
+    .withFailureHandler(function (error) { akhiriProgres(); tampilkanToast(pesanErrorRamah(error), "gagal", { durasi: 6000 }); })
     .ambilDataLihatDataHakAkses(dataPengguna.token);
 }
 
 window.tampilkanDataDetail = function () {
   if (!pastikanLogin()) return;
+  _ddHalaman = 1;
+  _ddSudahTampil = false;
+  _lepasObserverDataDetail();
   document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(20, 5);
   document.getElementById('info-total-data-detail').innerText = '';
+  const navDd = document.getElementById('pagination-data-detail');
+  if (navDd) navDd.innerHTML = '';
+  const infoHalDd = document.getElementById('info-halaman-data-detail');
+  if (infoHalDd) infoHalDd.textContent = '';
   document.getElementById('modal-data-detail').classList.remove('hidden');
+  _siapkanGulirDataDetail();
   muatDataDetail(true);
 };
 
@@ -1300,19 +1430,44 @@ function muatDataDetail(bolehCobaLagi) {
     .ambilDataDetail(dataPengguna.token, tahun);
 }
 
-function renderTabelDataDetail(rows) {
-  const tbody = document.getElementById('body-tabel-data-detail');
-  document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
-  if (!rows || rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
-    return;
-  }
-  let html = '';
-  rows.forEach(function (r, idx) {
-    html += `
+// Urutan tampil Data Detail: Layanan -> Kecamatan -> Kelurahan (A-Z), lalu Nama sebagai pembeda
+// terakhir. Nilai kosong ditaruh paling bawah. Dilakukan di sisi klien (bukan di query backend)
+// supaya query ambilDataDetail dan cache-nya tidak tersentuh.
+function _urutkanDataDetail(rows) {
+  const kunci = ['layanan', 'kecamatan', 'kelurahan', 'nama'];
+  const bandingTeks = function (a, b) {
+    const x = String(a == null ? '' : a).trim(), y = String(b == null ? '' : b).trim();
+    if (!x && !y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return x.localeCompare(y, 'id', { sensitivity: 'base', numeric: true });
+  };
+  return rows.slice().sort(function (a, b) {
+    for (let i = 0; i < kunci.length; i++) {
+      const hasil = bandingTeks(a[kunci[i]], b[kunci[i]]);
+      if (hasil !== 0) return hasil;
+    }
+    return 0;
+  });
+}
+
+// Paginasi + lazy load Data Detail. Seluruh baris sudah ada di memori (backend mengirim satu
+// paket), jadi yang dibatasi adalah jumlah baris DOM: tabel hanya memuat satu halaman
+// (DD_PER_HALAMAN baris), dan baris di halaman itu digambar bertahap (DD_CHUNK baris) saat
+// pengguna menggulir mendekati dasar tabel -- DOM tetap ringan walau datanya ribuan.
+const DD_PER_HALAMAN = 50;
+const DD_CHUNK = 15;
+let _ddRows = [];
+let _ddHalaman = 1;
+let _ddTerender = 0;      // jumlah baris halaman aktif yang sudah masuk DOM
+let _ddObserver = null;
+let _ddSudahTampil = false;  // true setelah render pertama sejak modal dibuka (muat ulang realtime = pertahankan posisi)
+
+function _htmlBarisDataDetail(r, nomor) {
+  return `
   <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-    <td class="px-3 py-2 text-center font-medium text-slate-400">${idx + 1}</td>
-    <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.nama) || '-'}</td>
+    <td class="px-3 py-2 text-center font-medium text-slate-400">${nomor}</td>
+    <td class="px-3 py-2 font-semibold text-slate-800" title="${esc(r.nama)}">${esc(r.nama) || '-'}</td>
     <td class="px-3 py-2 font-mono text-xs text-slate-600">${esc(r.nik) || '-'}</td>
     <td class="px-3 py-2">${esc(r.jenisKelamin) || '-'}</td>
     <td class="px-3 py-2">${esc(r.tempatLahir) || '-'}</td>
@@ -1332,8 +1487,223 @@ function renderTabelDataDetail(rows) {
     <td class="px-3 py-2"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">${esc(r.status) || '-'}</span></td>
     <td class="px-3 py-2 text-xs text-slate-500">${esc(r.tglStatus) || '-'}</td>
   </tr>`;
+}
+
+function _lepasObserverDataDetail() {
+  if (_ddObserver) { _ddObserver.disconnect(); _ddObserver = null; }
+}
+
+// Gambar halaman aktif dari nol, hanya DD_CHUNK baris pertama; sisanya lewat sentinel.
+// Parameter pertahankan = true (muat ulang otomatis di halaman yang sama): gambar sebanyak baris
+// yang sudah terlihat tadi dan kembalikan posisi gulir, supaya pengguna yang sedang membaca tidak
+// terlempar ke atas.
+function _gambarHalamanDataDetail(pertahankan) {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  const wadah = document.getElementById('scroll-data-detail');
+  _lepasObserverDataDetail();
+  const awal = (_ddHalaman - 1) * DD_PER_HALAMAN;
+  const akhir = Math.min(awal + DD_PER_HALAMAN, _ddRows.length);
+  const posisi = pertahankan && wadah ? wadah.scrollTop : 0;
+  const jumlahAwal = pertahankan ? Math.max(DD_CHUNK, _ddTerender - awal) : DD_CHUNK;
+  tbody.innerHTML = '';
+  _ddTerender = awal;
+  _tambahBarisDataDetail(akhir, typeof IntersectionObserver === 'undefined', jumlahAwal);
+  if (wadah) wadah.scrollTop = posisi;
+}
+
+// Tambah baris berikutnya sampai batas `akhir`. `semua` = true menggambar sekaligus (fallback
+// bila browser tidak punya IntersectionObserver).
+function _tambahBarisDataDetail(akhir, semua, jumlah) {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  const sentinelLama = document.getElementById('sentinel-data-detail');
+  if (sentinelLama) sentinelLama.remove();
+  const batas = semua ? akhir : Math.min(_ddTerender + (jumlah || DD_CHUNK), akhir);
+  let html = '';
+  for (let i = _ddTerender; i < batas; i++) html += _htmlBarisDataDetail(_ddRows[i], i + 1);
+  _ddTerender = batas;
+  if (_ddTerender < akhir) {
+    html += '<tr id="sentinel-data-detail"><td colspan="20" class="px-4 py-3 text-center text-xs text-slate-400">Memuat baris berikutnya...</td></tr>';
+  }
+  tbody.insertAdjacentHTML('beforeend', html);
+  const sentinel = document.getElementById('sentinel-data-detail');
+  if (!sentinel) return;
+  const wadah = document.getElementById('scroll-data-detail');
+  _ddObserver = new IntersectionObserver(function (entri) {
+    if (!entri[0].isIntersecting) return;
+    _lepasObserverDataDetail();
+    _tambahBarisDataDetail(akhir, false);
+  }, { root: wadah, rootMargin: '0px 0px 300px 0px' });
+  _ddObserver.observe(sentinel);
+}
+
+function _perbaruiNavDataDetail() {
+  const wrap = document.getElementById('pagination-data-detail');
+  const info = document.getElementById('info-halaman-data-detail');
+  if (!wrap) return;
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  const sekarang = _ddHalaman;
+  if (info) {
+    const awal = (sekarang - 1) * DD_PER_HALAMAN + 1;
+    const akhir = Math.min(sekarang * DD_PER_HALAMAN, _ddRows.length);
+    info.textContent = 'Menampilkan ' + awal + '-' + akhir + ' dari ' + _ddRows.length + ' baris · Halaman ' + sekarang + '/' + total;
+  }
+  if (total <= 1) { wrap.innerHTML = ''; return; }
+  const TAMPIL = 5;
+  let mulai = Math.max(1, sekarang - Math.floor(TAMPIL / 2));
+  let akhirRange = mulai + TAMPIL - 1;
+  if (akhirRange > total) { akhirRange = total; mulai = Math.max(1, akhirRange - TAMPIL + 1); }
+  const BASE = 'px-3 py-1.5 rounded-xl text-xs font-semibold transition min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-center active:scale-95 shadow-2xs';
+  const AKTIF = BASE + ' bg-slate-800 text-white shadow-xs';
+  const PASIF = BASE + ' bg-white border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 cursor-pointer';
+  const NONAKTIF = BASE + ' bg-slate-100/60 border border-slate-200/50 text-slate-300 cursor-not-allowed';
+  const ikonPrev = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>';
+  const ikonNext = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>';
+  let h = `<button onclick="pindahHalamanDataDetail(${sekarang - 1})" ${sekarang === 1 ? 'disabled' : ''} class="${sekarang === 1 ? NONAKTIF : PASIF}" title="Halaman Sebelumnya">${ikonPrev}</button>`;
+  if (mulai > 1) {
+    h += `<button onclick="pindahHalamanDataDetail(1)" class="${PASIF}">1</button>`;
+    if (mulai > 2) h += '<span class="px-1 text-slate-400 text-xs">…</span>';
+  }
+  for (let i = mulai; i <= akhirRange; i++) {
+    h += `<button onclick="pindahHalamanDataDetail(${i})" class="${i === sekarang ? AKTIF : PASIF}">${i}</button>`;
+  }
+  if (akhirRange < total) {
+    if (akhirRange < total - 1) h += '<span class="px-1 text-slate-400 text-xs">…</span>';
+    h += `<button onclick="pindahHalamanDataDetail(${total})" class="${PASIF}">${total}</button>`;
+  }
+  h += `<button onclick="pindahHalamanDataDetail(${sekarang + 1})" ${sekarang === total ? 'disabled' : ''} class="${sekarang === total ? NONAKTIF : PASIF}" title="Halaman Berikutnya">${ikonNext}</button>`;
+  wrap.innerHTML = h;
+}
+
+// Kemudahan geser kiri-kanan di PC untuk tabel Data Detail (20 kolom): drag dengan mouse,
+// tombol panah melayang (klik = geser 400px, tahan = gulir terus), dan Shift+roda / panah
+// keyboard yang sudah bawaan browser (kontainer punya tabindex). Hanya dipasang sekali.
+let _ddGulirSiap = false;
+function _siapkanGulirDataDetail() {
+  if (_ddGulirSiap) return;
+  const sc = document.getElementById('scroll-data-detail');
+  const tombolKiri = document.getElementById('dd-gulir-kiri');
+  const tombolKanan = document.getElementById('dd-gulir-kanan');
+  if (!sc || !tombolKiri || !tombolKanan) return;
+  _ddGulirSiap = true;
+
+  const tampilkan = function (btn, tampil) {
+    btn.classList.toggle('opacity-0', !tampil);
+    btn.classList.toggle('pointer-events-none', !tampil);
+  };
+  const perbarui = function () {
+    const maks = sc.scrollWidth - sc.clientWidth;
+    tampilkan(tombolKiri, sc.scrollLeft > 2);
+    tampilkan(tombolKanan, maks > 2 && sc.scrollLeft < maks - 2);
+  };
+  sc.addEventListener('scroll', perbarui, { passive: true });
+  window.addEventListener('resize', perbarui);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(perbarui);
+    ro.observe(sc);
+    const tabel = document.getElementById('tabel-data-detail');
+    if (tabel) ro.observe(tabel);
+  }
+
+  // Drag mouse. Hanya mouse (layar sentuh sudah bisa menggeser sendiri); baru dianggap drag
+  // setelah bergeser >4px supaya klik biasa tidak terganggu; klik di scrollbar diabaikan.
+  let drag = null;
+  sc.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    if (e.target.closest('button, a, input, select, textarea')) return;
+    const r = sc.getBoundingClientRect();
+    if (e.clientX > r.left + sc.clientLeft + sc.clientWidth || e.clientY > r.top + sc.clientTop + sc.clientHeight) return;
+    drag = { x: e.clientX, y: e.clientY, kiri: sc.scrollLeft, atas: sc.scrollTop, aktif: false, id: e.pointerId };
   });
-  tbody.innerHTML = html;
+  sc.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    if (!(e.buttons & 1)) { akhiriDrag(); return; }  // klik sudah dilepas di luar tabel
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.aktif) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      drag.aktif = true;
+      sc.classList.add('dd-menggeser');
+      try { sc.setPointerCapture(drag.id); } catch (_) { /* abaikan */ }
+      const seleksi = window.getSelection && window.getSelection();
+      if (seleksi) seleksi.removeAllRanges();
+    }
+    sc.scrollLeft = drag.kiri - dx;
+    sc.scrollTop = drag.atas - dy;
+  });
+  function akhiriDrag() {
+    if (!drag) return;
+    if (drag.aktif) {
+      sc.classList.remove('dd-menggeser');
+      try { sc.releasePointerCapture(drag.id); } catch (_) { /* abaikan */ }
+    }
+    drag = null;
+  }
+  sc.addEventListener('pointerup', akhiriDrag);
+  sc.addEventListener('pointercancel', akhiriDrag);
+
+  // Tombol panah: klik singkat = geser 400px (halus), tahan >350ms = gulir terus sampai dilepas.
+  const pasangTombol = function (btn, arah) {
+    let timer = null, raf = null, ditekan = false, menahan = false;
+    const langkah = function () {
+      sc.scrollLeft += arah * 14;
+      raf = requestAnimationFrame(langkah);
+    };
+    const berhenti = function () {
+      clearTimeout(timer);
+      timer = null;
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+    };
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      ditekan = true;
+      menahan = false;
+      timer = setTimeout(function () { menahan = true; raf = requestAnimationFrame(langkah); }, 350);
+    });
+    btn.addEventListener('pointerup', function () {
+      const klik = ditekan && !menahan;
+      ditekan = false;
+      berhenti();
+      if (klik) sc.scrollBy({ left: arah * 400, behavior: 'smooth' });
+    });
+    btn.addEventListener('pointerleave', function () { ditekan = false; berhenti(); });
+    btn.addEventListener('pointercancel', function () { ditekan = false; berhenti(); });
+  };
+  pasangTombol(tombolKiri, -1);
+  pasangTombol(tombolKanan, 1);
+  perbarui();
+}
+
+window.pindahHalamanDataDetail = function (nomor) {
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  nomor = Math.min(Math.max(1, Number(nomor) || 1), total);
+  if (nomor === _ddHalaman) return;
+  _ddHalaman = nomor;
+  _gambarHalamanDataDetail(false);
+  _perbaruiNavDataDetail();
+};
+
+function renderTabelDataDetail(rows) {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  rows = Array.isArray(rows) ? rows : [];
+  document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
+  _lepasObserverDataDetail();
+  if (rows.length === 0) {
+    _ddRows = [];
+    _ddSudahTampil = true;
+    tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
+    _perbaruiNavDataDetail();
+    const infoHal = document.getElementById('info-halaman-data-detail');
+    if (infoHal) infoHal.textContent = '';
+    return;
+  }
+  _ddRows = _urutkanDataDetail(rows);
+  // Muat ulang otomatis (realtime) mempertahankan halaman yang sedang dibuka bila masih valid.
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  if (_ddHalaman > total) _ddHalaman = total;
+  if (_ddHalaman < 1) _ddHalaman = 1;
+  _gambarHalamanDataDetail(_ddSudahTampil);
+  _ddSudahTampil = true;
+  _perbaruiNavDataDetail();
 }
 
 function setupPencarianRealtime() {
@@ -1424,6 +1794,8 @@ window.resetSemuaFilter = resetSemuaFilter;
 function urutkanDanIndexDataLihat(rows) {
   if (!Array.isArray(rows)) return [];
   rows.forEach(function (r) {
+    const idAngka = Number(r[0]);
+    if (Number.isFinite(idAngka)) r[0] = idAngka; // seragamkan tipe id (server mengirim bigint sebagai string)
     r._cari = (String(r[1] || '') + ' ' + String(r[2] || '') + ' ' + String(r[15] || '') + ' ' + String(r[8] || '')).toLowerCase();
   });
   return rows.sort(function (a, b) {
@@ -1860,12 +2232,12 @@ function halamanBerikutnya() {
 // Detail & Edit Penerima
 (function () {
   const KOLOM_TEKS = {
-    1: { label: "Nama Lengkap", type: "text" }, 2: { label: "NIK", type: "text" },
+    1: { label: "Nama Lengkap", type: "text", maks: 100 }, 2: { label: "NIK", type: "text" },
     3: { label: "Jenis Kelamin", type: "select", opsi: ["LAKI-LAKI", "PEREMPUAN"] },
-    4: { label: "Tempat Lahir", type: "text" }, 5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
-    6: { label: "Alamat Domisili", type: "text" }, 11: { label: "Kelurahan", type: "text" },
-    12: { label: "Nama Rekening", type: "text" }, 13: { label: "Nomor Rekening", type: "text" },
-    14: { label: "Kantor Cabang", type: "text" }, 15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
+    4: { label: "Tempat Lahir", type: "text", maks: 100 }, 5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
+    6: { label: "Alamat Domisili", type: "text", maks: 100 }, 11: { label: "Kelurahan", type: "text", maks: 100 },
+    12: { label: "Nama Rekening", type: "text", maks: 100 }, 13: { label: "Nomor Rekening", type: "text" },
+    14: { label: "Kantor Cabang", type: "text", maks: 100 }, 15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
     16: { label: "Status BPJS TK", type: "select", opsi: ["YA", "TIDAK"] },
   };
   const KOLOM_BERKAS = {
@@ -2136,6 +2508,7 @@ function halamanBerikutnya() {
             dataAktif[38] = res.tanggalLapor;
             dataAktif[39] = res.dilaporOleh;
             renderBaca(dataAktif);
+            perbaruiStatusDiMasterData(nomorBarisAktif, dataAktif[32] || "Berkas Tidak Lengkap", res.tanggalLapor);
             invalidateCacheDataTransaksi();
             tampilkanToast('Perbaikan berkas berhasil dilaporkan.', 'sukses');
           })
@@ -2219,7 +2592,7 @@ function halamanBerikutnya() {
       } else {
         h += `<div class="bg-white rounded-xl px-4 py-2.5 border border-sky-300 shadow-2xs">
           <p class="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}${kolDef.hint ? ` <span class="font-normal text-slate-400 normal-case">${esc(kolDef.hint)}</span>` : ""}</p>
-          <input id="edit-${i}" type="text" value="${esc(v)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">
+          <input id="edit-${i}" type="text"${kolDef.maks ? ` maxlength="${kolDef.maks}"` : ""} value="${esc(v)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">
         </div>`;
       }
     }
@@ -2392,7 +2765,7 @@ function halamanBerikutnya() {
     });
   }
   function ambilDanTampilkanDetail(nomorBaris) {
-    isiKonten.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Mengambil data dari server...</p></div>`;
+    isiKonten.innerHTML = htmlSkeletonPanel('detail');
     google.script.run
       .withSuccessHandler(function (jsonResponse) {
         try {
@@ -2777,6 +3150,10 @@ document.getElementById('btn-refresh-data').addEventListener('click', function (
     // tombolnya sudah ditekan, membuat pengguna mengira sudah dapat data terbaru padahal
     // belum. broadcast:false karena ini cuma memaksa refresh di tab ini sendiri, bukan
     // sinyal mutasi data yang perlu diteruskan ke tab/perangkat lain.
+    // Event invalidasi ini memicu listener realtime (app-admin.js) yang akan menjadwalkan muat ulang
+    // Lihat Data -- padahal inisialisasiMenuLihatData() di bawah sudah memuatnya. Jeda singkat ini
+    // membuat listener mengabaikannya supaya tidak ada muat ulang ganda yang menyusul.
+    window._abaikanMuatUlangLihatSampai = Date.now() + 3000;
     if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') {
       window.djpmCache.invalidate(['penerima'], false);
     }
@@ -2800,7 +3177,7 @@ function muatDashboardProgres() {
     renderDashboardProgres(tersimpan.res, kecFilter);
     return;
   }
-  isi.innerHTML = `<div class="flex flex-col items-center justify-center py-10 gap-3"><div class="loader"></div><p class="text-sm text-slate-500 animate-pulse">Memuat dashboard...</p></div>`;
+  isi.innerHTML = htmlSkeletonPanel('dashboard');
   google.script.run
     .withSuccessHandler(function (res) {
       if (!res || !res.sukses) { isi.innerHTML = `<p class="text-red-500 text-sm text-center py-6">Gagal memuat: ${res ? esc(res.pesan) : 'tidak diketahui'}</p>`; return; }
