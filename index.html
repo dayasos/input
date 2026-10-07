@@ -579,10 +579,10 @@
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Nomor Induk Kependudukan (NIK) <span
                       class="text-red-500">*</span></label>
-                  <input type="text" name="inputNik" id="input-nik" maxlength="16" placeholder="16 Digit Angka"
+                  <input type="text" name="inputNik" id="input-nik" inputmode="numeric" autocomplete="off" enterkeyhint="next" aria-describedby="peringatan-nik" maxlength="16" placeholder="16 Digit Angka"
                     class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                     required>
-                  <p id="peringatan-nik" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
+                  <p id="peringatan-nik" role="alert" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Jenis Kelamin <span
@@ -694,11 +694,11 @@
                   <div class="sm:col-span-1 lg:col-span-3">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nomor Rekening Bank Sumut <span
                         class="text-red-500">*</span></label>
-                    <input type="text" name="inputNoRekening" id="input-no-rek" maxlength="14"
+                    <input type="text" name="inputNoRekening" id="input-no-rek" inputmode="numeric" autocomplete="off" enterkeyhint="next" aria-describedby="peringatan-rekening" maxlength="14"
                       placeholder="14 Digit Angka"
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
-                    <p id="peringatan-rekening" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
+                    <p id="peringatan-rekening" role="alert" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
                   </div>
                   <div class="sm:col-span-1 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Kantor Cabang Bank Sumut <span
@@ -711,7 +711,7 @@
                   <div class="sm:col-span-1 lg:col-span-2">
                     <label class="block text-xs font-medium text-slate-600 mb-1.5">Nomor Kontak / WhatsApp <span
                         class="text-red-500">*</span></label>
-                    <input type="text" name="inputNoKontak" id="input-kontak" maxlength="13"
+                    <input type="text" name="inputNoKontak" id="input-kontak" inputmode="tel" autocomplete="off" maxlength="13"
                       placeholder="Wajib diawali 08, tanpa spasi"
                       class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                       required>
@@ -2731,7 +2731,7 @@
   <!-- Tombol Akun Saya sudah dipindahkan ke header atas -->
 
   <!-- Modal akun saya: ganti username dan/atau password -->
-  <div id="modal-ganti-password"
+  <div id="modal-ganti-password" data-jaga-isian
     class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
@@ -2762,7 +2762,7 @@
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password
             (Verifikasi) <span class="text-red-500">*</span></label>
           <div class="relative">
-            <input type="password" id="gp-lama" placeholder="Masukkan password Anda"
+            <input type="password" id="gp-lama" autocomplete="current-password" placeholder="Masukkan password Anda"
               class="w-full px-3 py-2.5 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
               style="text-transform:none">
             <button type="button" onclick="togglePw('gp-lama', this)"
@@ -2790,7 +2790,7 @@
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password Baru
             (opsional)</label>
           <div class="relative">
-            <input type="password" id="gp-baru" placeholder="Min. 6 karakter, ada huruf & angka"
+            <input type="password" id="gp-baru" autocomplete="new-password" placeholder="Min. 6 karakter, ada huruf & angka"
               class="w-full px-3 py-2.5 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
               style="text-transform:none">
             <button type="button" onclick="togglePw('gp-baru', this)"
@@ -2809,7 +2809,7 @@
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Konfirmasi Password
             Baru</label>
           <div class="relative">
-            <input type="password" id="gp-konfirm" placeholder="Ketik ulang password baru"
+            <input type="password" id="gp-konfirm" autocomplete="new-password" placeholder="Ketik ulang password baru"
               class="w-full px-3 py-2.5 pr-10 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
               style="text-transform:none">
             <button type="button" onclick="togglePw('gp-konfirm', this)"
@@ -2895,7 +2895,7 @@
             </div>
             <div>
               <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nomor HP</label>
-              <input type="text" id="up-hp" placeholder="Diawali 08"
+              <input type="text" id="up-hp" inputmode="tel" placeholder="Diawali 08"
                 class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
                 style="text-transform:none" maxlength="15" autocomplete="off">
             </div>
@@ -2996,7 +2996,7 @@
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nomor HP / WhatsApp
             <span class="text-red-500">*</span></label>
-          <input type="text" id="profil-hp" placeholder="Diawali 08, min. 10 digit"
+          <input type="text" id="profil-hp" inputmode="tel" placeholder="Diawali 08, min. 10 digit"
             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
             maxlength="15" autocomplete="off" style="text-transform:none">
         </div>
@@ -3019,14 +3019,14 @@
           </div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Password Baru <span
               class="text-red-500">*</span></label>
-          <input type="password" id="profil-pass-baru" placeholder="Min. 6 karakter, ada huruf & angka"
+          <input type="password" id="profil-pass-baru" autocomplete="new-password" placeholder="Min. 6 karakter, ada huruf & angka"
             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
             style="text-transform:none">
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Konfirmasi Password
             Baru <span class="text-red-500">*</span></label>
-          <input type="password" id="profil-pass-konfirm" placeholder="Ketik ulang password baru"
+          <input type="password" id="profil-pass-konfirm" autocomplete="new-password" placeholder="Ketik ulang password baru"
             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500"
             style="text-transform:none">
         </div>
@@ -3116,7 +3116,7 @@
   <div id="modal-kelola-user" class="hidden" style="display:none"></div>
 
   <!-- Modal Tambah Pengguna Baru -->
-  <div id="modal-tambah-user"
+  <div id="modal-tambah-user" data-jaga-isian
     class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
@@ -3209,7 +3209,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nomor HP</label>
-            <input type="text" id="tu-hp" placeholder="081234567890"
+            <input type="text" id="tu-hp" inputmode="tel" autocomplete="off" placeholder="081234567890"
               class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500">
           </div>
           <div>
@@ -3236,7 +3236,7 @@
   </div>
 
   <!-- Modal Edit Pengguna -->
-  <div id="modal-edit-user"
+  <div id="modal-edit-user" data-jaga-isian
     class="hidden fixed inset-0 z-[180] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
@@ -3315,7 +3315,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Nomor HP</label>
-            <input type="text" id="eu-hp"
+            <input type="text" id="eu-hp" inputmode="tel" autocomplete="off"
               class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-sky-500">
           </div>
           <div>
@@ -3343,7 +3343,7 @@
 
   <!-- Modal Reset Password Pengguna (dari Kelola Akun) — terpisah dari modal "Akun Saya" supaya
        admin tidak salah mengisi form ganti password akunnya sendiri. -->
-  <div id="modal-reset-sandi-user"
+  <div id="modal-reset-sandi-user" data-jaga-isian
     class="hidden fixed inset-0 z-[190] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-3 sm:p-4"
     onclick="if(event.target===this)this.classList.add('hidden')">
     <div
@@ -3480,6 +3480,7 @@
   <script src="/js/app-kelola-data.js?v=20271007" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
   <script src="/js/app-kelola-ibadah.js?v=20271007" defer></script>
+  <script src="/js/modal-a11y.js?v=20271008" defer></script>
 
 </body>
 
