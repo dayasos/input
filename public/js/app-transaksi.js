@@ -1201,6 +1201,7 @@ window.tampilkanDataDetail = function () {
   const infoHalDd = document.getElementById('info-halaman-data-detail');
   if (infoHalDd) infoHalDd.textContent = '';
   document.getElementById('modal-data-detail').classList.remove('hidden');
+  _siapkanGulirDataDetail();
   muatDataDetail(true);
 };
 
@@ -1439,6 +1440,105 @@ function _perbaruiNavDataDetail() {
   }
   h += `<button onclick="pindahHalamanDataDetail(${sekarang + 1})" ${sekarang === total ? 'disabled' : ''} class="${sekarang === total ? NONAKTIF : PASIF}" title="Halaman Berikutnya">${ikonNext}</button>`;
   wrap.innerHTML = h;
+}
+
+// Kemudahan geser kiri-kanan di PC untuk tabel Data Detail (20 kolom): drag dengan mouse,
+// tombol panah melayang (klik = geser 400px, tahan = gulir terus), dan Shift+roda / panah
+// keyboard yang sudah bawaan browser (kontainer punya tabindex). Hanya dipasang sekali.
+let _ddGulirSiap = false;
+function _siapkanGulirDataDetail() {
+  if (_ddGulirSiap) return;
+  const sc = document.getElementById('scroll-data-detail');
+  const tombolKiri = document.getElementById('dd-gulir-kiri');
+  const tombolKanan = document.getElementById('dd-gulir-kanan');
+  if (!sc || !tombolKiri || !tombolKanan) return;
+  _ddGulirSiap = true;
+
+  const tampilkan = function (btn, tampil) {
+    btn.classList.toggle('opacity-0', !tampil);
+    btn.classList.toggle('pointer-events-none', !tampil);
+  };
+  const perbarui = function () {
+    const maks = sc.scrollWidth - sc.clientWidth;
+    tampilkan(tombolKiri, sc.scrollLeft > 2);
+    tampilkan(tombolKanan, maks > 2 && sc.scrollLeft < maks - 2);
+  };
+  window._perbaruiGulirDd = perbarui;
+  sc.addEventListener('scroll', perbarui, { passive: true });
+  window.addEventListener('resize', perbarui);
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(perbarui);
+    ro.observe(sc);
+    const tabel = document.getElementById('tabel-data-detail');
+    if (tabel) ro.observe(tabel);
+  }
+
+  // Drag mouse. Hanya mouse (layar sentuh sudah bisa menggeser sendiri); baru dianggap drag
+  // setelah bergeser >4px supaya klik biasa tidak terganggu; klik di scrollbar diabaikan.
+  let drag = null;
+  sc.addEventListener('pointerdown', function (e) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    if (e.target.closest('button, a, input, select, textarea')) return;
+    const r = sc.getBoundingClientRect();
+    if (e.clientX > r.left + sc.clientLeft + sc.clientWidth || e.clientY > r.top + sc.clientTop + sc.clientHeight) return;
+    drag = { x: e.clientX, y: e.clientY, kiri: sc.scrollLeft, atas: sc.scrollTop, aktif: false, id: e.pointerId };
+  });
+  sc.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.aktif) {
+      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+      drag.aktif = true;
+      sc.classList.add('dd-menggeser');
+      try { sc.setPointerCapture(drag.id); } catch (_) { /* abaikan */ }
+      const seleksi = window.getSelection && window.getSelection();
+      if (seleksi) seleksi.removeAllRanges();
+    }
+    sc.scrollLeft = drag.kiri - dx;
+    sc.scrollTop = drag.atas - dy;
+  });
+  const akhiriDrag = function () {
+    if (!drag) return;
+    if (drag.aktif) {
+      sc.classList.remove('dd-menggeser');
+      try { sc.releasePointerCapture(drag.id); } catch (_) { /* abaikan */ }
+    }
+    drag = null;
+  };
+  sc.addEventListener('pointerup', akhiriDrag);
+  sc.addEventListener('pointercancel', akhiriDrag);
+
+  // Tombol panah: klik singkat = geser 400px (halus), tahan >350ms = gulir terus sampai dilepas.
+  const pasangTombol = function (btn, arah) {
+    let timer = null, raf = null, ditekan = false, menahan = false;
+    const langkah = function () {
+      sc.scrollLeft += arah * 14;
+      raf = requestAnimationFrame(langkah);
+    };
+    const berhenti = function () {
+      clearTimeout(timer);
+      timer = null;
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+    };
+    btn.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      ditekan = true;
+      menahan = false;
+      timer = setTimeout(function () { menahan = true; raf = requestAnimationFrame(langkah); }, 350);
+    });
+    btn.addEventListener('pointerup', function () {
+      const klik = ditekan && !menahan;
+      ditekan = false;
+      berhenti();
+      if (klik) sc.scrollBy({ left: arah * 400, behavior: 'smooth' });
+    });
+    btn.addEventListener('pointerleave', function () { ditekan = false; berhenti(); });
+    btn.addEventListener('pointercancel', function () { ditekan = false; berhenti(); });
+  };
+  pasangTombol(tombolKiri, -1);
+  pasangTombol(tombolKanan, 1);
+  perbarui();
 }
 
 window.pindahHalamanDataDetail = function (nomor) {

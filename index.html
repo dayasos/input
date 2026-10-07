@@ -1617,9 +1617,10 @@
         <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
           class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
       </div>
-      <div id="scroll-data-detail" class="flex-1 p-4 sm:p-6 overflow-y-auto text-sm text-slate-700 overscroll-contain">
-        <div class="overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
-          <table class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
+      <div class="relative flex-1 min-h-0 flex flex-col p-4 sm:p-6 text-sm text-slate-700">
+        <div id="scroll-data-detail" tabindex="0" aria-label="Tabel Data Detail, geser kiri-kanan dengan drag, Shift + roda mouse, atau tombol panah"
+          class="flex-1 min-h-0 overflow-auto overscroll-contain rounded-xl border border-slate-200/80 shadow-2xs cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300">
+          <table id="tabel-data-detail" class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
             <thead>
               <tr
                 class="bg-slate-800 text-white text-[11px] font-bold tracking-wider uppercase select-none border-b border-slate-700/80">
@@ -1649,6 +1650,15 @@
             </tbody>
           </table>
         </div>
+        <!-- Tombol geser kiri/kanan (khusus layar lebar/PC; klik = geser 400px, tahan = gulir terus) -->
+        <button id="dd-gulir-kiri" type="button" aria-label="Geser tabel ke kiri" title="Geser ke kiri"
+          class="hidden md:flex absolute left-9 top-1/2 -translate-y-1/2 z-40 w-9 h-9 items-center justify-center rounded-full bg-white/95 border border-slate-200 shadow-md text-slate-600 hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition opacity-0 pointer-events-none">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+        </button>
+        <button id="dd-gulir-kanan" type="button" aria-label="Geser tabel ke kanan" title="Geser ke kanan"
+          class="hidden md:flex absolute right-10 top-1/2 -translate-y-1/2 z-40 w-9 h-9 items-center justify-center rounded-full bg-white/95 border border-slate-200 shadow-md text-slate-600 hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition opacity-0 pointer-events-none">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+        </button>
       </div>
       <div
         class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex flex-wrap justify-between items-center gap-x-4 gap-y-2.5 rounded-b-2xl sm:rounded-b-3xl">

@@ -223,3 +223,49 @@ header button:focus-visible {
     transition: opacity .25s ease-out;
   }
 }
+
+
+/* Data Detail: header tabel dan dua kolom pertama (No, Nama) menempel saat digulir, supaya
+   baris tetap terbaca dan scrollbar horizontal selalu ada di dasar area gulir yang terlihat.
+   Lebar kolom No dikunci 56px -- kolom Nama menempel di left:56px tepat di sebelahnya. */
+#tabel-data-detail thead th {
+   position: sticky;
+   top: 0;
+   z-index: 20;
+   background-color: #1e293b;
+   box-shadow: inset 0 -1px 0 #334155;
+}
+#tabel-data-detail thead th:nth-child(-n+2),
+#tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+   position: sticky;
+}
+#tabel-data-detail thead th:nth-child(-n+2) { z-index: 30; }
+#tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+   z-index: 10;
+   background-color: #ffffff;
+   box-shadow: inset 0 -1px 0 #f1f5f9;
+}
+#tabel-data-detail tbody tr:hover td:nth-child(-n+2):not([colspan]) { background-color: #f8fafc; }
+#tabel-data-detail th:nth-child(1),
+#tabel-data-detail td:nth-child(1):not([colspan]) {
+   left: 0;
+   width: 56px;
+   min-width: 56px;
+   max-width: 56px;
+}
+#tabel-data-detail th:nth-child(2),
+#tabel-data-detail td:nth-child(2):not([colspan]) { left: 56px; }
+#tabel-data-detail thead th:nth-child(2),
+#tabel-data-detail tbody td:nth-child(2):not([colspan]) {
+   box-shadow: inset 0 -1px 0 #334155, 3px 0 4px -2px rgba(15, 23, 42, 0.18);
+}
+#tabel-data-detail tbody td:nth-child(2):not([colspan]) {
+   box-shadow: inset 0 -1px 0 #f1f5f9, 3px 0 4px -2px rgba(15, 23, 42, 0.12);
+}
+
+/* Geser tabel dengan drag mouse (lihat _siapkanGulirDataDetail di app-transaksi.js). */
+#scroll-data-detail.dd-menggeser {
+   cursor: grabbing;
+   user-select: none;
+   -webkit-user-select: none;
+}
