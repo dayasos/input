@@ -1193,6 +1193,7 @@ function inisialisasiMenuLihatData() {
 window.tampilkanDataDetail = function () {
   if (!pastikanLogin()) return;
   _ddHalaman = 1;
+  _ddSudahTampil = false;
   _lepasObserverDataDetail();
   document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(20, 5);
   document.getElementById('info-total-data-detail').innerText = '';
@@ -1335,6 +1336,7 @@ let _ddRows = [];
 let _ddHalaman = 1;
 let _ddTerender = 0;      // jumlah baris halaman aktif yang sudah masuk DOM
 let _ddObserver = null;
+let _ddSudahTampil = false;  // true setelah render pertama sejak modal dibuka (muat ulang realtime = pertahankan posisi)
 
 function _htmlBarisDataDetail(r, nomor) {
   return `
@@ -1367,25 +1369,30 @@ function _lepasObserverDataDetail() {
 }
 
 // Gambar halaman aktif dari nol, hanya DD_CHUNK baris pertama; sisanya lewat sentinel.
-function _gambarHalamanDataDetail() {
+// Parameter pertahankan = true (muat ulang otomatis di halaman yang sama): gambar sebanyak baris
+// yang sudah terlihat tadi dan kembalikan posisi gulir, supaya pengguna yang sedang membaca tidak
+// terlempar ke atas.
+function _gambarHalamanDataDetail(pertahankan) {
   const tbody = document.getElementById('body-tabel-data-detail');
   const wadah = document.getElementById('scroll-data-detail');
   _lepasObserverDataDetail();
   const awal = (_ddHalaman - 1) * DD_PER_HALAMAN;
   const akhir = Math.min(awal + DD_PER_HALAMAN, _ddRows.length);
+  const posisi = pertahankan && wadah ? wadah.scrollTop : 0;
+  const jumlahAwal = pertahankan ? Math.max(DD_CHUNK, _ddTerender - awal) : DD_CHUNK;
   tbody.innerHTML = '';
   _ddTerender = awal;
-  if (wadah) wadah.scrollTop = 0;
-  _tambahBarisDataDetail(akhir, typeof IntersectionObserver === 'undefined');
+  _tambahBarisDataDetail(akhir, typeof IntersectionObserver === 'undefined', jumlahAwal);
+  if (wadah) wadah.scrollTop = posisi;
 }
 
 // Tambah baris berikutnya sampai batas `akhir`. `semua` = true menggambar sekaligus (fallback
 // bila browser tidak punya IntersectionObserver).
-function _tambahBarisDataDetail(akhir, semua) {
+function _tambahBarisDataDetail(akhir, semua, jumlah) {
   const tbody = document.getElementById('body-tabel-data-detail');
   const sentinelLama = document.getElementById('sentinel-data-detail');
   if (sentinelLama) sentinelLama.remove();
-  const batas = semua ? akhir : Math.min(_ddTerender + DD_CHUNK, akhir);
+  const batas = semua ? akhir : Math.min(_ddTerender + (jumlah || DD_CHUNK), akhir);
   let html = '';
   for (let i = _ddTerender; i < batas; i++) html += _htmlBarisDataDetail(_ddRows[i], i + 1);
   _ddTerender = batas;
@@ -1463,7 +1470,6 @@ function _siapkanGulirDataDetail() {
     tampilkan(tombolKiri, sc.scrollLeft > 2);
     tampilkan(tombolKanan, maks > 2 && sc.scrollLeft < maks - 2);
   };
-  window._perbaruiGulirDd = perbarui;
   sc.addEventListener('scroll', perbarui, { passive: true });
   window.addEventListener('resize', perbarui);
   if (typeof ResizeObserver !== 'undefined') {
@@ -1485,6 +1491,7 @@ function _siapkanGulirDataDetail() {
   });
   sc.addEventListener('pointermove', function (e) {
     if (!drag) return;
+    if (!(e.buttons & 1)) { akhiriDrag(); return; }  // klik sudah dilepas di luar tabel
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     if (!drag.aktif) {
       if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
@@ -1497,14 +1504,14 @@ function _siapkanGulirDataDetail() {
     sc.scrollLeft = drag.kiri - dx;
     sc.scrollTop = drag.atas - dy;
   });
-  const akhiriDrag = function () {
+  function akhiriDrag() {
     if (!drag) return;
     if (drag.aktif) {
       sc.classList.remove('dd-menggeser');
       try { sc.releasePointerCapture(drag.id); } catch (_) { /* abaikan */ }
     }
     drag = null;
-  };
+  }
   sc.addEventListener('pointerup', akhiriDrag);
   sc.addEventListener('pointercancel', akhiriDrag);
 
@@ -1546,7 +1553,7 @@ window.pindahHalamanDataDetail = function (nomor) {
   nomor = Math.min(Math.max(1, Number(nomor) || 1), total);
   if (nomor === _ddHalaman) return;
   _ddHalaman = nomor;
-  _gambarHalamanDataDetail();
+  _gambarHalamanDataDetail(false);
   _perbaruiNavDataDetail();
 };
 
@@ -1557,6 +1564,7 @@ function renderTabelDataDetail(rows) {
   _lepasObserverDataDetail();
   if (rows.length === 0) {
     _ddRows = [];
+    _ddSudahTampil = true;
     tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
     _perbaruiNavDataDetail();
     const infoHal = document.getElementById('info-halaman-data-detail');
@@ -1568,7 +1576,8 @@ function renderTabelDataDetail(rows) {
   const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
   if (_ddHalaman > total) _ddHalaman = total;
   if (_ddHalaman < 1) _ddHalaman = 1;
-  _gambarHalamanDataDetail();
+  _gambarHalamanDataDetail(_ddSudahTampil);
+  _ddSudahTampil = true;
   _perbaruiNavDataDetail();
 }
 
