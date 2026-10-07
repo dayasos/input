@@ -231,8 +231,10 @@ function evaluasiUploadKondisional() {
   wrapperKegiatan.classList.add('hidden');
   wrapperRekomendasiBkm.classList.add('hidden');
   wrapperRekomendasiRi.classList.add('hidden');
+  wrapperDomisiliRumahIbadah.classList.add('hidden');
   filePlank.required = false; fileIbadah.required = false; fileKegiatan.required = false;
   fileRekomendasiBkm.required = false; fileRekomendasiRi.required = false;
+  fileDomisiliRumahIbadah.required = false;
   const labelBerkasPendukung2 = document.getElementById('label-berkas-pendukung-2');
   if (labelBerkasPendukung2) {
     if (lay === "USTADZ" || lay === "USTADZAH") {
@@ -250,6 +252,15 @@ function evaluasiUploadKondisional() {
     resetStatusKoordinat('ibadah');
   }
   bukaKunciTempatTugas();
+  const butuhDomisiliRi = LAYANAN_WAJIB_DOMISILI_RUMAH_IBADAH.includes(lay);
+  if (butuhDomisiliRi) {
+    wrapperDomisiliRumahIbadah.classList.remove('hidden');
+    fileDomisiliRumahIbadah.required = true;
+  }
+  // Surat Pernyataan melebar penuh; kalau Domisili Rumah Ibadah tampil, ia berbagi baris terakhir dengannya.
+  wrapperPernyataan.classList.toggle('sm:col-span-2', !butuhDomisiliRi);
+  wrapperPernyataan.classList.toggle('lg:col-span-3', !butuhDomisiliRi);
+  wrapperPernyataan.classList.toggle('lg:col-span-2', butuhDomisiliRi);
   if (instansiAktif === "KEMENAG" && lay !== "") {
     if (lay === "GURU MAGHRIB MENGAJI") {
       wrapperPlank.classList.remove('hidden'); wrapperKegiatan.classList.remove('hidden');
@@ -717,7 +728,7 @@ async function kumpulkanDataForm() {
     return el ? el.value : "";
   }
   function fileEl(name) { return formPembayaran.querySelector('input[type="file"][name="' + name + '"]'); }
-  const namaFileInput = ['fileKtp', 'fileBukuRekening', 'fileSuratPermohon', 'filePernyataan', null, 'fileDomisili', 'fileBerkasPendukung', 'fileBerkasPendukung2', 'fileFotoPlank', 'fileFotoIbadah', 'fileFotoKegiatan', 'fileRekomendasiBkm', 'fileRekomendasiRi'];
+  const namaFileInput = ['fileKtp', 'fileBukuRekening', 'fileSuratPermohon', 'filePernyataan', null, 'fileDomisili', 'fileBerkasPendukung', 'fileBerkasPendukung2', 'fileFotoPlank', 'fileFotoIbadah', 'fileFotoKegiatan', 'fileRekomendasiBkm', 'fileRekomendasiRi', 'fileDomisiliRumahIbadah'];
   const data = {
     selectLayanan: val('selectLayanan'),
     inputTempatTugas: val('inputTempatTugas'),
@@ -765,7 +776,8 @@ function labelBerkasSimpanBaru(layanan) {
     fileBerkasPendukung: "Formulir Pendataan",
     fileBerkasPendukung2: (lay === "USTADZ" || lay === "USTADZAH") ? "Rekomendasi MUI" : "Berkas Pendukung",
     fileFotoPlank: "Foto Plank Rumah Ibadah", fileFotoIbadah: "Foto Lokasi Ibadah", fileFotoKegiatan: "Foto Kegiatan Belajar",
-    fileRekomendasiBkm: "Rekomendasi BKM", fileRekomendasiRi: "Rekomendasi Rumah Ibadah"
+    fileRekomendasiBkm: "Rekomendasi BKM", fileRekomendasiRi: "Rekomendasi Rumah Ibadah",
+    fileDomisiliRumahIbadah: "Domisili Rumah Ibadah"
   };
 }
 
@@ -2245,6 +2257,7 @@ function halamanBerikutnya() {
     21: ["Surat Pernyataan (Satu Jenis & Bukan ASN/BUMN/BUMD/TNI/POLRI)"],
     22: ["Domisili Kelurahan"], 23: ["Formulir Pendataan"], 24: ["Berkas Pendukung"],
     25: ["Foto Plank"], 26: ["Foto Lokasi Ibadah"], 27: ["Foto Kegiatan"],
+    40: ["Unggah Domisili Rumah Ibadah"],
   };
   let nomorBarisAktif = null;
   let dataAktif = null;
@@ -2274,6 +2287,8 @@ function halamanBerikutnya() {
       dasar.push({ idx: 29, label: "Rekomendasi Pengurus Rumah Ibadah" });
     } else if (lay === "PENATUA GEREJA") {
       dasar.push({ idx: 29, label: "Rekomendasi Pengurus Rumah Ibadah" });
+    } else if (LAYANAN_WAJIB_DOMISILI_RUMAH_IBADAH.includes(lay)) {
+      dasar.push({ idx: 40, label: "Unggah Domisili Rumah Ibadah" });
     }
     return dasar;
   }

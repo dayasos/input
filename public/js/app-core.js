@@ -1117,6 +1117,12 @@ const wrapperRekomendasiBkm = document.getElementById('wrapper-rekomendasi-bkm')
 const wrapperRekomendasiRi = document.getElementById('wrapper-rekomendasi-ri');
 const fileRekomendasiBkm = wrapperRekomendasiBkm.querySelector('input[type="file"]');
 const fileRekomendasiRi = wrapperRekomendasiRi.querySelector('input[type="file"]');
+const wrapperPernyataan = document.getElementById('wrapper-pernyataan');
+const wrapperDomisiliRumahIbadah = document.getElementById('wrapper-domisili-rumah-ibadah');
+const fileDomisiliRumahIbadah = wrapperDomisiliRumahIbadah.querySelector('input[type="file"]');
+const LAYANAN_WAJIB_DOMISILI_RUMAH_IBADAH = [
+  "IMAM MASJID", "NAZIR MASJID", "NAZIR MUSHOLLA", "PENGURUS GEREJA", "PENGURUS VIHARA/KLENTENG/KUIL"
+];
 const tabInput = document.getElementById('tab-input');
 const tabRekap = document.getElementById('tab-rekap');
 const tabTools = document.getElementById('tab-tools');

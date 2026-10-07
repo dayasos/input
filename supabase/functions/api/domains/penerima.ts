@@ -333,6 +333,7 @@ export async function ambilDetailPenerimaPerBaris(token: string, nomorBarisAsli:
       row.keterangan_verifikasi, row.tanggal_verifikasi, row.diverifikasi_oleh,
       row.batas_waktu_perbaikan, row.catatan_perbedaan_nama, row.tanggal_lapor_perbaikan,
       row.dilapor_oleh,
+      row.link_domisili_rumah_ibadah, // indeks 40, ditaruh paling akhir agar 0..39 tidak bergeser
     ].map(bersihkanSelUntukArray);
 
     // tanggal_verifikasi (index 34) & tanggal_lapor_perbaikan (index 38) BUKAN tanggal murni —
@@ -388,6 +389,7 @@ export const MAP_IDX_KE_KOLOM_BERKAS: Record<number, string> = {
   27: "link_foto_kegiatan_belajar",
   28: "link_rekomendasi_bkm",
   29: "link_rekomendasi_rumah_ibadah",
+  40: "link_domisili_rumah_ibadah",
 };
 
 // Label kolom untuk riwayat_edit (sama persis labelKolom_() Kode.gs baris 3102-3110)
@@ -402,6 +404,7 @@ export function labelKolom(idx: number): string {
     22: "Domisili Kelurahan", 23: "Formulir Pendataan", 24: "Berkas Pendukung",
     25: "Foto Plank", 26: "Foto Lokasi Ibadah", 27: "Foto Kegiatan",
     28: "Rekomendasi BKM", 29: "Rekomendasi Pengurus Rumah Ibadah",
+    40: "Unggah Domisili Rumah Ibadah",
   };
   return MAP[idx] || ("Kolom " + idx);
 }
@@ -523,6 +526,7 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     const linkFotoKegiatan = L.fileFotoKegiatan || "";
     const linkRekomendasiBkm = L.fileRekomendasiBkm || "";
     const linkRekomendasiRi = L.fileRekomendasiRi || "";
+    const linkDomisiliRumahIbadah = L.fileDomisiliRumahIbadah || "";
     const idFolderBerkas = L.idFolderBerkas || "";
 
     // ── Otorisasi server-side: RBAC layanan+kecamatan (port Kode.gs baris 1057-1072) ──
@@ -623,7 +627,7 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
               link_ktp, link_buku_rekening, link_surat_permohonan, link_pernyataan_satu_bantuan,
               link_domisili_kelurahan, link_formulir_pendataan, link_berkas_pendukung,
               link_foto_plank_rumah_ibadah, link_foto_lokasi_ibadah, link_foto_kegiatan_belajar,
-              link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah,
+              link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah, link_domisili_rumah_ibadah,
               id_folder_berkas, link_koordinat_lokasi,
               status_verifikasi, catatan_perbedaan_nama,
               dibuat_oleh_akun_id, sync_status
@@ -637,7 +641,7 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
               ${linkKtp}, ${linkBukuRekening}, ${linkSuratPermohon}, ${linkPernyataan},
               ${linkDomisili}, ${linkFormulirPendataan}, ${linkBerkasPendukung},
               ${linkFotoPlank}, ${linkFotoIbadah}, ${linkFotoKegiatan},
-              ${linkRekomendasiBkm}, ${linkRekomendasiRi},
+              ${linkRekomendasiBkm}, ${linkRekomendasiRi}, ${linkDomisiliRumahIbadah},
               ${idFolderBerkas}, ${koordinatLink},
               'Proses Verifikasi', ${catatanPerbedaanNama},
               ${sesi.akunId}, 'SUKSES'

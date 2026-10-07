@@ -10,7 +10,7 @@ import { SS_ID_PENYIMPANAN, TAHUN_AKTIF } from "../_shared/config.ts";
 import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
 import { ambilAccessTokenGoogleSheets } from "../_shared/googleAuth.ts";
 
-const HEADER_PENERIMA_40_KOLOM = [
+const HEADER_PENERIMA_41_KOLOM = [
   "NO", "NAMA", "NIK", "JENIS KELAMIN", "TEMPAT LAHIR", "TANGGAL LAHIR", "ALAMAT DOMISILI",
   "JENIS LAYANAN", "TEMPAT TUGAS", "ALAMAT TUGAS", "KECAMATAN", "KELURAHAN",
   "NAMA REKENING", "NOMOR REKENING", "KANTOR CABANG", "NO. KONTAK", "STATUS BPJS", "UMUR",
@@ -18,7 +18,7 @@ const HEADER_PENERIMA_40_KOLOM = [
   "FORMULIR PENDATAAN", "BERKAS PENDUKUNG", "FOTO PLANK", "FOTO LOKASI", "FOTO KEGIATAN",
   "REKOMENDASI BKM", "REKOMENDASI RUMAH IBADAH", "ID FOLDER BERKAS", "KOORDINAT LOKASI",
   "STATUS VERIFIKASI", "KETERANGAN VERIFIKASI", "TANGGAL VERIFIKASI", "DIVERIFIKASI OLEH",
-  "BATAS WAKTU PERBAIKAN", "CATATAN PERBEDAAN NAMA", "TANGGAL LAPOR PERBAIKAN", "DILAPOR OLEH"
+  "BATAS WAKTU PERBAIKAN", "CATATAN PERBEDAAN NAMA", "TANGGAL LAPOR PERBAIKAN", "DILAPOR OLEH", "UNGGAH DOMISILI RUMAH IBADAH"
 ];
 
 const HEADER_DATA_DETAIL = [
@@ -84,11 +84,12 @@ function barisKeArraySheet(r: Record<string, unknown>): unknown[] {
     teks(r.catatan_perbedaan_nama),
     formatTanggalWaktuWIB(r.tanggal_lapor_perbaikan as string),
     teks(r.dilapor_oleh),
+    teks(r.link_domisili_rumah_ibadah),
   ];
 }
 
 // ============================================================================
-// Smart Non-Destructive Merge: Penerima (40 Kolom)
+// Smart Non-Destructive Merge: Penerima (41 Kolom)
 // Pertahankan seluruh baris lama di spreadsheet; upsert berbasis NIK.
 // Data lama di sheet yang tidak ada di DB tidak akan pernah tertimpa/dihapus.
 // ============================================================================
@@ -116,6 +117,8 @@ function smartMergePenerima(
   if (result.length === 0 || !Array.isArray(result[0]) || result[0].length === 0) {
     result[0] = headerDefault;
   }
+  // Sheet lama baru punya 40 kolom: tambahkan judul kolom ke-41 tanpa menyentuh kolom lain.
+  if (!result[0][40] && headerDefault[40]) result[0][40] = headerDefault[40];
 
   // Peta NIK ke nomor baris di sheet (Kolom C / indeks 2)
   const nikMap = new Map<string, number>();
@@ -261,26 +264,45 @@ function smartMergeKuota(
   return { values: result, stats: { updated, appended, preserved } };
 }
 
-async function pastikanSheetTersedia(spreadsheetId: string, accessToken: string, daftarJudul: string[]) {
+// kolomMinimal: judul sheet -> jumlah kolom minimal. Sheet baru default-nya cuma 26 kolom (A:Z), dan
+// Sheets API menolak penulisan di luar grid ("exceeds grid limits"), jadi grid dilebarkan dulu.
+async function pastikanSheetTersedia(
+  spreadsheetId: string,
+  accessToken: string,
+  daftarJudul: string[],
+  kolomMinimal: Record<string, number> = {},
+) {
   try {
     const metaRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title,sheetId,gridProperties.columnCount)`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
     if (!metaRes.ok) return;
     const meta = await metaRes.json();
-    const sheetsAda = new Set(
-      ((meta && meta.sheets) || []).map((s: { properties?: { title?: string } }) => s.properties?.title),
-    );
+    type PropSheet = { title?: string; sheetId?: number; gridProperties?: { columnCount?: number } };
+    const daftarSheet: PropSheet[] = ((meta && meta.sheets) || []).map((s: { properties?: PropSheet }) => s.properties || {});
+    const sheetsAda = new Set(daftarSheet.map((p) => p.title));
 
-    const requests = [];
+    // deno-lint-ignore no-explicit-any
+    const requests: any[] = [];
     for (const judul of daftarJudul) {
+      const minKolom = kolomMinimal[judul];
       if (!sheetsAda.has(judul)) {
         requests.push({
           addSheet: {
-            properties: { title: judul },
+            properties: minKolom ? { title: judul, gridProperties: { columnCount: Math.max(minKolom, 26) } } : { title: judul },
           },
         });
+      } else if (minKolom) {
+        const ada = daftarSheet.find((p) => p.title === judul);
+        if (ada && ada.sheetId !== undefined && (ada.gridProperties?.columnCount ?? 0) < minKolom) {
+          requests.push({
+            updateSheetProperties: {
+              properties: { sheetId: ada.sheetId, gridProperties: { columnCount: minKolom } },
+              fields: "gridProperties.columnCount",
+            },
+          });
+        }
       }
     }
 
@@ -437,11 +459,11 @@ Deno.serve(async (req: Request) => {
       sheetDataDetail,
       sheetKuota,
       sheetLog,
-    ]);
+    ], { [sheetPenerima]: HEADER_PENERIMA_41_KOLOM.length });
 
     // 6. Baca data eksisting dari Google Sheets (1x batchGet tunggal)
     const rangesToRead = [
-      `${sheetPenerima}!A:AN`,
+      `${sheetPenerima}!A:AO`,
       `${sheetDataDetail}!A:U`,
       `${sheetKuota}!A:C`,
     ];
@@ -459,7 +481,7 @@ Deno.serve(async (req: Request) => {
     const existingKuota: unknown[][] = readData.valueRanges?.[2]?.values || [];
 
     // 7. Lakukan Smart Non-Destructive Merge (Tanpa Tertimpa)
-    const mergedPenerima = smartMergePenerima(existingPenerima, freshPenerimaRows, HEADER_PENERIMA_40_KOLOM);
+    const mergedPenerima = smartMergePenerima(existingPenerima, freshPenerimaRows, HEADER_PENERIMA_41_KOLOM);
     const mergedDetail = smartMergeDetail(existingDetail, freshDetailRows, HEADER_DATA_DETAIL);
     const mergedKuota = smartMergeKuota(existingKuota, freshKuotaRows, HEADER_KUOTA);
 
@@ -468,7 +490,7 @@ Deno.serve(async (req: Request) => {
       valueInputOption: "USER_ENTERED",
       data: [
         {
-          range: `${sheetPenerima}!A1:AN${mergedPenerima.values.length}`,
+          range: `${sheetPenerima}!A1:AO${mergedPenerima.values.length}`,
           values: mergedPenerima.values,
         },
         {
