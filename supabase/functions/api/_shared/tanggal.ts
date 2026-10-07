@@ -42,3 +42,29 @@ export function bersihkanSelUntukArray(nilai: unknown): unknown {
   if (nilai === null || nilai === undefined) return "";
   return nilai;
 }
+
+/**
+ * Nilai kolom "Tgl Status" Data Detail yang DITAMPILKAN dan DIEKSPOR (layar Data Detail dan backup
+ * spreadsheet memakai fungsi yang sama supaya selalu selaras -- salinan identik ada di
+ * supabase/functions/_shared/tanggal.ts dan supabase/functions/api/_shared/tanggal.ts).
+ *
+ * Baris berstatus AKTIF pada TAHUN AKTIF mengikuti Tanggal SK Wali Kota (Tools > Tanggal SK,
+ * tabel referensi_sk_walikota): dd-MM-yyyy bila Tanggal SK terisi, "-" bila dikosongkan. Hanya
+ * ditampilkan -- kolom data_detail.tgl_status di database TIDAK diubah (itu wewenang Aplikasi Retur).
+ * Baris lain (status bukan AKTIF, mis. diubah Aplikasi Retur, atau tahun arsip) tetap memakai
+ * tgl_status tersimpan apa adanya (dd-MM-yyyy HH:mm WIB).
+ */
+export function tentukanTglStatusDataDetail(p: {
+  tahunBaris: number | string | null | undefined;
+  tahunAktif: number | string;
+  status: unknown;
+  tglStatus: Date | string | null | undefined;
+  tanggalSk: Date | string | null | undefined;
+}): string {
+  const tahunAktifIni = Number(p.tahunBaris) === Number(p.tahunAktif);
+  const statusAktif = String(p.status ?? "").trim().toUpperCase() === "AKTIF";
+  if (tahunAktifIni && statusAktif) {
+    return formatTanggalDDMMYYYY(p.tanggalSk) || "-";
+  }
+  return formatTanggalWaktuWIB(p.tglStatus);
+}

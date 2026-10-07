@@ -274,7 +274,9 @@ const MUTATION_INVALIDATIONS = {
 
   buatBatchPembayaran: ['tools_batch'],
   simpanPejabatTtd: ['tools_pejabat'],
-  simpanReferensiSkWalikota: ['tools_referensi_sk'],
+  // Tanggal SK juga menjadi sumber kolom "Tgl Status" di Data Detail (dihitung server saat membaca),
+  // jadi cache & modal Data Detail yang terbuka ikut disegarkan begitu SK disimpan.
+  simpanReferensiSkWalikota: ['tools_referensi_sk', 'data_detail'],
   simpanSkLayanan: ['tools_sk_layanan'],
 
   tambahRumahIbadah: ['rumah_ibadah', 'master'],
