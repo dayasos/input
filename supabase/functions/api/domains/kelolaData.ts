@@ -18,8 +18,8 @@ import { hitungUmur, labelKolom, MAP_IDX_KE_KOLOM_BERKAS, tglDDMMYYYYkeISO } fro
 //  * Mutasi HANYA untuk TAHUN_AKTIF. Baris tahun arsip (mis. 2026) ditimpa otomatis dari Google
 //    Sheet db_2026 tiap 10 menit (sinkronSheet2026.ts), jadi mengubah/menghapusnya di DB percuma
 //    dan menyesatkan; tahun arsip hanya boleh dilihat.
-//  * Pool DB hanya 1 koneksi (_shared/db.ts, max: 1): DI DALAM sql.begin() cuma boleh memakai
-//    `trx`, jangan memanggil `sql`/fungsi lain yang memakai `sql` -- akan menunggu selamanya.
+//  * Pool DB kecil (_shared/db.ts, max: 2): DI DALAM sql.begin() cuma boleh memakai `trx`, jangan
+//    memanggil `sql`/fungsi lain yang memakai `sql` -- bisa menunggu selamanya bila pool habis.
 //  * Urutan hapus: database dulu (transaksi), baru Drive. Drive hanya memindahkan ke Sampah
 //    (bisa dipulihkan ~30 hari). Kegagalan Drive TIDAK membatalkan penghapusan data; hasilnya
 //    melaporkan `drive.status = "gagal"` supaya admin bisa membereskan manual.

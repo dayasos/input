@@ -57,10 +57,21 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
       sql`select kecamatan, layanan, kuota_maks from kuota`,
       sql`select kecamatan, layanan, kuota_maks from kuota_katolik`,
       getMasterLayanan(),
+      // Agregasi di database (bukan tarik semua baris lalu hitung di JS). Kolom pengelompokan
+      // sengaja sama dgn yg dipakai filter di loop bawah (layanan, kecamatan, kelurahan, ada/tidaknya
+      // "KATOLIK" di tempat_tugas, status) supaya hasil hitungan identik, tapi hanya puluhan baris
+      // yg dikirim, bukan ribuan.
       sql`
-        select layanan, kecamatan, kelurahan, tempat_tugas, status_verifikasi
+        select
+          upper(trim(coalesce(layanan, ''))) as layanan,
+          upper(trim(coalesce(kecamatan, ''))) as kecamatan,
+          upper(trim(coalesce(kelurahan, ''))) as kelurahan,
+          (upper(coalesce(tempat_tugas, '')) like '%KATOLIK%') as katolik,
+          trim(coalesce(nullif(status_verifikasi, ''), 'Proses Verifikasi')) as status_verifikasi,
+          count(*)::int as jumlah
         from penerima
         where tahun = ${TAHUN_AKTIF} ${filterClause}
+        group by 1, 2, 3, 4, 5
       `,
     ]);
 
@@ -130,25 +141,26 @@ export async function getDashboardProgresVerifikasi(token: string, kecamatanFilt
       const lay = (r.layanan || "").toString().trim().toUpperCase();
       const kec = (r.kecamatan || "").toString().trim().toUpperCase();
       const kel = (r.kelurahan || "").toString().trim().toUpperCase();
-      const tempatTugas = (r.tempat_tugas || "").toString().trim().toUpperCase();
+      const adaKatolik = Boolean(r.katolik);
+      const n = Number(r.jumlah) || 0;
       if (!lay) continue;
 
       if (role === "KECAMATAN" && kec !== kecUser) continue;
       if (role !== "UTAMA" && role !== "KECAMATAN" && kecUser && kec !== kecUser) continue;
       if (kecFilterInput && role === "UTAMA" && kec !== kecFilterInput) continue;
       if (kelurahanTerkunci && kel !== kelurahanTerkunci) continue;
-      if (subFilterGsm === "KATOLIK" && !tempatTugas.includes("KATOLIK")) continue;
-      if (subFilterGsm === "BUKAN_KATOLIK" && tempatTugas.includes("KATOLIK")) continue;
+      if (subFilterGsm === "KATOLIK" && !adaKatolik) continue;
+      if (subFilterGsm === "BUKAN_KATOLIK" && adaKatolik) continue;
 
       const kunci = kunciKartu(lay, kec);
       if (!(kunci in rekap)) continue;
 
       const status = (r.status_verifikasi || "Proses Verifikasi").toString().trim();
-      rekap[kunci].total++;
-      if (status === "Memenuhi Syarat") rekap[kunci].memenuhiSyarat++;
-      else if (status === "Tidak Memenuhi Syarat") rekap[kunci].tidakMemenuhiSyarat++;
-      else if (status === "Berkas Tidak Lengkap") rekap[kunci].berkasTidakLengkap++;
-      else rekap[kunci].prosesVerifikasi++;
+      rekap[kunci].total += n;
+      if (status === "Memenuhi Syarat") rekap[kunci].memenuhiSyarat += n;
+      else if (status === "Tidak Memenuhi Syarat") rekap[kunci].tidakMemenuhiSyarat += n;
+      else if (status === "Berkas Tidak Lengkap") rekap[kunci].berkasTidakLengkap += n;
+      else rekap[kunci].prosesVerifikasi += n;
     }
 
     const kartu = Object.values(rekap).map((item) => {

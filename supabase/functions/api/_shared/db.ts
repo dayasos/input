@@ -11,8 +11,11 @@ if (!connectionString) {
 
 export const sql = postgres(connectionString, {
   prepare: false,
-  max: 1,
+  // max 2 (bukan 1): query paralel (mis. Promise.all di dashboard) benar-benar jalan bersamaan.
+  // Sengaja kecil karena tiap isolate Deno punya pool sendiri & pooler Supabase punya batas klien.
+  // max_lifetime 30 detik dulu memaksa buka koneksi baru terus-menerus -> dinaikkan ke 5 menit.
+  max: 2,
   connect_timeout: 5,
-  idle_timeout: 5,
-  max_lifetime: 30,
+  idle_timeout: 10,
+  max_lifetime: 300,
 });
