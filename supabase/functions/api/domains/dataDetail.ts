@@ -61,20 +61,33 @@ export async function ambilDataDetail(token: string, tahun?: number) {
     // `data_detail` ditambahkan (idempoten lewat ON CONFLICT). Sengaja dilakukan di SATU
     // tempat ini (bukan ditempel di tiap fungsi verifikasi seperti verifikasiSatuData/
     // verifikasiMassalMemenuhiSyarat) supaya cuma ada satu jalur logika yang perlu dijaga.
-    await sql`
-      insert into data_detail (
-        tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
-        alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
-        nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur
-      )
-      select
-        p.tahun, p.id, p.nama, p.nik, p.jenis_kelamin, p.tempat_lahir, p.tanggal_lahir,
-        p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
-        p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur
-      from penerima p
-      where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
-      on conflict (tahun, penerima_id) do nothing
+    // Pengecekan murah dulu: INSERT ... ON CONFLICT DO NOTHING atas SELURUH penerima tahun itu dulu
+    // dijalankan di setiap pembukaan pop up (±714 ms utk 12 ribu baris tahun 2026, hasilnya hampir
+    // selalu 0 baris baru). Anti-join ini (±22 ms) hanya mencari penerima lolos yang BELUM punya baris
+    // data_detail; INSERT hanya jalan bila memang ada -- hasil akhirnya identik.
+    const adaYangKurang = await sql`
+      select exists (
+        select 1 from penerima p
+        where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
+          and not exists (select 1 from data_detail d where d.tahun = p.tahun and d.penerima_id = p.id)
+      ) as ada
     `;
+    if (adaYangKurang[0]?.ada) {
+      await sql`
+        insert into data_detail (
+          tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
+          alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
+          nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur
+        )
+        select
+          p.tahun, p.id, p.nama, p.nik, p.jenis_kelamin, p.tempat_lahir, p.tanggal_lahir,
+          p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
+          p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur
+        from penerima p
+        where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
+        on conflict (tahun, penerima_id) do nothing
+      `;
+    }
 
     const namaKecamatanPengguna = sesi.kecamatan || "";
     const kelurahanTerkunci = kelurahanTerkunciDari(sesi);
