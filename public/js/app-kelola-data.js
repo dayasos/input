@@ -9,20 +9,20 @@
   // Konfigurasi
   // ---------------------------------------------------------------------------
   var FIELD = [
-    { k: 'nama', d: 'nama', l: 'Nama Lengkap', lebar: 2 },
+    { k: 'nama', d: 'nama', l: 'Nama Lengkap', lebar: 2, maks: 100 },
     { k: 'nik', d: 'nik', l: 'NIK (16 digit)', mentah: true, maks: 16, mode: 'numeric' },
     { k: 'jenis_kelamin', d: 'jenisKelamin', l: 'Jenis Kelamin', pilih: ['LAKI-LAKI', 'PEREMPUAN'] },
-    { k: 'tempat_lahir', d: 'tempatLahir', l: 'Tempat Lahir' },
+    { k: 'tempat_lahir', d: 'tempatLahir', l: 'Tempat Lahir', maks: 100 },
     { k: 'tanggal_lahir', d: 'tanggalLahir', l: 'Tanggal Lahir (DD-MM-YYYY)', mentah: true, maks: 10, mode: 'numeric' },
-    { k: 'alamat', d: 'alamat', l: 'Alamat Domisili', lebar: 2, area: true },
+    { k: 'alamat', d: 'alamat', l: 'Alamat Domisili', lebar: 2, area: true, maks: 100 },
     { k: 'layanan', d: 'layanan', l: 'Layanan', sel: 'layanan' },
-    { k: 'tempat_tugas', d: 'tempatTugas', l: 'Tempat Tugas' },
-    { k: 'alamat_tugas', d: 'alamatTugas', l: 'Alamat Tugas', lebar: 2, area: true },
+    { k: 'tempat_tugas', d: 'tempatTugas', l: 'Tempat Tugas', maks: 100 },
+    { k: 'alamat_tugas', d: 'alamatTugas', l: 'Alamat Tugas', lebar: 2, area: true, maks: 100 },
     { k: 'kecamatan', d: 'kecamatan', l: 'Kecamatan', sel: 'kecamatan' },
     { k: 'kelurahan', d: 'kelurahan', l: 'Kelurahan', sel: 'kelurahan' },
-    { k: 'nama_rekening', d: 'namaRekening', l: 'Nama Rekening' },
+    { k: 'nama_rekening', d: 'namaRekening', l: 'Nama Rekening', maks: 100 },
     { k: 'nomor_rekening', d: 'nomorRekening', l: 'Nomor Rekening (14 digit)', mentah: true, maks: 14, mode: 'numeric' },
-    { k: 'kantor_cabang', d: 'kantorCabang', l: 'Kantor Cabang' },
+    { k: 'kantor_cabang', d: 'kantorCabang', l: 'Kantor Cabang', maks: 100 },
     { k: 'no_kontak', d: 'noKontak', l: 'No. Kontak', mentah: true, maks: 20, mode: 'tel' },
     { k: 'status_bpjs_tk', d: 'statusBpjs', l: 'Status BPJS TK', pilih: ['YA', 'TIDAK'] }
   ];
@@ -616,7 +616,7 @@
     } else if (f.sel) {
       kontrol = '<select id="' + id + '" class="' + KELAS_INPUT + '"' + dis + '><option value="' + esc(nilai) + '" selected>' + esc(nilai || '-- Pilih --') + '</option></select>';
     } else if (f.area) {
-      kontrol = '<textarea id="' + id + '" rows="2" class="' + KELAS_INPUT + '"' + dis + '>' + esc(nilai) + '</textarea>';
+      kontrol = '<textarea id="' + id + '" rows="2"' + (f.maks ? ' maxlength="' + f.maks + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>' + esc(nilai) + '</textarea>';
     } else {
       kontrol = '<input type="text" id="' + id + '" value="' + esc(nilai) + '" autocomplete="off"' +
         (f.maks ? ' maxlength="' + f.maks + '"' : '') + (f.mode ? ' inputmode="' + f.mode + '"' : '') + ' class="' + KELAS_INPUT + '"' + dis + '>';

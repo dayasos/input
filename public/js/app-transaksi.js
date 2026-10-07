@@ -2105,12 +2105,12 @@ function halamanBerikutnya() {
 // Detail & Edit Penerima
 (function () {
   const KOLOM_TEKS = {
-    1: { label: "Nama Lengkap", type: "text" }, 2: { label: "NIK", type: "text" },
+    1: { label: "Nama Lengkap", type: "text", maks: 100 }, 2: { label: "NIK", type: "text" },
     3: { label: "Jenis Kelamin", type: "select", opsi: ["LAKI-LAKI", "PEREMPUAN"] },
-    4: { label: "Tempat Lahir", type: "text" }, 5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
-    6: { label: "Alamat Domisili", type: "text" }, 11: { label: "Kelurahan", type: "text" },
-    12: { label: "Nama Rekening", type: "text" }, 13: { label: "Nomor Rekening", type: "text" },
-    14: { label: "Kantor Cabang", type: "text" }, 15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
+    4: { label: "Tempat Lahir", type: "text", maks: 100 }, 5: { label: "Tanggal Lahir", type: "text", hint: "Format: DD-MM-YYYY" },
+    6: { label: "Alamat Domisili", type: "text", maks: 100 }, 11: { label: "Kelurahan", type: "text", maks: 100 },
+    12: { label: "Nama Rekening", type: "text", maks: 100 }, 13: { label: "Nomor Rekening", type: "text" },
+    14: { label: "Kantor Cabang", type: "text", maks: 100 }, 15: { label: "No. Kontak", type: "text", hint: "Diawali 08" },
     16: { label: "Status BPJS TK", type: "select", opsi: ["YA", "TIDAK"] },
   };
   const KOLOM_BERKAS = {
@@ -2464,7 +2464,7 @@ function halamanBerikutnya() {
       } else {
         h += `<div class="bg-white rounded-xl px-4 py-2.5 border border-sky-300 shadow-2xs">
           <p class="text-[10px] font-bold text-sky-600 uppercase tracking-wider mb-1">${esc(label)}${kolDef.hint ? ` <span class="font-normal text-slate-400 normal-case">${esc(kolDef.hint)}</span>` : ""}</p>
-          <input id="edit-${i}" type="text" value="${esc(v)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">
+          <input id="edit-${i}" type="text"${kolDef.maks ? ` maxlength="${kolDef.maks}"` : ""} value="${esc(v)}" class="w-full border border-slate-300 rounded-lg p-2 text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 transition" style="text-transform:none">
         </div>`;
       }
     }
