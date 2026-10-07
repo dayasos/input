@@ -1297,13 +1297,36 @@ function muatDataDetail(bolehCobaLagi) {
     .ambilDataDetail(dataPengguna.token, tahun);
 }
 
+// Urutan tampil Data Detail: Layanan -> Kecamatan -> Kelurahan (A-Z), lalu Nama sebagai pembeda
+// terakhir. Nilai kosong ditaruh paling bawah. Dilakukan di sisi klien (bukan di query backend)
+// supaya query ambilDataDetail dan cache-nya tidak tersentuh.
+function _urutkanDataDetail(rows) {
+  const kunci = ['layanan', 'kecamatan', 'kelurahan', 'nama'];
+  const bandingTeks = function (a, b) {
+    const x = String(a == null ? '' : a).trim(), y = String(b == null ? '' : b).trim();
+    if (!x && !y) return 0;
+    if (!x) return 1;
+    if (!y) return -1;
+    return x.localeCompare(y, 'id', { sensitivity: 'base', numeric: true });
+  };
+  return rows.slice().sort(function (a, b) {
+    for (let i = 0; i < kunci.length; i++) {
+      const hasil = bandingTeks(a[kunci[i]], b[kunci[i]]);
+      if (hasil !== 0) return hasil;
+    }
+    return 0;
+  });
+}
+
 function renderTabelDataDetail(rows) {
   const tbody = document.getElementById('body-tabel-data-detail');
+  rows = Array.isArray(rows) ? rows : [];
   document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
-  if (!rows || rows.length === 0) {
+  if (rows.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
     return;
   }
+  rows = _urutkanDataDetail(rows);
   let html = '';
   rows.forEach(function (r, idx) {
     html += `
