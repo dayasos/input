@@ -10,7 +10,7 @@ import { SS_ID_PENYIMPANAN, TAHUN_AKTIF } from "../_shared/config.ts";
 import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
 import { ambilAccessTokenGoogleSheets } from "../_shared/googleAuth.ts";
 
-const HEADER_PENERIMA_40_KOLOM = [
+const HEADER_PENERIMA_41_KOLOM = [
   "NO", "NAMA", "NIK", "JENIS KELAMIN", "TEMPAT LAHIR", "TANGGAL LAHIR", "ALAMAT DOMISILI",
   "JENIS LAYANAN", "TEMPAT TUGAS", "ALAMAT TUGAS", "KECAMATAN", "KELURAHAN",
   "NAMA REKENING", "NOMOR REKENING", "KANTOR CABANG", "NO. KONTAK", "STATUS BPJS", "UMUR",
@@ -18,7 +18,7 @@ const HEADER_PENERIMA_40_KOLOM = [
   "FORMULIR PENDATAAN", "BERKAS PENDUKUNG", "FOTO PLANK", "FOTO LOKASI", "FOTO KEGIATAN",
   "REKOMENDASI BKM", "REKOMENDASI RUMAH IBADAH", "ID FOLDER BERKAS", "KOORDINAT LOKASI",
   "STATUS VERIFIKASI", "KETERANGAN VERIFIKASI", "TANGGAL VERIFIKASI", "DIVERIFIKASI OLEH",
-  "BATAS WAKTU PERBAIKAN", "CATATAN PERBEDAAN NAMA", "TANGGAL LAPOR PERBAIKAN", "DILAPOR OLEH"
+  "BATAS WAKTU PERBAIKAN", "CATATAN PERBEDAAN NAMA", "TANGGAL LAPOR PERBAIKAN", "DILAPOR OLEH", "UNGGAH DOMISILI RUMAH IBADAH"
 ];
 
 const HEADER_DATA_DETAIL = [
@@ -84,11 +84,12 @@ function barisKeArraySheet(r: Record<string, unknown>): unknown[] {
     teks(r.catatan_perbedaan_nama),
     formatTanggalWaktuWIB(r.tanggal_lapor_perbaikan as string),
     teks(r.dilapor_oleh),
+    teks(r.link_domisili_rumah_ibadah),
   ];
 }
 
 // ============================================================================
-// Smart Non-Destructive Merge: Penerima (40 Kolom)
+// Smart Non-Destructive Merge: Penerima (41 Kolom)
 // Pertahankan seluruh baris lama di spreadsheet; upsert berbasis NIK.
 // Data lama di sheet yang tidak ada di DB tidak akan pernah tertimpa/dihapus.
 // ============================================================================
@@ -116,6 +117,8 @@ function smartMergePenerima(
   if (result.length === 0 || !Array.isArray(result[0]) || result[0].length === 0) {
     result[0] = headerDefault;
   }
+  // Sheet lama baru punya 40 kolom: tambahkan judul kolom ke-41 tanpa menyentuh kolom lain.
+  if (!result[0][40] && headerDefault[40]) result[0][40] = headerDefault[40];
 
   // Peta NIK ke nomor baris di sheet (Kolom C / indeks 2)
   const nikMap = new Map<string, number>();
@@ -441,7 +444,7 @@ Deno.serve(async (req: Request) => {
 
     // 6. Baca data eksisting dari Google Sheets (1x batchGet tunggal)
     const rangesToRead = [
-      `${sheetPenerima}!A:AN`,
+      `${sheetPenerima}!A:AO`,
       `${sheetDataDetail}!A:U`,
       `${sheetKuota}!A:C`,
     ];
@@ -459,7 +462,7 @@ Deno.serve(async (req: Request) => {
     const existingKuota: unknown[][] = readData.valueRanges?.[2]?.values || [];
 
     // 7. Lakukan Smart Non-Destructive Merge (Tanpa Tertimpa)
-    const mergedPenerima = smartMergePenerima(existingPenerima, freshPenerimaRows, HEADER_PENERIMA_40_KOLOM);
+    const mergedPenerima = smartMergePenerima(existingPenerima, freshPenerimaRows, HEADER_PENERIMA_41_KOLOM);
     const mergedDetail = smartMergeDetail(existingDetail, freshDetailRows, HEADER_DATA_DETAIL);
     const mergedKuota = smartMergeKuota(existingKuota, freshKuotaRows, HEADER_KUOTA);
 
@@ -468,7 +471,7 @@ Deno.serve(async (req: Request) => {
       valueInputOption: "USER_ENTERED",
       data: [
         {
-          range: `${sheetPenerima}!A1:AN${mergedPenerima.values.length}`,
+          range: `${sheetPenerima}!A1:AO${mergedPenerima.values.length}`,
           values: mergedPenerima.values,
         },
         {

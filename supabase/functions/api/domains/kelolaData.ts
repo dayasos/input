@@ -138,7 +138,8 @@ export async function adminDaftarData(token: string, filter: Record<string, unkn
              + (nullif(btrim(link_foto_lokasi_ibadah), '') is not null)::int
              + (nullif(btrim(link_foto_kegiatan_belajar), '') is not null)::int
              + (nullif(btrim(link_rekomendasi_bkm), '') is not null)::int
-             + (nullif(btrim(link_rekomendasi_rumah_ibadah), '') is not null)::int ) as jumlah_berkas
+             + (nullif(btrim(link_rekomendasi_rumah_ibadah), '') is not null)::int
+             + (nullif(btrim(link_domisili_rumah_ibadah), '') is not null)::int ) as jumlah_berkas
       from penerima
       where ${where}
     `;
