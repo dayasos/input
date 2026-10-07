@@ -252,10 +252,15 @@ function evaluasiUploadKondisional() {
     resetStatusKoordinat('ibadah');
   }
   bukaKunciTempatTugas();
-  if (LAYANAN_WAJIB_DOMISILI_RUMAH_IBADAH.includes(lay)) {
+  const butuhDomisiliRi = LAYANAN_WAJIB_DOMISILI_RUMAH_IBADAH.includes(lay);
+  if (butuhDomisiliRi) {
     wrapperDomisiliRumahIbadah.classList.remove('hidden');
     fileDomisiliRumahIbadah.required = true;
   }
+  // Surat Pernyataan melebar penuh; kalau Domisili Rumah Ibadah tampil, ia berbagi baris terakhir dengannya.
+  wrapperPernyataan.classList.toggle('sm:col-span-2', !butuhDomisiliRi);
+  wrapperPernyataan.classList.toggle('lg:col-span-3', !butuhDomisiliRi);
+  wrapperPernyataan.classList.toggle('lg:col-span-2', butuhDomisiliRi);
   if (instansiAktif === "KEMENAG" && lay !== "") {
     if (lay === "GURU MAGHRIB MENGAJI") {
       wrapperPlank.classList.remove('hidden'); wrapperKegiatan.classList.remove('hidden');
