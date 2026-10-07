@@ -225,9 +225,10 @@ header button:focus-visible {
 }
 
 
-/* Data Detail: header tabel dan dua kolom pertama (No, Nama) menempel saat digulir, supaya
-   baris tetap terbaca dan scrollbar horizontal selalu ada di dasar area gulir yang terlihat.
-   Lebar kolom No dikunci 56px -- kolom Nama menempel di left:56px tepat di sebelahnya. */
+/* Data Detail: header tabel selalu menempel di atas saat digulir, sehingga scrollbar horizontal
+   ada di dasar area gulir yang terlihat. Dua kolom pertama (No, Nama) hanya menempel di layar
+   >= 768px -- di HP kolom Nama saja sudah hampir selebar tabel, jadi kolom lain tak akan
+   kelihatan. Lebar kolom No dikunci 56px; kolom Nama menempel di left:56px tepat di sebelahnya. */
 #tabel-data-detail thead th {
    position: sticky;
    top: 0;
@@ -235,32 +236,46 @@ header button:focus-visible {
    background-color: #1e293b;
    box-shadow: inset 0 -1px 0 #334155;
 }
-#tabel-data-detail thead th:nth-child(-n+2),
-#tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
-   position: sticky;
-}
-#tabel-data-detail thead th:nth-child(-n+2) { z-index: 30; }
-#tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
-   z-index: 10;
-   background-color: #ffffff;
-   box-shadow: inset 0 -1px 0 #f1f5f9;
-}
-#tabel-data-detail tbody tr:hover td:nth-child(-n+2):not([colspan]) { background-color: #f8fafc; }
-#tabel-data-detail th:nth-child(1),
-#tabel-data-detail td:nth-child(1):not([colspan]) {
-   left: 0;
-   width: 56px;
-   min-width: 56px;
-   max-width: 56px;
-}
+/* Kolom Nama dibatasi lebarnya (dipotong dengan ellipsis, nama lengkap ada di tooltip) supaya
+   kolom berikutnya tetap terlihat di HP sebagai petunjuk bahwa tabel bisa digeser. */
 #tabel-data-detail th:nth-child(2),
-#tabel-data-detail td:nth-child(2):not([colspan]) { left: 56px; }
-#tabel-data-detail thead th:nth-child(2),
-#tabel-data-detail tbody td:nth-child(2):not([colspan]) {
-   box-shadow: inset 0 -1px 0 #334155, 3px 0 4px -2px rgba(15, 23, 42, 0.18);
+#tabel-data-detail td:nth-child(2):not([colspan]) {
+   max-width: 11.5rem;
+   overflow: hidden;
+   text-overflow: ellipsis;
 }
-#tabel-data-detail tbody td:nth-child(2):not([colspan]) {
-   box-shadow: inset 0 -1px 0 #f1f5f9, 3px 0 4px -2px rgba(15, 23, 42, 0.12);
+@media (min-width: 768px) {
+   #tabel-data-detail thead th:nth-child(-n+2),
+   #tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+      position: sticky;
+   }
+   #tabel-data-detail thead th:nth-child(-n+2) { z-index: 30; }
+   #tabel-data-detail tbody td:nth-child(-n+2):not([colspan]) {
+      z-index: 10;
+      background-color: #ffffff;
+      box-shadow: inset 0 -1px 0 #f1f5f9;
+   }
+   #tabel-data-detail tbody tr:hover td:nth-child(-n+2):not([colspan]) { background-color: #f8fafc; }
+   #tabel-data-detail th:nth-child(1),
+   #tabel-data-detail td:nth-child(1):not([colspan]) {
+      left: 0;
+      width: 56px;
+      min-width: 56px;
+      max-width: 56px;
+   }
+   #tabel-data-detail th:nth-child(2),
+   #tabel-data-detail td:nth-child(2):not([colspan]) {
+      left: 56px;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+   }
+   #tabel-data-detail thead th:nth-child(2) {
+      box-shadow: inset 0 -1px 0 #334155, 3px 0 4px -2px rgba(15, 23, 42, 0.18);
+   }
+   #tabel-data-detail tbody td:nth-child(2):not([colspan]) {
+      box-shadow: inset 0 -1px 0 #f1f5f9, 3px 0 4px -2px rgba(15, 23, 42, 0.12);
+   }
 }
 
 /* Geser tabel dengan drag mouse (lihat _siapkanGulirDataDetail di app-transaksi.js). */
@@ -268,4 +283,16 @@ header button:focus-visible {
    cursor: grabbing;
    user-select: none;
    -webkit-user-select: none;
+}
+
+/* Data Detail di layar pendek (mis. HP landscape, tinggi <= 480px): rapatkan header, footer, dan
+   bantalan supaya lebih banyak baris terlihat. Ditulis di luar @layer sehingga menimpa utilitas. */
+@media (max-height: 480px) {
+   #modal-data-detail { padding: 0.25rem; }
+   #modal-data-detail > div { max-height: 100%; border-radius: 0.75rem; }
+   #modal-data-detail > div > div:first-child { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+   #subjudul-data-detail,
+   #info-halaman-data-detail { display: none; }
+   #wadah-data-detail { padding: 0.5rem 1rem; }
+   #modal-data-detail > div > div:last-child { padding-top: 0.4rem; padding-bottom: 0.4rem; }
 }

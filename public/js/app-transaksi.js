@@ -1340,7 +1340,7 @@ function _htmlBarisDataDetail(r, nomor) {
   return `
   <tr class="hover:bg-slate-50 transition border-b border-slate-100">
     <td class="px-3 py-2 text-center font-medium text-slate-400">${nomor}</td>
-    <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.nama) || '-'}</td>
+    <td class="px-3 py-2 font-semibold text-slate-800" title="${esc(r.nama)}">${esc(r.nama) || '-'}</td>
     <td class="px-3 py-2 font-mono text-xs text-slate-600">${esc(r.nik) || '-'}</td>
     <td class="px-3 py-2">${esc(r.jenisKelamin) || '-'}</td>
     <td class="px-3 py-2">${esc(r.tempatLahir) || '-'}</td>
