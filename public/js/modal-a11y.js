@@ -19,6 +19,9 @@
 
   var SEL_FOKUS = 'a[href],button:not([disabled]),input:not([disabled]):not([type="hidden"]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
   var SEL_KONTROL = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]),select,textarea';
+  // Semua jenis kontrol (termasuk file/checkbox/radio): dipakai untuk memastikan pasangan label-kontrol
+  // tidak ambigu. Tanpa ini, label "Foto ..." (unggah file) salah ditautkan ke kolom teks di sebelahnya.
+  var SEL_SEMUA = 'input:not([type="hidden"]),select,textarea';
   // Punya mekanisme sendiri sepenuhnya -> jangan diatur di sini.
   var ABAIKAN = { 'loading-overlay': 1 };
   // ESC sudah ditangani handler lain di app-core.js -> jangan ditutup dua kali.
@@ -103,16 +106,17 @@
       if (lb.querySelector(SEL_KONTROL)) continue;            // sudah membungkus inputnya
       var kontrol = null, induk = lb.parentElement;
       if (induk) {
-        var anak = induk.querySelectorAll(SEL_KONTROL);
+        var anak = induk.querySelectorAll(SEL_SEMUA);
         // Hanya bila induknya memuat tepat 1 label & 1 kontrol (pasangan jelas), supaya tidak salah tautan.
-        if (anak.length === 1 && !anak[0].closest('label') && induk.querySelectorAll('label').length === 1) kontrol = anak[0];
+        if (anak.length === 1 && anak[0].matches(SEL_KONTROL) && !anak[0].closest('label') &&
+            induk.querySelectorAll('label').length === 1) kontrol = anak[0];
       }
       if (!kontrol && lb.nextElementSibling) {
         var sb = lb.nextElementSibling;
         if (sb.matches && sb.matches(SEL_KONTROL)) kontrol = sb;
         else if (sb.querySelectorAll) {
-          var dlm = sb.querySelectorAll(SEL_KONTROL);
-          if (dlm.length === 1) kontrol = dlm[0];
+          var dlm = sb.querySelectorAll(SEL_SEMUA);
+          if (dlm.length === 1 && dlm[0].matches(SEL_KONTROL)) kontrol = dlm[0];
         }
       }
       if (!kontrol) continue;
