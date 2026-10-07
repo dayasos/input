@@ -55,15 +55,12 @@ export async function sinkronDataSheet2026(token?: string) {
     }
   }
 
-  // 2. Proteksi Concurrency Mutex: Cegah duplikasi proses jika admin klik berkali-kali atau bentrok dengan cron
-  const lockResult = await sql`select pg_try_advisory_lock(${ADVISORY_LOCK_ID}) as terkunci;`;
-  if (!lockResult[0]?.terkunci) {
-    return {
-      sukses: true,
-      pesan: "Sinkronisasi data 2026 sedang berlangsung di latar belakang, silakan tunggu beberapa detik...",
-    };
-  }
-
+  // 2. Proteksi Concurrency Mutex: Cegah duplikasi proses jika admin klik berkali-kali atau bentrok
+  // dengan cron. Gembok diambil DI DALAM transaksi tulis (pg_try_advisory_xact_lock, lihat langkah 6):
+  // otomatis lepas saat commit/rollback & pasti di koneksi yang sama. Versi lama memakai gembok
+  // level-sesi (pg_try_advisory_lock) di awal lalu pg_advisory_unlock di akhir -- di antaranya ada
+  // fetch Google Sheets beberapa detik tanpa aktivitas DB, sehingga koneksi pemegang gembok ditutup
+  // idle_timeout & unlock jatuh ke koneksi lain ("you don't own a lock of type ExclusiveLock").
   const mulai = Date.now();
 
   try {
@@ -129,8 +126,16 @@ export async function sinkronDataSheet2026(token?: string) {
     // memutuskan perlu tidaknya menyiarkan sinyal realtime -- kalau sheet tidak berubah sejak run
     // sebelumnya (kasus paling sering, cron jalan tiap 10 menit), tidak ada yang perlu disiarkan.
     let barisBerubah = 0;
+    let dilewati = false;
     // deno-lint-ignore no-explicit-any
     await sql.begin(async (trx: any) => {
+      // Gembok mutex (xact-level): kalau sinkron lain sedang menulis, lewati run ini.
+      const kunci = await trx`select pg_try_advisory_xact_lock(${ADVISORY_LOCK_ID}) as terkunci`;
+      if (!kunci[0]?.terkunci) {
+        dilewati = true;
+        return;
+      }
+
       // A. Batch Upsert ke penerima_2026. Klausa WHERE ... IS DISTINCT FROM membuat baris yang
       // isinya sudah sama TIDAK ditulis ulang (tanpa itu, tiap run menulis ulang ~12 ribu baris
       // identik: pemindaian index sia-sia + WAL + vacuum).
@@ -248,6 +253,13 @@ export async function sinkronDataSheet2026(token?: string) {
       }
     });
 
+    if (dilewati) {
+      return {
+        sukses: true,
+        pesan: "Sinkronisasi data 2026 sedang berlangsung di latar belakang, silakan tunggu beberapa detik...",
+      };
+    }
+
     const durasiDetik = ((Date.now() - mulai) / 1000).toFixed(1);
     return {
       sukses: true,
@@ -259,8 +271,5 @@ export async function sinkronDataSheet2026(token?: string) {
   } catch (err) {
     const pesan = err instanceof Error ? err.message : String(err);
     return { sukses: false, pesan: `Gagal sinkronisasi data 2026: ${pesan}` };
-  } finally {
-    // 7. Lepaskan Mutex Lock
-    await sql`select pg_advisory_unlock(${ADVISORY_LOCK_ID});`;
   }
 }
