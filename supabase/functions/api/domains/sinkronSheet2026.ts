@@ -125,12 +125,22 @@ export async function sinkronDataSheet2026(token?: string) {
 
     // 6. Transaksi Atomik: Batch Upsert & Penyelarasan Data Detail
     const totalBatch = Math.ceil(daftarData.length / UKURAN_BATCH);
+    // Jumlah baris yang BENAR-BENAR berubah (insert baru + update yang nilainya beda). Dipakai utk
+    // memutuskan perlu tidaknya menyiarkan sinyal realtime -- kalau sheet tidak berubah sejak run
+    // sebelumnya (kasus paling sering, cron jalan tiap 10 menit), tidak ada yang perlu disiarkan.
+    let barisBerubah = 0;
     // deno-lint-ignore no-explicit-any
     await sql.begin(async (trx: any) => {
-      // A. Batch Upsert ke penerima_2026
+      // A. Batch Upsert ke penerima_2026. Klausa WHERE ... IS DISTINCT FROM membuat baris yang
+      // isinya sudah sama TIDAK ditulis ulang (tanpa itu, tiap run menulis ulang ~12 ribu baris
+      // identik: pemindaian index sia-sia + WAL + vacuum).
       for (let b = 0; b < totalBatch; b++) {
         const chunk = daftarData.slice(b * UKURAN_BATCH, (b + 1) * UKURAN_BATCH);
-        await trx`
+        // JANGAN beri alias ("insert into penerima as p") di sini: helper trx(chunk, ...) di bawah hanya
+        // dikenali library postgres sbg daftar kolom INSERT bila teks tepat sebelumnya "insert into <tabel>";
+        // dengan alias, helper dianggap daftar identifier & error "str.replace is not a function".
+        // Karena itu kolom tabel target di klausa WHERE dirujuk dengan nama tabelnya (penerima.<kolom>).
+        const hasilUpsert = await trx`
           insert into penerima ${trx(chunk,
           "tahun", "nomor_urut", "nama", "nik", "jenis_kelamin", "tempat_lahir", "tanggal_lahir",
           "alamat", "layanan", "tempat_tugas", "alamat_tugas", "kecamatan", "kelurahan",
@@ -156,11 +166,22 @@ export async function sinkronDataSheet2026(token?: string) {
             status_bpjs_tk = excluded.status_bpjs_tk,
             umur = excluded.umur,
             status_verifikasi = excluded.status_verifikasi
+          where (penerima.nomor_urut, penerima.nama, penerima.jenis_kelamin, penerima.tempat_lahir, penerima.tanggal_lahir, penerima.alamat,
+                 penerima.layanan, penerima.tempat_tugas, penerima.alamat_tugas, penerima.kecamatan, penerima.kelurahan, penerima.nama_rekening,
+                 penerima.nomor_rekening, penerima.kantor_cabang, penerima.no_kontak, penerima.status_bpjs_tk, penerima.umur,
+                 penerima.status_verifikasi)
+            is distinct from
+                (excluded.nomor_urut, excluded.nama, excluded.jenis_kelamin, excluded.tempat_lahir,
+                 excluded.tanggal_lahir, excluded.alamat, excluded.layanan, excluded.tempat_tugas,
+                 excluded.alamat_tugas, excluded.kecamatan, excluded.kelurahan, excluded.nama_rekening,
+                 excluded.nomor_rekening, excluded.kantor_cabang, excluded.no_kontak,
+                 excluded.status_bpjs_tk, excluded.umur, excluded.status_verifikasi)
         `;
+        barisBerubah += Number(hasilUpsert.count) || 0;
       }
 
       // B. Hapus baris dari data_detail_2026 jika status tidak lagi lolos (mis. retur / meninggal)
-      await trx`
+      const hasilHapus = await trx`
         delete from data_detail
         where tahun = 2026
           and penerima_id in (
@@ -169,10 +190,11 @@ export async function sinkronDataSheet2026(token?: string) {
               and status_verifikasi not in ('Memenuhi Syarat', 'AKTIF')
           )
       `;
+      barisBerubah += Number(hasilHapus.count) || 0;
 
       // C. Pastikan baris yang lolos (status AKTIF / Memenuhi Syarat) tersinkron lengkap di data_detail_2026
-      await trx`
-        insert into data_detail (
+      const hasilDetail = await trx`
+        insert into data_detail as d (
           tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
           alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
           nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur
@@ -200,22 +222,37 @@ export async function sinkronDataSheet2026(token?: string) {
           no_kontak = excluded.no_kontak,
           status_bpjs_tk = excluded.status_bpjs_tk,
           umur = excluded.umur
+        where (d.nama, d.jenis_kelamin, d.tempat_lahir, d.tanggal_lahir, d.alamat, d.layanan,
+               d.tempat_tugas, d.alamat_tugas, d.kecamatan, d.kelurahan, d.nama_rekening,
+               d.nomor_rekening, d.kantor_cabang, d.no_kontak, d.status_bpjs_tk, d.umur)
+          is distinct from
+              (excluded.nama, excluded.jenis_kelamin, excluded.tempat_lahir, excluded.tanggal_lahir,
+               excluded.alamat, excluded.layanan, excluded.tempat_tugas, excluded.alamat_tugas,
+               excluded.kecamatan, excluded.kelurahan, excluded.nama_rekening,
+               excluded.nomor_rekening, excluded.kantor_cabang, excluded.no_kontak,
+               excluded.status_bpjs_tk, excluded.umur)
       `;
+      barisBerubah += Number(hasilDetail.count) || 0;
 
-      // D. Broadcast sinyal Realtime ke Event Bus CDC
-      await trx`
-        insert into public.realtime_event_bus (domain, aksi, entitas_id, created_at)
-        values
-          ('arsip_tahun', 'SYNC_2026', null, now()),
-          ('penerima', 'SYNC_2026', null, now()),
-          ('data_detail', 'SYNC_2026', null, now())
-      `;
+      // D. Broadcast sinyal Realtime ke Event Bus CDC -- HANYA bila ada baris yang berubah. Dulu
+      // 3 sinyal ini dikirim tiap run (tiap 10 menit) walau sheet tidak berubah, sehingga cache
+      // semua admin yang online dibuang & data dimuat ulang tanpa perlu.
+      if (barisBerubah > 0) {
+        await trx`
+          insert into public.realtime_event_bus (domain, aksi, entitas_id, created_at)
+          values
+            ('arsip_tahun', 'SYNC_2026', null, now()),
+            ('penerima', 'SYNC_2026', null, now()),
+            ('data_detail', 'SYNC_2026', null, now())
+        `;
+      }
     });
 
     const durasiDetik = ((Date.now() - mulai) / 1000).toFixed(1);
     return {
       sukses: true,
       totalBaris: daftarData.length,
+      barisBerubah,
       durasi: durasiDetik,
       pesan: `Sinkronisasi berhasil! ${daftarData.length} data diselaraskan dari Google Sheets dalam ${durasiDetik} detik.`,
     };
