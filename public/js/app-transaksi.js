@@ -1153,6 +1153,15 @@ function _modalDetailTerbuka() {
   return !!m && !m.classList.contains('hidden');
 }
 
+// Sedang melihat tahun arsip? Daftar yang ditampilkan bukan masterDataLihat (tahun aktif), jadi
+// sinkron realtime tidak perlu jalan -- cache sudah dibuang dan data tahun aktif otomatis dimuat
+// ulang saat pengguna kembali memilih tahun aktif (lihat pemilih tahun di app-core.js). Memuat
+// ulang di sini malah mengacak opsi filter tahun arsip.
+function _sedangLihatTahunHistoris() {
+  return !!(window._tahunDipilihGetter && window._tahunAktifGetter &&
+    window._tahunDipilihGetter() !== window._tahunAktifGetter());
+}
+
 window.jadwalkanMuatUlangLihat = function () {
   _lihatTertunda = true;
   if (_timerLihatTertunda) return;
@@ -1162,9 +1171,9 @@ window.jadwalkanMuatUlangLihat = function () {
 function _cekMuatUlangLihat() {
   _timerLihatTertunda = null;
   if (!_lihatTertunda) return;
-  if (typeof panelAktif !== 'undefined' && panelAktif !== 'rekap') {
-    // Tab lain sedang aktif: tidak perlu memuat sekarang. Cache sudah dibuang, jadi saat tab Lihat
-    // Data dibuka lagi datanya otomatis dimuat ulang.
+  if ((typeof panelAktif !== 'undefined' && panelAktif !== 'rekap') || _sedangLihatTahunHistoris()) {
+    // Tab lain / tahun arsip sedang aktif: tidak perlu memuat sekarang. Cache sudah dibuang, jadi saat
+    // tab Lihat Data (tahun aktif) dibuka lagi datanya otomatis dimuat ulang.
     _lihatTertunda = false;
     return;
   }
@@ -1177,6 +1186,7 @@ function _cekMuatUlangLihat() {
 }
 
 window.sinkronBarisLihatData = function (ids) {
+  if (_sedangLihatTahunHistoris()) return;
   const adaData = Array.isArray(masterDataLihat) && masterDataLihat.length > 0;
   const adaSesi = typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token;
   if (!adaData || !adaSesi || Date.now() < _sinkronBarisGagalSampai) { window.jadwalkanMuatUlangLihat(); return; }
@@ -1240,7 +1250,7 @@ function _terapkanPatchBarisLihat(rowsBaru, hilang) {
 // Jaring pengaman: tab Lihat Data kembali terlihat setelah lama (koneksi realtime bisa tertidur saat
 // tab di-background) -> segarkan senyap bila data sudah lebih dari semenit.
 window.addEventListener('djpm:swr-window-focus', function () {
-  if (typeof panelAktif === 'undefined' || panelAktif !== 'rekap') return;
+  if (typeof panelAktif === 'undefined' || panelAktif !== 'rekap' || _sedangLihatTahunHistoris()) return;
   if (_modalDetailTerbuka() || !masterDataLihat || masterDataLihat.length === 0) return;
   if (Date.now() - waktuMasterDataLihat > 60000) window.jadwalkanMuatUlangLihat();
 });
@@ -3140,6 +3150,10 @@ document.getElementById('btn-refresh-data').addEventListener('click', function (
     // tombolnya sudah ditekan, membuat pengguna mengira sudah dapat data terbaru padahal
     // belum. broadcast:false karena ini cuma memaksa refresh di tab ini sendiri, bukan
     // sinyal mutasi data yang perlu diteruskan ke tab/perangkat lain.
+    // Event invalidasi ini memicu listener realtime (app-admin.js) yang akan menjadwalkan muat ulang
+    // Lihat Data -- padahal inisialisasiMenuLihatData() di bawah sudah memuatnya. Jeda singkat ini
+    // membuat listener mengabaikannya supaya tidak ada muat ulang ganda yang menyusul.
+    window._abaikanMuatUlangLihatSampai = Date.now() + 3000;
     if (window.djpmCache && typeof window.djpmCache.invalidate === 'function') {
       window.djpmCache.invalidate(['penerima'], false);
     }
