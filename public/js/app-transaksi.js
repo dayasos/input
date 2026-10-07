@@ -1192,8 +1192,14 @@ function inisialisasiMenuLihatData() {
 
 window.tampilkanDataDetail = function () {
   if (!pastikanLogin()) return;
+  _ddHalaman = 1;
+  _lepasObserverDataDetail();
   document.getElementById('body-tabel-data-detail').innerHTML = htmlSkeletonBaris(20, 5);
   document.getElementById('info-total-data-detail').innerText = '';
+  const navDd = document.getElementById('pagination-data-detail');
+  if (navDd) navDd.innerHTML = '';
+  const infoHalDd = document.getElementById('info-halaman-data-detail');
+  if (infoHalDd) infoHalDd.textContent = '';
   document.getElementById('modal-data-detail').classList.remove('hidden');
   muatDataDetail(true);
 };
@@ -1318,20 +1324,21 @@ function _urutkanDataDetail(rows) {
   });
 }
 
-function renderTabelDataDetail(rows) {
-  const tbody = document.getElementById('body-tabel-data-detail');
-  rows = Array.isArray(rows) ? rows : [];
-  document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
-  if (rows.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
-    return;
-  }
-  rows = _urutkanDataDetail(rows);
-  let html = '';
-  rows.forEach(function (r, idx) {
-    html += `
+// Paginasi + lazy load Data Detail. Seluruh baris sudah ada di memori (backend mengirim satu
+// paket), jadi yang dibatasi adalah jumlah baris DOM: tabel hanya memuat satu halaman
+// (DD_PER_HALAMAN baris), dan baris di halaman itu digambar bertahap (DD_CHUNK baris) saat
+// pengguna menggulir mendekati dasar tabel -- DOM tetap ringan walau datanya ribuan.
+const DD_PER_HALAMAN = 50;
+const DD_CHUNK = 15;
+let _ddRows = [];
+let _ddHalaman = 1;
+let _ddTerender = 0;      // jumlah baris halaman aktif yang sudah masuk DOM
+let _ddObserver = null;
+
+function _htmlBarisDataDetail(r, nomor) {
+  return `
   <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-    <td class="px-3 py-2 text-center font-medium text-slate-400">${idx + 1}</td>
+    <td class="px-3 py-2 text-center font-medium text-slate-400">${nomor}</td>
     <td class="px-3 py-2 font-semibold text-slate-800">${esc(r.nama) || '-'}</td>
     <td class="px-3 py-2 font-mono text-xs text-slate-600">${esc(r.nik) || '-'}</td>
     <td class="px-3 py-2">${esc(r.jenisKelamin) || '-'}</td>
@@ -1352,8 +1359,117 @@ function renderTabelDataDetail(rows) {
     <td class="px-3 py-2"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">${esc(r.status) || '-'}</span></td>
     <td class="px-3 py-2 text-xs text-slate-500">${esc(r.tglStatus) || '-'}</td>
   </tr>`;
-  });
-  tbody.innerHTML = html;
+}
+
+function _lepasObserverDataDetail() {
+  if (_ddObserver) { _ddObserver.disconnect(); _ddObserver = null; }
+}
+
+// Gambar halaman aktif dari nol, hanya DD_CHUNK baris pertama; sisanya lewat sentinel.
+function _gambarHalamanDataDetail() {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  const wadah = document.getElementById('scroll-data-detail');
+  _lepasObserverDataDetail();
+  const awal = (_ddHalaman - 1) * DD_PER_HALAMAN;
+  const akhir = Math.min(awal + DD_PER_HALAMAN, _ddRows.length);
+  tbody.innerHTML = '';
+  _ddTerender = awal;
+  if (wadah) wadah.scrollTop = 0;
+  _tambahBarisDataDetail(akhir, typeof IntersectionObserver === 'undefined');
+}
+
+// Tambah baris berikutnya sampai batas `akhir`. `semua` = true menggambar sekaligus (fallback
+// bila browser tidak punya IntersectionObserver).
+function _tambahBarisDataDetail(akhir, semua) {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  const sentinelLama = document.getElementById('sentinel-data-detail');
+  if (sentinelLama) sentinelLama.remove();
+  const batas = semua ? akhir : Math.min(_ddTerender + DD_CHUNK, akhir);
+  let html = '';
+  for (let i = _ddTerender; i < batas; i++) html += _htmlBarisDataDetail(_ddRows[i], i + 1);
+  _ddTerender = batas;
+  if (_ddTerender < akhir) {
+    html += '<tr id="sentinel-data-detail"><td colspan="20" class="px-4 py-3 text-center text-xs text-slate-400">Memuat baris berikutnya...</td></tr>';
+  }
+  tbody.insertAdjacentHTML('beforeend', html);
+  const sentinel = document.getElementById('sentinel-data-detail');
+  if (!sentinel) return;
+  const wadah = document.getElementById('scroll-data-detail');
+  _ddObserver = new IntersectionObserver(function (entri) {
+    if (!entri[0].isIntersecting) return;
+    _lepasObserverDataDetail();
+    _tambahBarisDataDetail(akhir, false);
+  }, { root: wadah, rootMargin: '0px 0px 300px 0px' });
+  _ddObserver.observe(sentinel);
+}
+
+function _perbaruiNavDataDetail() {
+  const wrap = document.getElementById('pagination-data-detail');
+  const info = document.getElementById('info-halaman-data-detail');
+  if (!wrap) return;
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  const sekarang = _ddHalaman;
+  if (info) {
+    const awal = (sekarang - 1) * DD_PER_HALAMAN + 1;
+    const akhir = Math.min(sekarang * DD_PER_HALAMAN, _ddRows.length);
+    info.textContent = 'Menampilkan ' + awal + '-' + akhir + ' dari ' + _ddRows.length + ' baris · Halaman ' + sekarang + '/' + total;
+  }
+  if (total <= 1) { wrap.innerHTML = ''; return; }
+  const TAMPIL = 5;
+  let mulai = Math.max(1, sekarang - Math.floor(TAMPIL / 2));
+  let akhirRange = mulai + TAMPIL - 1;
+  if (akhirRange > total) { akhirRange = total; mulai = Math.max(1, akhirRange - TAMPIL + 1); }
+  const BASE = 'px-3 py-1.5 rounded-xl text-xs font-semibold transition min-w-[36px] min-h-[36px] inline-flex items-center justify-center text-center active:scale-95 shadow-2xs';
+  const AKTIF = BASE + ' bg-slate-800 text-white shadow-xs';
+  const PASIF = BASE + ' bg-white border border-slate-200 hover:bg-slate-100 hover:border-slate-300 text-slate-700 cursor-pointer';
+  const NONAKTIF = BASE + ' bg-slate-100/60 border border-slate-200/50 text-slate-300 cursor-not-allowed';
+  const ikonPrev = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>';
+  const ikonNext = '<svg class="w-3.5 h-3.5 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>';
+  let h = `<button onclick="pindahHalamanDataDetail(${sekarang - 1})" ${sekarang === 1 ? 'disabled' : ''} class="${sekarang === 1 ? NONAKTIF : PASIF}" title="Halaman Sebelumnya">${ikonPrev}</button>`;
+  if (mulai > 1) {
+    h += `<button onclick="pindahHalamanDataDetail(1)" class="${PASIF}">1</button>`;
+    if (mulai > 2) h += '<span class="px-1 text-slate-400 text-xs">…</span>';
+  }
+  for (let i = mulai; i <= akhirRange; i++) {
+    h += `<button onclick="pindahHalamanDataDetail(${i})" class="${i === sekarang ? AKTIF : PASIF}">${i}</button>`;
+  }
+  if (akhirRange < total) {
+    if (akhirRange < total - 1) h += '<span class="px-1 text-slate-400 text-xs">…</span>';
+    h += `<button onclick="pindahHalamanDataDetail(${total})" class="${PASIF}">${total}</button>`;
+  }
+  h += `<button onclick="pindahHalamanDataDetail(${sekarang + 1})" ${sekarang === total ? 'disabled' : ''} class="${sekarang === total ? NONAKTIF : PASIF}" title="Halaman Berikutnya">${ikonNext}</button>`;
+  wrap.innerHTML = h;
+}
+
+window.pindahHalamanDataDetail = function (nomor) {
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  nomor = Math.min(Math.max(1, Number(nomor) || 1), total);
+  if (nomor === _ddHalaman) return;
+  _ddHalaman = nomor;
+  _gambarHalamanDataDetail();
+  _perbaruiNavDataDetail();
+};
+
+function renderTabelDataDetail(rows) {
+  const tbody = document.getElementById('body-tabel-data-detail');
+  rows = Array.isArray(rows) ? rows : [];
+  document.getElementById('info-total-data-detail').innerText = 'Total Data: ' + rows.length + ' Baris';
+  _lepasObserverDataDetail();
+  if (rows.length === 0) {
+    _ddRows = [];
+    tbody.innerHTML = '<tr><td colspan="20" class="px-4 py-6 text-center text-slate-400 italic">Belum ada data Memenuhi Syarat.</td></tr>';
+    _perbaruiNavDataDetail();
+    const infoHal = document.getElementById('info-halaman-data-detail');
+    if (infoHal) infoHal.textContent = '';
+    return;
+  }
+  _ddRows = _urutkanDataDetail(rows);
+  // Muat ulang otomatis (realtime) mempertahankan halaman yang sedang dibuka bila masih valid.
+  const total = Math.ceil(_ddRows.length / DD_PER_HALAMAN) || 1;
+  if (_ddHalaman > total) _ddHalaman = total;
+  if (_ddHalaman < 1) _ddHalaman = 1;
+  _gambarHalamanDataDetail();
+  _perbaruiNavDataDetail();
 }
 
 function setupPencarianRealtime() {

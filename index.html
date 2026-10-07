@@ -1617,7 +1617,7 @@
         <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
           class="text-slate-400 hover:text-slate-600 hover:bg-slate-100 p-1.5 rounded-lg text-xl font-semibold leading-none transition">&times;</button>
       </div>
-      <div class="flex-1 p-4 sm:p-6 overflow-y-auto text-sm text-slate-700 overscroll-contain">
+      <div id="scroll-data-detail" class="flex-1 p-4 sm:p-6 overflow-y-auto text-sm text-slate-700 overscroll-contain">
         <div class="overflow-x-auto rounded-xl border border-slate-200/80 shadow-2xs">
           <table class="w-full text-left border-collapse bg-white whitespace-nowrap table-auto">
             <thead>
@@ -1651,8 +1651,12 @@
         </div>
       </div>
       <div
-        class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex justify-between items-center rounded-b-2xl sm:rounded-b-3xl">
-        <span id="info-total-data-detail" class="text-xs text-slate-500 font-medium"></span>
+        class="shrink-0 px-5 sm:px-7 py-3.5 bg-slate-50/90 border-t border-slate-100 flex flex-wrap justify-between items-center gap-x-4 gap-y-2.5 rounded-b-2xl sm:rounded-b-3xl">
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span id="info-total-data-detail" class="text-xs text-slate-500 font-medium"></span>
+          <span id="info-halaman-data-detail" class="text-[11px] text-slate-400 font-medium"></span>
+        </div>
+        <div id="pagination-data-detail" class="flex items-center gap-1 flex-wrap justify-center order-last sm:order-none w-full sm:w-auto"></div>
         <button onclick="document.getElementById('modal-data-detail').classList.add('hidden')"
           class="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 rounded-xl text-xs font-semibold transition">
           Tutup
