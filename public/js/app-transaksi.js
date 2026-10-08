@@ -389,6 +389,8 @@ function pulihkanDrafLokalForm() {
       }
       if (draf.inputTempatTugas && inputTempatTugas) inputTempatTugas.value = draf.inputTempatTugas;
       if (draf.inputAlamatTugas && inputAlamatTugas) inputAlamatTugas.value = draf.inputAlamatTugas;
+      // Layanan wajib-pilih: nilai draf berasal dari pilihan pop up, jadi kolom dikunci lagi.
+      if (inputTempatTugas.value && inputAlamatTugas.value && layananHarusPilihTempat()) kunciTempatTugas();
       const elNama = document.getElementById('input-nama');
       if (draf.inputNama && elNama) elNama.value = draf.inputNama;
       if (draf.inputNik && inputNik) inputNik.value = draf.inputNik;
@@ -1055,6 +1057,13 @@ document.getElementById('input-nama-rek').addEventListener('input', resetKonfirm
 formPembayaran.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!pastikanLogin()) return;
+  // Kolom readonly dilewati validasi bawaan browser -> cek manual tempat tugas yang wajib dipilih dari pop up.
+  if (!inputTempatTugas.value.trim() || !inputAlamatTugas.value.trim()) {
+    tampilkanToast(layananHarusPilihTempat()
+      ? "Pilih rumah ibadah terlebih dahulu lewat tombol Pilih Rumah Ibadah."
+      : "Lengkapi nama dan alamat tempat tugas terlebih dahulu.", "gagal");
+    return;
+  }
   // Wajib ada koordinat lokasi untuk GMM / Guru Sekolah Minggu/Buddha/Hindu sebelum lanjut
   for (const modeKoordinat of Object.keys(KONFIG_KOORDINAT)) {
     const cfgKoordinat = KONFIG_KOORDINAT[modeKoordinat];

@@ -1852,48 +1852,67 @@ inputKontak.addEventListener('input', function (e) {
   e.target.value = e.target.value.replace(/[^0-9]/g, '');
 });
 
+const PLACEHOLDER_TEMPAT_BEBAS = 'KETIK NAMA TEMPAT TUGAS ATAU RUMAH IBADAH';
+const PLACEHOLDER_ALAMAT_BEBAS = 'MASUKKAN ALAMAT LENGKAP';
+const PLACEHOLDER_PILIH_RI = 'KLIK UNTUK MEMILIH RUMAH IBADAH';
+
+function layananHarusPilihTempat() {
+  return typeof layananWajibPilihTempat === 'function' && layananWajibPilihTempat(selectLayanan.value);
+}
+
+function setLabelTombolPilihTempat(teks) {
+  const btnGanti = document.getElementById('btn-ganti-tempat-tugas');
+  const label = btnGanti && btnGanti.querySelector('span');
+  if (label) label.textContent = teks;
+}
+
 function kunciTempatTugas() {
   inputTempatTugas.readOnly = true;
   inputAlamatTugas.readOnly = true;
   inputTempatTugas.classList.add('bg-slate-100', 'cursor-not-allowed');
   inputAlamatTugas.classList.add('bg-slate-100', 'cursor-not-allowed');
+  inputTempatTugas.placeholder = PLACEHOLDER_TEMPAT_BEBAS;
+  inputAlamatTugas.placeholder = PLACEHOLDER_ALAMAT_BEBAS;
   const btnGanti = document.getElementById('btn-ganti-tempat-tugas');
   if (btnGanti) btnGanti.classList.remove('hidden');
+  setLabelTombolPilihTempat('Ganti Pilihan');
 }
 
+// Kosongkan tempat tugas. Layanan yang punya data rumah ibadah tetap TERKUNCI sampai dipilih
+// lewat pop up; layanan tanpa data rumah ibadah bebas diketik.
 function bukaKunciTempatTugas() {
   inputTempatTugas.value = '';
   inputAlamatTugas.value = '';
-  inputTempatTugas.readOnly = false;
-  inputAlamatTugas.readOnly = false;
-  inputTempatTugas.classList.remove('bg-slate-100', 'cursor-not-allowed');
-  inputAlamatTugas.classList.remove('bg-slate-100', 'cursor-not-allowed');
+  const wajibPilih = layananHarusPilihTempat();
+  inputTempatTugas.readOnly = wajibPilih;
+  inputAlamatTugas.readOnly = wajibPilih;
+  inputTempatTugas.classList.toggle('bg-slate-100', wajibPilih);
+  inputTempatTugas.classList.toggle('cursor-not-allowed', wajibPilih);
+  inputAlamatTugas.classList.toggle('bg-slate-100', wajibPilih);
+  inputAlamatTugas.classList.toggle('cursor-not-allowed', wajibPilih);
+  inputTempatTugas.placeholder = wajibPilih ? PLACEHOLDER_PILIH_RI : PLACEHOLDER_TEMPAT_BEBAS;
+  inputAlamatTugas.placeholder = wajibPilih ? PLACEHOLDER_PILIH_RI : PLACEHOLDER_ALAMAT_BEBAS;
   const btnGanti = document.getElementById('btn-ganti-tempat-tugas');
-  if (btnGanti) btnGanti.classList.add('hidden');
+  if (btnGanti) btnGanti.classList.toggle('hidden', !wajibPilih);
+  setLabelTombolPilihTempat('Pilih Rumah Ibadah');
   sembunyikanPeringatan('peringatan-tempat-tugas');
   bukaKunciForm('TEMPAT_TUGAS');
 }
 
 function bukaUlangModalRumahIbadah() {
-  bukaKunciTempatTugas(); // kosongkan & buka kunci dulu, jaga-jaga kalau modal ditutup tanpa pilih apa pun
-
-  const val = selectLayanan.value.toUpperCase().trim();
-  const kategoriModalKec = [
-    "IMAM MASJID", "KHATIB JUMAT", "NAZIR MASJID", "NAZIR MUSHOLLA",
-    "PENGURUS GEREJA", "PENGURUS VIHARA/KLENTENG/KUIL", "PETUGAS GEREJA KATOLIK"
-  ];
-  const daftarKemenag = (typeof masterLayanan !== 'undefined' && masterLayanan.kemenag)
-    ? masterLayanan.kemenag.map(function (v) { return v.trim().toUpperCase(); })
-    : [];
-
-  if (daftarKemenag.indexOf(val) !== -1 || val === "USTADZ" || val === "USTADZAH") {
-    if (typeof openKemenagModal === 'function') openKemenagModal(val);
-  } else if (kategoriModalKec.indexOf(val) !== -1) {
-    if (typeof openModal === 'function') openModal(val);
-  }
+  bukaKunciTempatTugas(); // kosongkan dulu, jaga-jaga kalau modal ditutup tanpa pilih apa pun
+  if (typeof bukaPopupTempatTugas === 'function') bukaPopupTempatTugas(selectLayanan.value);
 }
 
 document.getElementById('btn-ganti-tempat-tugas').addEventListener('click', bukaUlangModalRumahIbadah);
+
+// Kolom terkunci yang masih KOSONG bisa diklik untuk membuka pop up. Kalau sudah terisi, klik
+// diabaikan agar pilihan tidak terhapus tak sengaja -- ganti pilihan lewat tombol "Ganti Pilihan".
+[inputTempatTugas, inputAlamatTugas].forEach(function (el) {
+  el.addEventListener('click', function () {
+    if (el.readOnly && layananHarusPilihTempat() && !inputTempatTugas.value.trim()) bukaUlangModalRumahIbadah();
+  });
+});
 
 function jalankanCekTempatTugas() {
   sembunyikanPeringatan('peringatan-tempat-tugas');
