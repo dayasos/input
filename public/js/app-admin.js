@@ -1499,6 +1499,36 @@ const kategoriModal = [
   "PETUGAS GEREJA KATOLIK"
 ];
 
+const LAYANAN_USTADZ = ["USTADZ", "USTADZAH", "USTADZ/USTADZAH"];
+
+// Layanan yang punya data rumah ibadah -> tempat tugas WAJIB dipilih lewat pop up (kolom terkunci).
+// Layanan lain (mis. Bilal Jenazah, Penggali Kubur) tidak punya data -> kolom boleh diketik langsung.
+function layananWajibPilihTempat(layanan) {
+  const val = String(layanan || '').toUpperCase().trim();
+  if (!val) return false;
+  const daftarKemenag = (typeof masterLayanan !== 'undefined' && masterLayanan.kemenag)
+    ? masterLayanan.kemenag.map(v => v.trim().toUpperCase())
+    : [];
+  return daftarKemenag.includes(val) || kategoriModal.includes(val) || LAYANAN_USTADZ.includes(val);
+}
+
+// Buka pop up pilih rumah ibadah yang sesuai layanan. Mengembalikan true bila pop up dibuka.
+function bukaPopupTempatTugas(layanan) {
+  const val = String(layanan || '').toUpperCase().trim();
+  const daftarKemenag = (typeof masterLayanan !== 'undefined' && masterLayanan.kemenag)
+    ? masterLayanan.kemenag.map(v => v.trim().toUpperCase())
+    : [];
+  if (daftarKemenag.includes(val) || LAYANAN_USTADZ.includes(val)) {
+    openKemenagModal(val === "USTADZ/USTADZAH" ? "USTADZ" : val);
+    return true;
+  }
+  if (kategoriModal.includes(val)) {
+    openModal(val);
+    return true;
+  }
+  return false;
+}
+
 if (inputLayanan) {
   inputLayanan.addEventListener('focus', function () {
     this.dataset.lastValue = this.value;
@@ -1513,20 +1543,7 @@ if (inputLayanan) {
       hiddenKategori.value = val;
     }
 
-    const daftarKemenag = (typeof masterLayanan !== 'undefined' && masterLayanan.kemenag)
-      ? masterLayanan.kemenag.map(v => v.trim().toUpperCase())
-      : [];
-
-    if (daftarKemenag.includes(val)) {
-      openKemenagModal(val);
-      this.blur();
-    }
-    else if (kategoriModal.includes(val)) {
-      openModal(val);
-      this.blur();
-    }
-    else if (val === "USTADZ" || val === "USTADZAH") {
-      openKemenagModal(val);
+    if (bukaPopupTempatTugas(val)) {
       this.blur();
     }
     else {
