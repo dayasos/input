@@ -1,6 +1,7 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
 import { ikonRumahIbadah, LAYANAN_BATASI_TEMPAT_TUGAS, rapikanTeks, TAHUN_AKTIF } from "../_shared/config.ts";
+import { tentukanWilayahTugas } from "../_shared/wilayahTugas.ts";
 
 // ---------------------------------------------------------------------------
 // Catatan desain (beda dari Kode.gs, disengaja — lihat rencana migrasi):
@@ -276,9 +277,12 @@ export async function validasiDataBaru(
   noRekBaru: string,
   kecamatanBaru: string,
   alamatTugasBaru: string,
+  // Argumen ke-9 (baru): kelurahan wilayah tugas. Formulir lama tidak mengirimnya.
+  kelurahanTugasBaru?: string,
 ) {
+  let sesi;
   try {
-    await wajibSesi(token);
+    sesi = await wajibSesi(token);
   } catch (e) {
     return { valid: false, pesan: e instanceof Error ? e.message : String(e) };
   }
@@ -369,8 +373,25 @@ export async function validasiDataBaru(
       return { valid: false, temuan, pesan: "Ditemukan " + temuan.length + " masalah duplikasi data." };
     }
 
+    // Wilayah tugas (lihat wilayahTugas.ts) -- dicek di sini juga supaya penolakan muncul SEBELUM
+    // berkas diunggah. Formulir lama tidak mengirim kelurahan tugas: cek kelurahan dilewati di
+    // sini (simpanDataKeSheet tetap memeriksanya), cek kecamatan rumah ibadah tetap jalan.
+    const wilayahTugas = await tentukanWilayahTugas({
+      sesi,
+      layanan: layananBaru,
+      tempatTugas: tempatTugasBaru,
+      alamatTugas: alamatTugasBaru,
+      kecamatan: kecamatanBaru,
+      kelurahan: kelurahanTugasBaru ?? "",
+    });
+    const kelurahanTidakDikirim = kelurahanTugasBaru === undefined;
+    if (!wilayahTugas.ok && !(kelurahanTidakDikirim && wilayahTugas.soalKelurahan)) {
+      return { valid: false, pesan: wilayahTugas.pesan };
+    }
+    const kecamatanKuota = wilayahTugas.ok ? wilayahTugas.kecamatan : kecamatanBaru;
+
     // Hitung pemakaian kuota - query langsung (lihat catatan desain di atas berkas ini soal indeks cache).
-    const hasilKuota = await cekKuotaTersedia(kecamatanBaru, layananBaru);
+    const hasilKuota = await cekKuotaTersedia(kecamatanKuota, layananBaru);
     if (!hasilKuota.tersedia) {
       return { valid: false, pesan: hasilKuota.pesan, kuotaHabis: true };
     }

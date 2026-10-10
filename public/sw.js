@@ -14,7 +14,7 @@
 // 6. Otomatis membersihkan cache versi lama saat aktivasi + langsung ambil alih tab yang terbuka
 //    (skipWaiting + clients.claim) supaya versi baru aktif tanpa perlu tutup semua tab.
 
-const SW_VERSION = 'djpm-sw-v5';
+const SW_VERSION = 'djpm-sw-v6';
 const STATIC_CACHE_NAME = `djpm-static-${SW_VERSION}`;
 
 // Daftar aset inti yang di-precache saat instalasi

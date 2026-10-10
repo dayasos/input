@@ -1186,6 +1186,7 @@ tabInput.addEventListener('click', () => {
       fsContainer.classList.add('opacity-50', 'pointer-events-none');
       formPembayaran.reset();
       inputUmur.value = "";
+      if (typeof resetWilayahTugasDanDomisili === 'function') resetWilayahTugasDanDomisili();
       setGembokSubFormulir(false);
       evaluasiUploadKondisional();
     }
@@ -1611,6 +1612,7 @@ function murniGantiInstansi(instansi, targetBtn, otherBtn) {
   fsContainer.disabled = false;
   fsContainer.classList.remove('opacity-50', 'pointer-events-none');
   resetSemuaKuncianForm();
+  if (typeof resetWilayahTugasDanDomisili === 'function') resetWilayahTugasDanDomisili();
   if (isRoleKemenag(dataPengguna.role)) { renderDropdownLayananTunggal(dataPengguna.role); }
   else { renderDropdownLayanan(instansi); }
 }
@@ -1897,6 +1899,8 @@ function bukaKunciTempatTugas() {
   setLabelTombolPilihTempat('Pilih Rumah Ibadah');
   sembunyikanPeringatan('peringatan-tempat-tugas');
   bukaKunciForm('TEMPAT_TUGAS');
+  // Tempat tugas dikosongkan -> wilayah dari rumah ibadah ikut dilepas (app-admin.js).
+  if (typeof terapkanWilayahTugas === 'function') terapkanWilayahTugas('', '');
 }
 
 function bukaUlangModalRumahIbadah() {

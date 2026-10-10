@@ -297,6 +297,7 @@ btnResetForm.addEventListener('click', () => {
     if (hiddenJenis) hiddenJenis.value = "";
     resetSemuaStatusKoordinat();
     bukaKunciTempatTugas();
+    if (typeof resetWilayahTugasDanDomisili === 'function') resetWilayahTugasDanDomisili();
     resetKonfirmasiNamaBeda();
     evaluasiUploadKondisional();
     sembunyikanPeringatan('peringatan-nik');
@@ -321,6 +322,7 @@ function simpanDrafLokalForm() {
     const elAlamat = document.getElementById('input-alamat');
     const elKecDom = document.getElementById('input-kecamatan');
     const elKelDom = document.getElementById('input-kelurahan');
+    const elKelTugas = document.getElementById('input-kelurahan-tugas');
     const elNamaRek = document.getElementById('input-nama-rek');
     const elCabang = document.getElementById('input-cabang-bank');
     const elBpjs = document.getElementById('input-bpjs');
@@ -337,7 +339,12 @@ function simpanDrafLokalForm() {
       inputTglLahir: inputTglLahir ? inputTglLahir.value : '',
       inputUmur: inputUmur ? inputUmur.value : '',
       inputKecamatanDomisili: elKecDom ? elKecDom.value : '',
-      controlKelurahan: elKelDom ? elKelDom.value : '',
+      // Draf versi lama menyimpan kelurahan DOMISILI di kunci `controlKelurahan` -- kunci itu sengaja
+      // tidak dipakai lagi supaya artinya tidak tertukar dengan kelurahan wilayah tugas.
+      inputKelurahanDomisili: elKelDom ? elKelDom.value : '',
+      domisiliDiubahPengguna: !!(elKecDom && elKecDom.dataset.diubahPengguna),
+      kelurahanTugas: elKelTugas ? elKelTugas.value : '',
+      wilayahTugasRI: (typeof wilayahTugasDariRI !== 'undefined' && wilayahTugasDariRI) ? wilayahTugasDariRI : null,
       inputAlamat: elAlamat ? elAlamat.value : '',
       inputNamaRekening: elNamaRek ? elNamaRek.value : '',
       inputNoRekening: inputNoRek ? inputNoRek.value : '',
@@ -391,6 +398,15 @@ function pulihkanDrafLokalForm() {
       if (draf.inputAlamatTugas && inputAlamatTugas) inputAlamatTugas.value = draf.inputAlamatTugas;
       // Layanan wajib-pilih: nilai draf berasal dari pilihan pop up, jadi kolom dikunci lagi.
       if (inputTempatTugas.value && inputAlamatTugas.value && layananHarusPilihTempat()) kunciTempatTugas();
+      // Wilayah tugas: dari rumah ibadah yang dipilih (draf baru), atau kelurahan pilihan manual.
+      // Draf versi lama tidak punya keduanya -> kelurahan tugas dipilih ulang oleh pengguna.
+      const elKelTugasDraf = document.getElementById('input-kelurahan-tugas');
+      if (elKelTugasDraf && draf.kelurahanTugas) elKelTugasDraf.dataset.nilaiDiinginkan = draf.kelurahanTugas;
+      if (draf.wilayahTugasRI && draf.wilayahTugasRI.kecamatan && inputTempatTugas.value) {
+        terapkanWilayahTugas(draf.wilayahTugasRI.kecamatan, draf.wilayahTugasRI.kelurahan);
+      } else {
+        aturKelurahanTugas();
+      }
       const elNama = document.getElementById('input-nama');
       if (draf.inputNama && elNama) elNama.value = draf.inputNama;
       if (draf.inputNik && inputNik) inputNik.value = draf.inputNik;
@@ -406,15 +422,15 @@ function pulihkanDrafLokalForm() {
         inputTglLahir.dispatchEvent(new Event('input'));
         inputTglLahir.dispatchEvent(new Event('change'));
       }
+      // Domisili. Draf versi lama menyimpan kelurahan domisili di `controlKelurahan`.
       const elKecDom = document.getElementById('input-kecamatan');
+      const elKelDom = document.getElementById('input-kelurahan');
       if (draf.inputKecamatanDomisili && elKecDom) {
         elKecDom.value = draf.inputKecamatanDomisili;
-        elKecDom.dispatchEvent(new Event('change'));
+        if (draf.domisiliDiubahPengguna) elKecDom.dataset.diubahPengguna = '1';
+        const kelDomDraf = draf.inputKelurahanDomisili !== undefined ? draf.inputKelurahanDomisili : draf.controlKelurahan;
+        isiSelectKelurahan(elKelDom, draf.inputKecamatanDomisili, kelDomDraf || '');
       }
-      setTimeout(function () {
-        const elKelDom = document.getElementById('input-kelurahan');
-        if (draf.controlKelurahan && elKelDom) elKelDom.value = draf.controlKelurahan;
-      }, 300);
       const elAlamat = document.getElementById('input-alamat');
       if (draf.inputAlamat && elAlamat) elAlamat.value = draf.inputAlamat;
       const elNamaRek = document.getElementById('input-nama-rek');
@@ -743,7 +759,9 @@ async function kumpulkanDataForm() {
     inputUmur: val('inputUmur'),
     inputAlamat: val('inputAlamat'),
     controlKecamatan: document.getElementById('control-kecamatan') ? document.getElementById('control-kecamatan').value : "",
-    controlKelurahan: val('controlKelurahan'),
+    controlKelurahan: val('controlKelurahan'), // kelurahan WILAYAH TUGAS (bagian A)
+    inputKecamatanDomisili: val('inputKecamatanDomisili'),
+    inputKelurahanDomisili: val('inputKelurahanDomisili'),
     inputNamaRekening: val('inputNamaRekening'),
     inputNoRekening: val('inputNoRekening'),
     inputKantorCabang: val('inputKantorCabang'),
@@ -953,7 +971,7 @@ function prosesValidasiDanSimpan() {
       sembunyiLoading();
       tampilkanToast(pesanErrorRamah(err), 'gagal', { durasi: 6000 });
     })
-    .validasiDataBaru(dataPengguna.token, inputNik.value, selectLayanan.value, inputTempatTugas.value, instansiAktif, inputNoRek.value, document.getElementById('control-kecamatan').value, document.getElementById('input-almt-tugas').value);
+    .validasiDataBaru(dataPengguna.token, inputNik.value, selectLayanan.value, inputTempatTugas.value, instansiAktif, inputNoRek.value, document.getElementById('control-kecamatan').value, document.getElementById('input-almt-tugas').value, document.getElementById('input-kelurahan-tugas').value);
 }
 
 // Cek Kesesuaian Nama Rekening
@@ -1081,6 +1099,22 @@ formPembayaran.addEventListener('submit', (e) => {
   // Validasi lokal cepat sebelum tampilkan modal
   const kecVal = document.getElementById('control-kecamatan').value;
   if (!kecVal) { tampilkanToast("Kecamatan lokasi tugas wajib dipilih!", "gagal"); document.getElementById('control-kecamatan').focus(); return; }
+  // Kelurahan tugas bisa terkunci (disabled) sehingga tidak ikut validasi bawaan browser -- cek manual.
+  const elKelTugas = document.getElementById('input-kelurahan-tugas');
+  if (!elKelTugas.value) {
+    tampilkanToast(elKelTugas.disabled && !inputTempatTugas.value.trim()
+      ? "Pilih tempat tugas (rumah ibadah) terlebih dahulu!"
+      : "Kelurahan wilayah tugas wajib dipilih!", "gagal");
+    (elKelTugas.disabled ? inputTempatTugas : elKelTugas).focus();
+    return;
+  }
+  const elKecDomisili = document.getElementById('input-kecamatan');
+  const elKelDomisili = document.getElementById('input-kelurahan');
+  if (!elKecDomisili.value || !elKelDomisili.value) {
+    tampilkanToast("Kecamatan dan kelurahan domisili wajib dipilih!", "gagal");
+    (elKecDomisili.value ? elKelDomisili : elKecDomisili).focus();
+    return;
+  }
   if (parseInt(inputUmur.value) < 18) { tampilkanToast("Umur di bawah 18 tahun!", "gagal"); inputTglLahir.focus(); return; }
   if (inputNik.value.length !== 16) { tampilkanToast("NIK wajib 16 digit!", "gagal"); inputNik.focus(); return; }
   if (inputNoRek.value.length !== 14) { tampilkanToast("No Rekening wajib 14 digit!", "gagal"); inputNoRek.focus(); return; }

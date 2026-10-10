@@ -507,7 +507,7 @@
                 class="hidden items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all duration-300 shadow-sm">
               </div>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Jenis Layanan Jasa <span class="text-red-500">*</span>
@@ -535,7 +535,7 @@
                 <p id="peringatan-tempat-tugas" class="hidden text-[11px] text-red-600 font-semibold mt-1"></p>
               </div>
 
-              <div class="sm:col-span-2 lg:col-span-1">
+              <div>
                 <label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                   Alamat Tempat Tugas <span class="text-red-500">*</span>
                 </label>
@@ -551,6 +551,19 @@
                   </svg>
                   <span class="underline">Ganti Pilihan</span>
                 </button>
+              </div>
+
+              <!-- Kelurahan wilayah tugas: dikirim sbg controlKelurahan (kolom penerima.kelurahan). Terisi
+                   otomatis dari rumah ibadah, atau dipilih manual untuk input tanpa rumah ibadah. -->
+              <div>
+                <label for="input-kelurahan-tugas" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Kelurahan Wilayah Tugas <span class="text-red-500">*</span>
+                </label>
+                <select name="controlKelurahan" id="input-kelurahan-tugas" disabled
+                  class="w-full py-2.5 px-3.5 bg-slate-100 border border-slate-300 rounded-xl text-sm font-medium uppercase text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs cursor-not-allowed transition"
+                  required>
+                  <option value="">-- PILIH TEMPAT TUGAS DULU --</option>
+                </select>
               </div>
             </div>
           </div>
@@ -622,7 +635,7 @@
               <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1.5">Kecamatan Domisili <span
                     class="text-red-500">*</span></label>
-                <select name="controlKecamatan" id="input-kecamatan"
+                <select name="inputKecamatanDomisili" id="input-kecamatan"
                   class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                   required>
                   <option value="">-- PILIH KECAMATAN DOMISILI --</option>
@@ -664,7 +677,7 @@
                 <div>
                   <label class="block text-xs font-medium text-slate-600 mb-1.5">Kelurahan Domisili <span
                       class="text-red-500">*</span></label>
-                  <select name="controlKelurahan" id="input-kelurahan"
+                  <select name="inputKelurahanDomisili" id="input-kelurahan"
                     class="w-full py-2.5 px-3.5 border border-slate-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 shadow-2xs transition"
                     required>
                     <option value="">-- Pilih Kelurahan --</option>
@@ -3474,9 +3487,9 @@
   <!-- ========================================================================= -->
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
-  <script src="/js/app-core.js?v=20271008e" defer></script>
-  <script src="/js/app-transaksi.js?v=20271008d" defer></script>
-  <script src="/js/app-admin.js?v=20271008" defer></script>
+  <script src="/js/app-core.js?v=20271010" defer></script>
+  <script src="/js/app-transaksi.js?v=20271010" defer></script>
+  <script src="/js/app-admin.js?v=20271010" defer></script>
   <script src="/js/app-kelola-data.js?v=20271007" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
   <script src="/js/app-kelola-ibadah.js?v=20271007" defer></script>

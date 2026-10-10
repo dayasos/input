@@ -1397,93 +1397,238 @@ function masukSetelahAuth(res, usernameFallback) {
   }
 })();
 
-// Dropdown Berjenjang
+// Dropdown Berjenjang -- Wilayah Tugas (bagian A) & Domisili (bagian B)
+//
+// Kolom kecamatan/kelurahan penerima = WILAYAH TUGAS (dasar kuota & hak akses); domisili disimpan
+// terpisah (inputKecamatanDomisili/inputKelurahanDomisili). Aturan kelurahan tugas:
+// - tempat tugas dipilih dari rumah ibadah -> kecamatan & kelurahan ikut rumah ibadah, terkunci;
+// - input langsung (RUMAH/LAINNYA/layanan tanpa data rumah ibadah) -> dipilih dari kelurahan di
+//   kecamatan tugas; akun kelurahan terkunci ke kelurahannya;
+// - layanan wajib pilih rumah ibadah & belum dipilih -> kosong, terkunci.
+// Server (wilayahTugas.ts) memeriksa ulang semua ini -- aturan di sini hanya kenyamanan pengguna.
+
+// Ambil daftar kelurahan suatu kecamatan (cache memori -> localStorage -> server), panggil cb(daftar|null).
+function muatDaftarKelurahan(kecamatan, cb) {
+  const kec = String(kecamatan || '').trim().toUpperCase();
+  if (!kec) { cb([]); return; }
+  let tersimpan = cacheKelurahanByKecamatan[kec];
+  if (!tersimpan) {
+    try {
+      const raw = localStorage.getItem('cache_kel_' + kec);
+      if (raw) tersimpan = JSON.parse(raw);
+    } catch (e) { }
+  }
+  if (tersimpan && tersimpan.data && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
+    cacheKelurahanByKecamatan[kec] = tersimpan;
+    cb(tersimpan.data);
+    return;
+  }
+  google.script.run
+    .withSuccessHandler(function (daftarKelurahan) {
+      const entri = { data: daftarKelurahan, waktu: Date.now() };
+      cacheKelurahanByKecamatan[kec] = entri;
+      try { localStorage.setItem('cache_kel_' + kec, JSON.stringify(entri)); } catch (e) { }
+      cb(daftarKelurahan);
+    })
+    .withFailureHandler(function (error) {
+      console.error("Gagal memuat kelurahan:", error);
+      cb(null);
+    })
+    .getKelurahanByKecamatan(dataPengguna.token, kec);
+}
+
+function setKunciSelect(el, terkunci) {
+  if (!el) return;
+  el.disabled = terkunci;
+  el.classList.toggle('bg-slate-100', terkunci);
+  el.classList.toggle('cursor-not-allowed', terkunci);
+  el.classList.toggle('bg-white', !terkunci);
+}
+
+// Isi <select> kelurahan dari daftar kecamatan `kec`, lalu pilih `nilai` (kalau ada di daftar;
+// `tambahJikaTidakAda` hanya untuk nilai dari rumah ibadah). selesai(adaDiDaftar) dipanggil setelahnya.
+// Permintaan usang (kecamatan berganti sebelum daftar datang) diabaikan lewat dataset.permintaan.
+function isiSelectKelurahan(el, kec, nilai, selesai, tambahJikaTidakAda) {
+  if (!el) return;
+  const kecUpper = String(kec || '').trim().toUpperCase();
+  const penanda = String(Date.now()) + Math.random();
+  el.dataset.permintaan = penanda;
+  if (!kecUpper) {
+    el.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
+    if (selesai) selesai(false);
+    return;
+  }
+  el.innerHTML = '<option value="">MENGAMBIL DATA KELURAHAN...</option>';
+  muatDaftarKelurahan(kecUpper, function (daftar) {
+    if (el.dataset.permintaan !== penanda) return;
+    if (daftar === null) {
+      el.innerHTML = '<option value="">GAGAL MEMUAT DATA</option>';
+    } else if (!daftar.length) {
+      el.innerHTML = '<option value="">DATA KELURAHAN TIDAK DITEMUKAN</option>';
+    } else {
+      el.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
+      daftar.forEach(function (kelurahan) {
+        const opt = document.createElement('option');
+        opt.value = opt.textContent = String(kelurahan).trim().toUpperCase();
+        el.appendChild(opt);
+      });
+    }
+    const ada = pilihOpsiKelurahan(el, nilai, tambahJikaTidakAda);
+    if (selesai) selesai(ada);
+  });
+}
+
+// Pilih nilai pada <select>. Kalau tidak ada di daftar: dengan `tambah` (nilai dari rumah ibadah, yang
+// ejaannya bisa beda dari tabel wilayah) ditambahkan sbg opsi agar terkirim apa adanya; tanpa `tambah`
+// dibiarkan kosong. Mengembalikan true bila nilai akhirnya terpilih.
+function pilihOpsiKelurahan(el, nilai, tambah) {
+  const v = String(nilai || '').trim().toUpperCase();
+  if (!v) { el.value = ''; return false; }
+  const ada = Array.from(el.options).some(function (o) { return o.value === v; });
+  if (!ada && !tambah) { el.value = ''; return false; }
+  if (!ada) {
+    const opt = document.createElement('option');
+    opt.value = opt.textContent = v;
+    el.appendChild(opt);
+  }
+  el.value = v;
+  return true;
+}
+
+// Wilayah tugas dari rumah ibadah yang dipilih (null = input langsung / belum dipilih).
+let wilayahTugasDariRI = null;
+
+// Atur ulang dropdown kelurahan tugas sesuai keadaan sekarang (lihat aturan di atas).
+function aturKelurahanTugas() {
+  const el = document.getElementById('input-kelurahan-tugas');
+  const elKec = document.getElementById('control-kecamatan');
+  if (!el || !elKec) return;
+  const kec = elKec.value;
+
+  // dataset.mode: 'RI' (dari rumah ibadah), 'TUNGGU' (belum pilih), 'MANUAL' (input langsung).
+  // Nilai sebelumnya hanya dibawa bila memang pilihan manual -- jangan sampai kelurahan rumah ibadah
+  // lama terbawa diam-diam ke input langsung.
+  const nilaiManualSebelumnya = el.dataset.mode === 'MANUAL' ? el.value : '';
+  const nilaiDraf = el.dataset.nilaiDiinginkan || ''; // dari pemulihan draf, sekali pakai
+  delete el.dataset.nilaiDiinginkan;
+
+  if (wilayahTugasDariRI && wilayahTugasDariRI.kelurahan) {
+    el.dataset.mode = 'RI';
+    isiSelectKelurahan(el, wilayahTugasDariRI.kecamatan, wilayahTugasDariRI.kelurahan, null, true);
+    setKunciSelect(el, true);
+    return;
+  }
+  const tempatKosong = !document.getElementById('input-tempat-tugas').value.trim();
+  if (!wilayahTugasDariRI && tempatKosong && typeof layananWajibPilihTempat === 'function' && layananWajibPilihTempat(selectLayanan.value)) {
+    el.dataset.mode = 'TUNGGU';
+    el.dataset.permintaan = '';
+    el.innerHTML = '<option value="">-- PILIH TEMPAT TUGAS DULU --</option>';
+    setKunciSelect(el, true);
+    return;
+  }
+  // Input langsung, atau rumah ibadah yang kelurahannya kosong di data: pilih manual dari kelurahan
+  // di kecamatan tugas. Akun kelurahan dikunci ke kelurahannya (hanya bila memang ada di daftar,
+  // sama seperti perilaku kunci lama).
+  el.dataset.mode = 'MANUAL';
+  const kelTerkunci = (dataPengguna && dataPengguna.kelurahanTerkunci) ? dataPengguna.kelurahanTerkunci.trim().toUpperCase() : '';
+  const nilaiLama = nilaiDraf || nilaiManualSebelumnya;
+  setKunciSelect(el, true);
+  isiSelectKelurahan(el, kec, kelTerkunci || nilaiLama, function (ada) {
+    setKunciSelect(el, !kec || (!!kelTerkunci && ada));
+  });
+}
+
+// Dipanggil isiTempatTugas(): simpan wilayah rumah ibadah (atau null utk input langsung), selaraskan
+// kecamatan tugas, lalu atur kelurahan tugas. Mengembalikan false bila rumah ibadah di luar wilayah akun.
+function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
+  const elKec = document.getElementById('control-kecamatan');
+  const kec = String(kecamatanRI || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const kel = String(kelurahanRI || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (!kec) {
+    wilayahTugasDariRI = null;
+    aturKelurahanTugas();
+    return true;
+  }
+  // Akun yang punya kecamatan (selain UTAMA) hanya boleh rumah ibadah di kecamatannya. Daftar pop up
+  // sudah difilter server, jadi ini pengaman tambahan; server menolak ulang saat simpan.
+  const kecAkun = (dataPengguna.role !== 'UTAMA' && dataPengguna.kecamatan) ? dataPengguna.kecamatan.trim().toUpperCase() : '';
+  if (kecAkun && kec !== kecAkun) {
+    tampilkanToast('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
+      ' -- di luar wilayah akun Anda (Kecamatan ' + kecAkun + ').', 'gagal', { durasi: 7000 });
+    return false;
+  }
+  // Akun kelurahan hanya boleh rumah ibadah di kelurahannya sendiri (daftar pop up juga sudah
+  // difilter server). Kelurahan tugas memakai ejaan kelurahan akun supaya data tetap tampil di
+  // Lihat Data akun itu; rumah ibadah tanpa kelurahan di data -> kelurahan tugas dikunci ke akun.
+  const kelAkun = (dataPengguna.kelurahanTerkunci || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  if (kelAkun && kel && kel !== kelAkun) {
+    tampilkanToast('Rumah ibadah ini tercatat di Kel. ' + kel +
+      ' -- di luar kelurahan akun Anda (Kelurahan ' + kelAkun + ').', 'gagal', { durasi: 7000 });
+    return false;
+  }
+  const kelTugas = kelAkun || kel;
+  if (elKec && elKec.value !== kec) {
+    const adaOpsi = Array.from(elKec.options).some(function (o) { return o.value === kec; });
+    if (!adaOpsi) {
+      // Ejaan kecamatan di data rumah ibadah tidak dikenali -> jangan simpan dgn kecamatan yang salah.
+      tampilkanToast('Kecamatan rumah ibadah ini (' + kec + ') tidak dikenali. Hubungi admin utama untuk memperbaiki data rumah ibadah.', 'gagal', { durasi: 7000 });
+      return false;
+    }
+    wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
+    elKec.value = kec;
+    elKec.dispatchEvent(new Event('change'));
+  }
+  wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
+  aturKelurahanTugas();
+  return true;
+}
+
 (function () {
-  const filterKecamatanAtas = document.getElementById('control-kecamatan');
-  const domisiliKecamatanForm = document.getElementById('input-kecamatan');
-  const domisiliKelurahanForm = document.getElementById('input-kelurahan');
+  const elKecTugas = document.getElementById('control-kecamatan');
+  const elKecDom = document.getElementById('input-kecamatan');
+  const elKelDom = document.getElementById('input-kelurahan');
 
-  if (filterKecamatanAtas) {
-    filterKecamatanAtas.addEventListener('change', function () {
-      const nilaiKecamatan = this.value.trim().toUpperCase();
-
-      if (!nilaiKecamatan) {
-        if (domisiliKecamatanForm) {
-          domisiliKecamatanForm.value = "";
-          domisiliKecamatanForm.disabled = false;
-          domisiliKecamatanForm.classList.remove('bg-slate-100', 'cursor-not-allowed');
-        }
-        if (domisiliKelurahanForm) {
-          domisiliKelurahanForm.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
-        }
-        return;
+  // Kecamatan tugas berubah -> kelurahan tugas dimuat ulang. Kecamatan domisili hanya diberi nilai
+  // awal = kecamatan tugas selama pengguna belum mengubahnya sendiri (domisili TIDAK dikunci).
+  if (elKecTugas) {
+    elKecTugas.addEventListener('change', function (e) {
+      const kec = this.value.trim().toUpperCase();
+      if (wilayahTugasDariRI && wilayahTugasDariRI.kecamatan !== kec) {
+        wilayahTugasDariRI = null;
+        // Pengguna sendiri mengganti kecamatan setelah memilih rumah ibadah (akun bebas/UTAMA):
+        // rumah ibadah itu tidak lagi sesuai kecamatan -> kosongkan supaya dipilih ulang.
+        if (e.isTrusted && typeof bukaKunciTempatTugas === 'function') bukaKunciTempatTugas();
       }
-
-      if (domisiliKecamatanForm) {
-        domisiliKecamatanForm.value = nilaiKecamatan;
-        domisiliKecamatanForm.disabled = true;
-        domisiliKecamatanForm.classList.add('bg-slate-100', 'cursor-not-allowed');
-      }
-
-      if (domisiliKelurahanForm) {
-        const isiDropdownKelurahan = function (daftarKelurahan) {
-          domisiliKelurahanForm.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
-          if (daftarKelurahan && daftarKelurahan.length > 0) {
-            daftarKelurahan.forEach(function (kelurahan) {
-              const opt = document.createElement('option');
-              const teksKapital = kelurahan.trim().toUpperCase();
-              opt.value = teksKapital;
-              opt.textContent = teksKapital;
-              domisiliKelurahanForm.appendChild(opt);
-            });
-
-            // Kunci kelurahan otomatis jika operator memiliki kelurahanTerkunci
-            if (dataPengguna && dataPengguna.kelurahanTerkunci) {
-              const kelTerkunci = dataPengguna.kelurahanTerkunci.trim().toUpperCase();
-              const cocok = Array.from(domisiliKelurahanForm.options).some(function (o) { return o.value === kelTerkunci; });
-              if (cocok) {
-                domisiliKelurahanForm.value = kelTerkunci;
-                domisiliKelurahanForm.disabled = true;
-                domisiliKelurahanForm.classList.add('bg-slate-100', 'cursor-not-allowed');
-                domisiliKelurahanForm.classList.remove('bg-white');
-              }
-            }
-          } else {
-            domisiliKelurahanForm.innerHTML = '<option value="">DATA KELURAHAN TIDAK DITEMUKAN</option>';
-          }
-        };
-
-        let tersimpan = cacheKelurahanByKecamatan[nilaiKecamatan];
-        if (!tersimpan) {
-          try {
-            const raw = localStorage.getItem('cache_kel_' + nilaiKecamatan);
-            if (raw) tersimpan = JSON.parse(raw);
-          } catch (e) { }
-        }
-        if (tersimpan && tersimpan.data && (Date.now() - tersimpan.waktu) < TTL_CACHE_MASTER_MS) {
-          cacheKelurahanByKecamatan[nilaiKecamatan] = tersimpan;
-          isiDropdownKelurahan(tersimpan.data);
-          return;
-        }
-
-        domisiliKelurahanForm.innerHTML = '<option value="">MENGAMBIL DATA KELURAHAN...</option>';
-
-        google.script.run
-          .withSuccessHandler(function (daftarKelurahan) {
-            const entri = { data: daftarKelurahan, waktu: Date.now() };
-            cacheKelurahanByKecamatan[nilaiKecamatan] = entri;
-            try { localStorage.setItem('cache_kel_' + nilaiKecamatan, JSON.stringify(entri)); } catch (e) { }
-            isiDropdownKelurahan(daftarKelurahan);
-          })
-          .withFailureHandler(function (error) {
-            console.error("Gagal memuat kelurahan:", error);
-            domisiliKelurahanForm.innerHTML = '<option value="">GAGAL MEMUAT DATA</option>';
-          })
-          .getKelurahanByKecamatan(dataPengguna.token, nilaiKecamatan);
+      aturKelurahanTugas();
+      if (elKecDom && !elKecDom.dataset.diubahPengguna) {
+        elKecDom.value = kec;
+        isiSelectKelurahan(elKelDom, kec, '');
       }
     });
   }
+
+  if (elKecDom) {
+    elKecDom.addEventListener('change', function (e) {
+      if (e.isTrusted) this.dataset.diubahPengguna = '1';
+      isiSelectKelurahan(elKelDom, this.value, '');
+    });
+  }
 })();
+
+// Setelah form direset / ganti instansi: lepas wilayah rumah ibadah, hapus tanda "domisili diubah
+// pengguna", dan kembalikan nilai awal domisili = kecamatan tugas.
+function resetWilayahTugasDanDomisili() {
+  wilayahTugasDariRI = null;
+  const elKecTugas = document.getElementById('control-kecamatan');
+  const elKecDom = document.getElementById('input-kecamatan');
+  const kec = elKecTugas ? elKecTugas.value.trim().toUpperCase() : '';
+  if (elKecDom) {
+    delete elKecDom.dataset.diubahPengguna;
+    elKecDom.value = kec;
+    isiSelectKelurahan(document.getElementById('input-kelurahan'), kec, '');
+  }
+  aturKelurahanTugas();
+}
 
 // Layanan Kecamatan & Kemenag
 const inputLayanan = document.getElementById('input-layanan');
@@ -1562,14 +1707,22 @@ if (inputLayanan) {
   });
 }
 
-// Helper Tempat Tugas
-function isiTempatTugas(nama, alamat) {
+// Helper Tempat Tugas. kecamatan/kelurahan = wilayah rumah ibadah yang dipilih (kosong untuk input
+// langsung RUMAH/LAINNYA). Mengembalikan false (tanpa mengisi apa pun) bila rumah ibadah di luar
+// wilayah akun.
+function isiTempatTugas(nama, alamat, kecamatan, kelurahan) {
+  if (!terapkanWilayahTugas(kecamatan, kelurahan)) return false;
   const inputTempat = document.getElementById('input-tempat-tugas');
   const inputAlmt = document.getElementById('input-almt-tugas');
   if (inputTempat) { inputTempat.value = nama; inputTempat.dispatchEvent(new Event('change')); }
   if (inputAlmt) { inputAlmt.value = alamat; inputAlmt.dispatchEvent(new Event('change')); }
 
   if (typeof kunciTempatTugas === 'function') kunciTempatTugas();
+
+  // Atur ulang kelurahan tugas SETELAH kolom tempat tugas terisi. Tanpa ini, input manual (GMM/Ustadz:
+  // RUMAH/LAINNYA) tetap terjebak di mode "PILIH TEMPAT TUGAS DULU" karena saat terapkanWilayahTugas
+  // dipanggil di atas, tempat tugas masih kosong.
+  aturKelurahanTugas();
 
   if (typeof jalankanCekTempatTugas === 'function') jalankanCekTempatTugas();
 }
@@ -1688,7 +1841,8 @@ function filterTable() {
 function pilihRI(index) {
   const nama = (dataCache[index][2] || '').trim().toUpperCase();
   const alamat = (dataCache[index][3] || '').trim().toUpperCase();
-  isiTempatTugas(nama, alamat);
+  // row[0]=kecamatan, row[1]=kelurahan rumah ibadah -> jadi wilayah tugas.
+  if (!isiTempatTugas(nama, alamat, dataCache[index][0], dataCache[index][1])) return;
   closeModal();
 }
 
@@ -1946,7 +2100,8 @@ function filterKemenagTable() {
 function pilihData(index) {
   const nama = (kemenagCache[index][2] || '').trim().toUpperCase();
   const alamat = (kemenagCache[index][3] || '').trim().toUpperCase();
-  isiTempatTugas(nama, alamat);
+  // row[0]=kecamatan, row[1]=kelurahan rumah ibadah -> jadi wilayah tugas.
+  if (!isiTempatTugas(nama, alamat, kemenagCache[index][0], kemenagCache[index][1])) return;
   const modalKemenag = document.getElementById('modal-kemenag');
   if (modalKemenag) modalKemenag.classList.add('hidden');
 }

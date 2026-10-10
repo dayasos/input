@@ -1,5 +1,10 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
+import type { DataSesi } from "../_shared/sesi.ts";
+import { rapikanTeks } from "../_shared/config.ts";
+// Catatan: akses.ts juga meng-import master.ts (siklus). Aman karena kelurahanTerkunciDari hanya
+// dipanggil di dalam fungsi (saat request), bukan saat modul dimuat.
+import { kelurahanTerkunciDari } from "../_shared/akses.ts";
 
 const JENIS_RUMAH_IBADAH_VALID = [
   "MASJID", "MUSHOLLA", "GEREJA", "GEREJA_KATOLIK", "VIHARA", "KLENTENG", "KUIL",
@@ -132,6 +137,20 @@ type BarisRumahIbadah = {
   alamat?: string;
 };
 
+// Akun kelurahan ("KELURAHAN X") hanya boleh memilih rumah ibadah di kelurahannya sendiri (keputusan
+// 2026-10-10) -- kalau tidak, data yang diinputnya tersimpan dgn kelurahan lain dan hilang dari Lihat
+// Data akun itu sendiri. Rumah ibadah yg kelurahannya kosong di data tetap tampil (kelurahan tugasnya
+// lalu dikunci ke kelurahan akun). Normalisasi sama dengan wilayahTugas.ts (rapikanTeks), yang juga
+// memeriksa ulang aturan ini saat simpan.
+function saringKelurahanAkun(sesi: DataSesi, rows: BarisRumahIbadah[]): BarisRumahIbadah[] {
+  const kelAkun = rapikanTeks(kelurahanTerkunciDari(sesi));
+  if (!kelAkun) return rows;
+  return rows.filter((r) => {
+    const kel = rapikanTeks(r.kelurahan);
+    return !kel || kel === kelAkun;
+  });
+}
+
 // Port 1:1 dari getDataRumahIbadah() — bentuk hasil TETAP array-of-array [kecamatan, kelurahan,
 // nama, alamat] (bukan objek) karena index.html membaca lewat row[0]/row[1]/row[2]/row[3]
 // (lihat renderTable() di index.html) — mengubah bentuk ini akan merusak modal pilih rumah ibadah.
@@ -162,6 +181,7 @@ export async function getDataRumahIbadah(token: string, kategori: string) {
       where jenis = ${jenis}
     `;
   }
+  rows = saringKelurahanAkun(sesi, rows);
   return rows.map((r) => [
     String(r.kecamatan || ""),
     String(r.kelurahan || ""),
@@ -211,6 +231,7 @@ export async function getKemenagData(token: string, sheetName: string) {
       where jenis = ${jenis}
     `;
   }
+  rows = saringKelurahanAkun(sesi, rows);
 
   return rows.map((r) => [
     String(r.kecamatan || ""),

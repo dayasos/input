@@ -77,12 +77,14 @@ export async function ambilDataDetail(token: string, tahun?: number) {
         insert into data_detail (
           tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
           alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
-          nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur
+          nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
+          kecamatan_domisili, kelurahan_domisili
         )
         select
           p.tahun, p.id, p.nama, p.nik, p.jenis_kelamin, p.tempat_lahir, p.tanggal_lahir,
           p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
-          p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur
+          p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur,
+          p.kecamatan_domisili, p.kelurahan_domisili
         from penerima p
         where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
         on conflict (tahun, penerima_id) do nothing

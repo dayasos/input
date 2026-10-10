@@ -11,6 +11,7 @@ import {
 } from "../_shared/akses.ts";
 import { cekAksesInputUser } from "./setelan.ts";
 import { cekKuotaTersedia } from "./validasi.ts";
+import { cariRumahIbadah, kelurahanAdaDiKecamatan, tentukanWilayahTugas } from "../_shared/wilayahTugas.ts";
 
 export async function ambilDataLihatDataHakAkses(token: string): Promise<string> {
   let sesi;
@@ -502,8 +503,19 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     const layanan = ((formObject.selectLayanan as string) || "").trim().toUpperCase();
     const tempatTugas = ((formObject.inputTempatTugas as string) || "").trim().toUpperCase();
     const alamatTugas = ((formObject.inputAlamatTugas as string) || "").trim().toUpperCase();
-    const kecamatan = ((formObject.controlKecamatan as string) || "").trim().toUpperCase();
-    const kelurahan = ((formObject.controlKelurahan as string) || "").trim().toUpperCase();
+    // let: ditimpa hasil tentukanWilayahTugas() di bawah (wilayah tugas yang sah).
+    let kecamatan = ((formObject.controlKecamatan as string) || "").trim().toUpperCase();
+    let kelurahan = ((formObject.controlKelurahan as string) || "").trim().toUpperCase();
+    // Formulir baru selalu mengirim field domisili (boleh kosong). Formulir lama (cache PWA)
+    // tidak mengirimnya sama sekali -- di formulir lama kecamatan domisili = salinan kecamatan
+    // tugas dan `controlKelurahan` = kelurahan domisili, jadi itulah default-nya.
+    const formulirPunyaDomisili = "inputKecamatanDomisili" in formObject;
+    let kecamatanDomisili = formulirPunyaDomisili
+      ? rapikanTeks(formObject.inputKecamatanDomisili)
+      : kecamatan;
+    let kelurahanDomisili = formulirPunyaDomisili
+      ? rapikanTeks(formObject.inputKelurahanDomisili)
+      : kelurahan;
     const namaRekening = ((formObject.inputNamaRekening as string) || "").trim().toUpperCase();
     const nomorRekening = String(formObject.inputNoRekening || "").trim();
     const kantorCabang = ((formObject.inputKantorCabang as string) || "").trim().toUpperCase();
@@ -570,6 +582,31 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
       return { sukses: false, pesan: "GAGAL: Data wajib tidak lengkap atau format NIK/Rekening salah." };
     }
 
+    // ── Wilayah tugas: kecamatan & kelurahan dari rumah ibadah / sesi login (lihat wilayahTugas.ts) ──
+    // Dijalankan SEBELUM cek kuota supaya kuota dihitung pada kecamatan tugas yang sah.
+    const wilayahTugas = await tentukanWilayahTugas({ sesi, layanan, tempatTugas, alamatTugas, kecamatan, kelurahan });
+    if (!wilayahTugas.ok) return { sukses: false, pesan: wilayahTugas.pesan };
+    kecamatan = wilayahTugas.kecamatan;
+    kelurahan = wilayahTugas.kelurahan;
+
+    // ── Domisili: kosong (formulir lama / tidak diisi) -> ikut wilayah tugas. Kewajiban mengisi
+    // ditegakkan formulir (required); server hanya memvalidasi pasangan yang benar-benar dikirim.
+    const domisiliDikirim = formulirPunyaDomisili && !!kecamatanDomisili && !!kelurahanDomisili;
+    if (formulirPunyaDomisili && !!kecamatanDomisili !== !!kelurahanDomisili) {
+      // Hanya separuh terisi (mis. daftar kelurahan gagal dimuat): tolak, jangan diam-diam diganti.
+      return { sukses: false, pesan: "GAGAL: Kecamatan dan kelurahan domisili wajib diisi lengkap." };
+    }
+    if (!kecamatanDomisili || !kelurahanDomisili) {
+      kecamatanDomisili = kecamatan;
+      kelurahanDomisili = kelurahan;
+    }
+    if (domisiliDikirim && !(await kelurahanAdaDiKecamatan(kecamatanDomisili, kelurahanDomisili))) {
+      return {
+        sukses: false,
+        pesan: "GAGAL: Kelurahan domisili " + kelurahanDomisili + " tidak berada di Kecamatan " + kecamatanDomisili + ".",
+      };
+    }
+
     // Validasi akhir secara paralel untuk efisiensi (tanpa full round-trip validasiDataBaru internal)
     const cekTempatTugasRelevan = LAYANAN_BATASI_TEMPAT_TUGAS.includes(layanan);
     const tempatTugasTarget = rapikanTeks(tempatTugas);
@@ -630,7 +667,8 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
               link_rekomendasi_bkm, link_rekomendasi_rumah_ibadah, link_domisili_rumah_ibadah,
               id_folder_berkas, link_koordinat_lokasi,
               status_verifikasi, catatan_perbedaan_nama,
-              dibuat_oleh_akun_id, sync_status
+              dibuat_oleh_akun_id, sync_status,
+              kecamatan_domisili, kelurahan_domisili
             ) values (
               ${TAHUN_AKTIF}, ${nomorUrut},
               ${nama}, ${nik}, ${jenisKelamin}, ${tempatLahir}, ${tanggalLahirISO}, ${alamat},
@@ -644,7 +682,8 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
               ${linkRekomendasiBkm}, ${linkRekomendasiRi}, ${linkDomisiliRumahIbadah},
               ${idFolderBerkas}, ${koordinatLink},
               'Proses Verifikasi', ${catatanPerbedaanNama},
-              ${sesi.akunId}, 'SUKSES'
+              ${sesi.akunId}, 'SUKSES',
+              ${kecamatanDomisili}, ${kelurahanDomisili}
             )
             returning id
           `;
@@ -822,6 +861,44 @@ export async function editDataPenerima(
           pesan: "GAGAL: " + tempatTugasBaruEdit + " sudah memiliki penerima untuk layanan " +
             layananSheet + " atas nama " + cekTempat[0].nama + ".",
         };
+      }
+    }
+
+    // ── Wilayah tugas saat edit (kecamatan tidak bisa diedit; hanya dicek bila tempat tugas /
+    // kelurahan BERUBAH, supaya edit kolom lain pada data lama tidak tiba-tiba gagal) ──
+    if (peranSesi !== "UTAMA") {
+      const kecBaris = rapikanTeks(rowLama.kecamatan);
+      const kelTerkunci = rapikanTeks(kelurahanTerkunciDari(sesi));
+      if (tempatBerubah) {
+        const lokasi = await cariRumahIbadah(tempatTugasBaruEdit, alamatTugasBaruEdit);
+        if (lokasi.length > 0 && !lokasi.some((l) => l.kecamatan === kecBaris)) {
+          return {
+            sukses: false,
+            pesan: "GAGAL: " + tempatTugasBaruEdit + " tercatat di Kec. " + lokasi[0].kecamatan +
+              ", Kel. " + lokasi[0].kelurahan + " -- berbeda dari kecamatan data ini (" + kecBaris + ").",
+          };
+        }
+        // Akun kelurahan: rumah ibadah baru wajib di kelurahannya sendiri (kelurahan kosong di data
+        // rumah ibadah tidak dianggap pelanggaran), sama seperti saat input.
+        const kelRumahIbadah = lokasi
+          .filter((l) => l.kecamatan === kecBaris && l.kelurahan)
+          .map((l) => l.kelurahan);
+        if (kelTerkunci && kelRumahIbadah.length > 0 && !kelRumahIbadah.includes(kelTerkunci)) {
+          return {
+            sukses: false,
+            pesan: "GAGAL: " + tempatTugasBaruEdit + " tercatat di Kel. " + kelRumahIbadah.join(" / ") +
+              " -- di luar kelurahan akun Anda (Kelurahan " + kelTerkunci + ").",
+          };
+        }
+      }
+      const kelBaruEdit = teks[11] !== undefined ? rapikanTeks(teks[11]) : "";
+      if (teks[11] !== undefined && kelBaruEdit !== rapikanTeks(rowLama.kelurahan)) {
+        if (kelTerkunci && kelBaruEdit !== kelTerkunci) {
+          return { sukses: false, pesan: "GAGAL: Akun Anda hanya berwenang mengisi data untuk Kelurahan " + kelTerkunci + "." };
+        }
+        if (!(await kelurahanAdaDiKecamatan(kecBaris, kelBaruEdit))) {
+          return { sukses: false, pesan: "GAGAL: Kelurahan " + kelBaruEdit + " tidak berada di Kecamatan " + kecBaris + "." };
+        }
       }
     }
 
