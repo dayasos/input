@@ -336,6 +336,16 @@
               </svg>
               <span>Data Ibadah</span>
             </button>
+            <!-- Retur terintegrasi (tahap uji, hanya UTAMA). Dikelola public/js/app-retur.js. Tombol "Retur & Kematian"
+                 di baris atas TETAP mengarah ke aplikasi Retur lama sampai go-live. -->
+            <button id="tab-retur"
+              class="utama-show bg-sky-600/80 hover:bg-sky-600 active:scale-95 border border-sky-500/50 text-white w-9 h-9 rounded-lg shadow-sm outline-none flex items-center justify-center shrink-0 transition"
+              title="Retur Pembayaran (tahap uji, Admin Utama)" aria-label="Retur Pembayaran (tahap uji)">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-sky-200 shrink-0" fill="none"
+                viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 14l-4-4m0 0l4-4m-4 4h11a4 4 0 010 8h-1" />
+              </svg>
+            </button>
           </div>
 
           <div class="utama-show hidden sm:block w-px h-5 bg-slate-700/80 mx-0.5 shrink-0"></div>
@@ -1558,6 +1568,9 @@
 
     <!-- Halaman "Data Ibadah" (Rumah Ibadah) -- khusus UTAMA. Dikelola oleh public/js/app-kelola-ibadah.js -->
     <section id="panel-kelola-ibadah" class="hidden"></section>
+
+    <!-- Halaman "Retur" (tahap uji, khusus UTAMA). Dirender oleh public/js/app-retur.js -->
+    <section id="panel-retur" class="hidden"></section>
   </main>
 
   <div id="modal-detail-penerima"
@@ -3493,6 +3506,7 @@
   <script src="/js/app-kelola-data.js?v=20271007" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
   <script src="/js/app-kelola-ibadah.js?v=20271007" defer></script>
+  <script src="/js/app-retur.js?v=20271011" defer></script>
   <script src="/js/modal-a11y.js?v=20271008" defer></script>
 
 </body>

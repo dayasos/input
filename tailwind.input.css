@@ -108,6 +108,13 @@ header button:focus-visible {
    outline: none !important;
 }
 
+.tab-retur-aktif {
+   background-color: #0284c7 !important;
+   border-color: #7dd3fc !important;
+   box-shadow: inset 0 0 0 1.5px #7dd3fc, 0 0 8px rgba(125, 211, 252, 0.5) !important;
+   outline: none !important;
+}
+
 /* Loading UI: skeleton, progress bar atas, overlay proses, spinner tombol */
 /* Skeleton shimmer: pengganti spinner untuk memuat konten */
 .skeleton {
