@@ -458,6 +458,21 @@ export function tglDDMMYYYYkeISO(tglStr: string): string | null {
 // Kontrak respons identik: { sukses, pesan } — tidak ada perubahan di frontend yang mengkonsumsi
 // respons ini (index.html baris sekitar 3100-3140 hanya cek sukses/pesan).
 // ---------------------------------------------------------------------------
+// Hasil yang tersimpan di idempotency_keys -> objek { sukses, pesan }. Menerima jsonb objek (benar) maupun
+// jsonb string (baris lama hasil double-encode); selain itu null supaya pemanggil lanjut proses normal.
+function hasilIdempotensiSebagaiObjek(nilai: unknown): { sukses: boolean; pesan: string } | null {
+  let h = nilai;
+  if (typeof h === "string") {
+    try {
+      h = JSON.parse(h);
+    } catch (_e) {
+      return null;
+    }
+  }
+  if (h && typeof h === "object" && "sukses" in h) return h as { sukses: boolean; pesan: string };
+  return null;
+}
+
 export async function simpanDataKeSheet(token: string, formObject: Record<string, unknown>) {
   let sesi;
   try {
@@ -481,8 +496,11 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
         SELECT result FROM idempotency_keys WHERE key = ${idempotencyKey} LIMIT 1
       `;
       if (existing.length > 0) {
-        // Sudah pernah diproses — kembalikan hasil asli tanpa tulis ulang.
-        return existing[0].result as { sukses: boolean; pesan: string };
+        // Sudah pernah diproses — kembalikan hasil asli tanpa tulis ulang. Baris yang ditulis versi
+        // lama berupa jsonb STRING (double-encode, lihat catatan di penulisan bawah) -> di-parse dulu,
+        // karena frontend membaca response.sukses dan string tidak punya properti itu.
+        const hasilTersimpan = hasilIdempotensiSebagaiObjek(existing[0].result);
+        if (hasilTersimpan) return hasilTersimpan;
       }
     } catch (_errIdempotency) {
       // Jika tabel belum ada / error DB sementara, lanjutkan proses normal (fail-open).
@@ -708,10 +726,13 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     const hasilSimpan = { sukses: true, pesan: "Data dan berkas berhasil disimpan ke Database!" };
 
     // Simpan idempotency key agar retry berikutnya (jika koneksi tadi putus) langsung beri tahu sukses.
+    // PENTING: pakai sql.json(), JANGAN `${JSON.stringify(x)}::jsonb` -- postgres.js menyerialkan parameter
+    // bertipe jsonb dengan JSON.stringify lagi, sehingga yang tersimpan adalah jsonb STRING ("{\"sukses\":..}")
+    // dan saat retry hasilnya kembali sebagai teks, bukan objek (frontend lalu menampilkan "Gagal menyimpan").
     if (idempotencyKey) {
       try {
         await sql`
-          INSERT INTO idempotency_keys (key, result) VALUES (${idempotencyKey}, ${JSON.stringify(hasilSimpan)}::jsonb)
+          INSERT INTO idempotency_keys (key, result) VALUES (${idempotencyKey}, ${sql.json(hasilSimpan)})
           ON CONFLICT (key) DO NOTHING
         `;
       } catch (_e) {
