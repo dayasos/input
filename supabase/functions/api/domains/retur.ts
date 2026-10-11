@@ -56,16 +56,46 @@ async function buatPenyaringAkses(sesi: SesiLogin) {
     });
 }
 
-function tahunValid(tahun?: number): number {
+export function tahunValid(tahun?: number): number {
   const t = Number(tahun) || TAHUN_AKTIF;
   if (!Number.isInteger(t) || t < 2000 || t > 2100) throw new Error("Tahun tidak valid.");
   return t;
 }
 
-function bulanValid(bulan?: string): string {
+export function bulanValid(bulan?: string): string {
   const b = String(bulan || "").trim().toUpperCase();
   if (!(BULAN as readonly string[]).includes(b)) throw new Error("Bulan tidak valid.");
   return b;
+}
+
+// Teks kolom "STATUS SETELAH PERBAIKAN" di tabel/Excel Retur -- format sama dengan log Retur lama:
+// "[dd/MM/yy HH:mm - PETUGAS: STATUS]" (waktu WIB); kendala memakai kata KENDALA sebagai pengganti petugas;
+// belum diproses = "BELUM DIUSULKAN UNTUK PERBAIKAN RETUR".
+export const TEKS_BELUM_DIUSULKAN = "BELUM DIUSULKAN UNTUK PERBAIKAN RETUR";
+
+function waktuLog(nilai: unknown): string {
+  const d = nilai instanceof Date ? nilai : new Date(String(nilai));
+  if (isNaN(d.getTime())) return "";
+  const bagian = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta", day: "2-digit", month: "2-digit", year: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(d);
+  const ambil = (tipe: string) => bagian.find((p) => p.type === tipe)?.value ?? "";
+  return `${ambil("day")}/${ambil("month")}/${ambil("year")} ${ambil("hour")}:${ambil("minute")}`;
+}
+
+export function teksStatusSetelahPerbaikan(
+  statusKerja: string | null, kendala: string | null, nomorPerbaikan: number | null,
+  diubahAt: unknown, petugas: string | null,
+): string {
+  if (!statusKerja) return TEKS_BELUM_DIUSULKAN;
+  const tgl = waktuLog(diubahAt);
+  const oleh = (petugas || "").toString().trim().toUpperCase();
+  if (statusKerja === "KENDALA") return `[${tgl} - KENDALA: ${kendala || ""}]`;
+  if (statusKerja === "PROSES PEMBAYARAN") {
+    return `[${tgl} - ${oleh}: PROSES PEMBAYARAN${nomorPerbaikan != null ? ` (Ke-${nomorPerbaikan})` : ""}]`;
+  }
+  return `[${tgl} - ${oleh}: ${statusKerja}]`;
 }
 
 function statusTampil(statusKerja: string | null, kendala: string | null): string {
@@ -127,10 +157,14 @@ export async function returDaftarBulan(token: string, tahun: number | undefined,
     const rows = await sql`
       select r.data_detail_id, r.nama_rekening, r.nik, r.jenis_kelamin, r.alamat, r.layanan,
              r.nomor_rekening, r.kecamatan, r.kelurahan, r.no_kontak, d.tempat_tugas,
-             p.nomor_perbaikan, p.status_kerja, p.kendala, p.diubah_at
+             p.nomor_perbaikan, p.status_kerja, p.kendala, p.diubah_at,
+             h.oleh_nama as oleh_terakhir
       from retur_daftar r
       join data_detail d on d.id = r.data_detail_id and d.tahun = r.tahun
       left join retur_proses p on p.tahun = r.tahun and p.bulan = r.bulan and p.data_detail_id = r.data_detail_id
+      left join lateral (
+        select oleh_nama from retur_riwayat where proses_id = p.id order by waktu desc, id desc limit 1
+      ) h on true
       where r.tahun = ${t} and r.bulan = ${b}
       order by r.layanan, r.kecamatan, r.kelurahan, r.nama_rekening
     `;
@@ -153,6 +187,7 @@ export async function returDaftarBulan(token: string, tahun: number | undefined,
         statusKerja: r.status_kerja ?? null,
         kendala: r.kendala ?? null,
         statusTampil: statusTampil(r.status_kerja, r.kendala),
+        statusSetelahPerbaikan: teksStatusSetelahPerbaikan(r.status_kerja, r.kendala, r.nomor_perbaikan, r.diubah_at, r.oleh_terakhir),
         diubahAt: r.diubah_at ?? null,
       });
     }

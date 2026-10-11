@@ -31,6 +31,7 @@ import {
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
 import { returCari, returDaftarBulan, returRingkasan } from "./domains/retur.ts";
+import { returDaftarImpor, returImporBank, returUnduhExcelBulan, returUnduhExcelTidakDitemukan } from "./domains/returAdmin.ts";
 import {
   konfirmasiUploadBerkas,
   mintaUrlUploadBerkas,
@@ -122,6 +123,10 @@ const ALLOWED: Record<string, Handler> = {
   returRingkasan,
   returDaftarBulan,
   returCari,
+  returImporBank,
+  returDaftarImpor,
+  returUnduhExcelBulan,
+  returUnduhExcelTidakDitemukan,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
   ambilTahunTersedia,
