@@ -1497,6 +1497,7 @@ function pilihOpsiKelurahan(el, nilai, tambah) {
 
 // Wilayah tugas dari rumah ibadah yang dipilih (null = input langsung / belum dipilih).
 let wilayahTugasDariRI = null;
+let idToastPenolakanWilayah = null; // lihat tolakWilayah()
 
 // Atur ulang dropdown kelurahan tugas sesuai keadaan sekarang (lihat aturan di atas).
 function aturKelurahanTugas() {
@@ -1553,18 +1554,16 @@ function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
   // sudah difilter server, jadi ini pengaman tambahan; server menolak ulang saat simpan.
   const kecAkun = (dataPengguna.role !== 'UTAMA' && dataPengguna.kecamatan) ? dataPengguna.kecamatan.trim().toUpperCase() : '';
   if (kecAkun && kec !== kecAkun) {
-    tampilkanToast('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
-      ' -- di luar wilayah akun Anda (Kecamatan ' + kecAkun + ').', 'gagal', { durasi: 7000 });
-    return false;
+    return tolakWilayah('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
+      ' -- di luar wilayah akun Anda (Kecamatan ' + kecAkun + ').', 7000);
   }
   // Akun kelurahan hanya boleh rumah ibadah di kelurahannya sendiri (daftar pop up juga sudah
   // difilter server). Kelurahan tugas memakai ejaan kelurahan akun supaya data tetap tampil di
   // Lihat Data akun itu; rumah ibadah tanpa kelurahan di data -> kelurahan tugas dikunci ke akun.
   const kelAkun = (dataPengguna.kelurahanTerkunci || '').trim().toUpperCase().replace(/\s+/g, ' ');
   if (kelAkun && kel && kel !== kelAkun) {
-    tampilkanToast('Rumah ibadah ini tercatat di Kel. ' + kel +
-      ' -- di luar kelurahan akun Anda (Kelurahan ' + kelAkun + ').', 'gagal', { durasi: 7000 });
-    return false;
+    return tolakWilayah('Rumah ibadah ini tercatat di Kel. ' + kel +
+      ' -- di luar kelurahan akun Anda (Kelurahan ' + kelAkun + ').', 7000);
   }
   const kelTugas = kelAkun || kel;
   if (elKec && elKec.value !== kec) {
@@ -1573,16 +1572,14 @@ function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
     // bebas yang kecamatannya mengikuti rumah ibadah (aturan PDF); selain itu (UTAMA, GMM se-kota) ditolak,
     // jangan diam-diam mengubah kecamatan yang sudah dipilih.
     if (dipilih && !isRoleKemenagBebas(dataPengguna.role)) {
-      tampilkanToast('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
+      return tolakWilayah('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
         ', sedangkan Kecamatan Lokasi Tugas yang Anda pilih adalah ' + dipilih + '. Pilih rumah ibadah di ' +
-        dipilih + ', atau ubah Kecamatan Lokasi Tugas terlebih dahulu.', 'gagal', { durasi: 8000 });
-      return false;
+        dipilih + ', atau ubah Kecamatan Lokasi Tugas terlebih dahulu.', 8000);
     }
     const adaOpsi = Array.from(elKec.options).some(function (o) { return o.value === kec; });
     if (!adaOpsi) {
       // Ejaan kecamatan di data rumah ibadah tidak dikenali -> jangan simpan dgn kecamatan yang salah.
-      tampilkanToast('Kecamatan rumah ibadah ini (' + kec + ') tidak dikenali. Hubungi admin utama untuk memperbaiki data rumah ibadah.', 'gagal', { durasi: 7000 });
-      return false;
+      return tolakWilayah('Kecamatan rumah ibadah ini (' + kec + ') tidak dikenali. Hubungi admin utama untuk memperbaiki data rumah ibadah.', 7000);
     }
     wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
     elKec.value = kec;
@@ -1591,9 +1588,22 @@ function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
       tampilkanToast('Kecamatan Lokasi Tugas diubah dari ' + dipilih + ' ke ' + kec + ' mengikuti rumah ibadah yang dipilih.', 'info', { durasi: 6000 });
     }
   }
+  tutupToastPenolakanWilayah(); // pilihan yang benar sudah diterima: hapus pesan penolakan sebelumnya
   wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
   aturKelurahanTugas();
   return true;
+}
+
+// Pesan penolakan pilihan rumah ibadah: hanya satu yang tampil, dan ditutup begitu pilihan yang benar diterima
+// (supaya pesan merah tidak menempel padahal pilihan sudah berhasil).
+function tolakWilayah(pesan, durasi) {
+  tutupToastPenolakanWilayah();
+  idToastPenolakanWilayah = tampilkanToast(pesan, 'gagal', { durasi: durasi });
+  return false;
+}
+function tutupToastPenolakanWilayah() {
+  if (idToastPenolakanWilayah && typeof tutupToast === 'function') tutupToast(idToastPenolakanWilayah);
+  idToastPenolakanWilayah = null;
 }
 
 (function () {
