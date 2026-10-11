@@ -12,13 +12,25 @@ import type { DataSesi } from "./sesi.ts";
 //   kecamatan lain. Batasan hanya di tingkat kecamatan -- kelurahan rumah ibadah TIDAK dibatasi.
 // - Tidak cocok (RUMAH / LAINNYA / layanan tanpa data rumah ibadah): kecamatan dari sesi login
 //   (kalau akunnya punya), kelurahan harus ada di kecamatan itu dan terkunci untuk akun kelurahan.
-// - Akun UTAMA tidak terkena aturan ini.
+// - Akun UTAMA tidak dibatasi wilayah, tapi kecamatan yang DIPILIH harus sama dengan kecamatan
+//   rumah ibadah (tidak diam-diam diganti; keputusan 2026-10-11).
 //
 // "Terikat" di sini = akun punya kecamatan di sesi. Sama dengan syarat yang sudah dipakai
-// simpanDataKeSheet ("kecSesi && kecamatan !== kecSesi" -> tolak), jadi akun Kemenag bebas &
-// GMM se-Kota Medan (kecamatan kosong) otomatis tidak dibatasi wilayah.
+// simpanDataKeSheet ("kecSesi && kecamatan !== kecSesi" -> tolak). Akun tanpa kecamatan:
+// - Kemenag bebas (LAYANAN_KEMENAG_BEBAS): kecamatan MENGIKUTI rumah ibadah (aturan PDF).
+// - Selain itu (UTAMA, GMM se-Kota Medan): kecamatan yang dipilih harus sama dengan rumah ibadah.
 // Penolakan di formulir saja bisa dilewati -- pemeriksaan di server ini yang wajib.
 // ---------------------------------------------------------------------------
+
+// Layanan Kemenag yang TIDAK terikat kecamatan: kecamatan tugas mengikuti rumah ibadah yang dipilih.
+// Sama dengan ROLE_KEMENAG_BEBAS di public/js/app-core.js -- jaga tetap sinkron.
+export const LAYANAN_KEMENAG_BEBAS = [
+  "GURU SEKOLAH BUDDHA",
+  "GURU SEKOLAH HINDU",
+  "GURU SEKOLAH KONG HU CHU",
+  "GURU SEKOLAH MINGGU",
+  "PENATUA GEREJA",
+];
 
 // Layanan yang tempat tugasnya WAJIB rumah ibadah terdaftar (tidak punya opsi RUMAH/LAINNYA di
 // formulir). Sama dengan kategoriModal (app-admin.js) + Kemenag bebas (ROLE_KEMENAG_BEBAS di
@@ -104,9 +116,24 @@ export async function tentukanWilayahTugas(params: {
   const kecSesi = rapikanTeks(sesi.kecamatan);
   const kelTerkunci = rapikanTeks(kelurahanTerkunciDari(sesi));
 
-  if (peran === "UTAMA") return { ok: true, kecamatan: kecKirim, kelurahan: kelKirim, dariRumahIbadah: false };
-
   const lokasi = await cariRumahIbadah(params.tempatTugas, params.alamatTugas);
+
+  // Tolak bila kecamatan yang DIPILIH petugas berbeda dari kecamatan rumah ibadah (lihat catatan atas).
+  const tolakBedaKecamatan = (): HasilWilayahTugas | null => {
+    if (!kecKirim || lokasi.length === 0) return null;
+    if (unik(lokasi.map((l) => l.kecamatan)).includes(kecKirim)) return null;
+    const l = lokasi[0];
+    return {
+      ok: false,
+      pesan: "GAGAL: " + rapikanTeks(params.tempatTugas) + " tercatat di Kec. " + l.kecamatan + ", Kel. " + l.kelurahan +
+        ", sedangkan Kecamatan Lokasi Tugas yang dipilih adalah " + kecKirim + ". Pilih rumah ibadah di " + kecKirim +
+        ", atau ubah Kecamatan Lokasi Tugas terlebih dahulu.",
+    };
+  };
+
+  if (peran === "UTAMA") {
+    return tolakBedaKecamatan() ?? { ok: true, kecamatan: kecKirim, kelurahan: kelKirim, dariRumahIbadah: false };
+  }
 
   if (lokasi.length > 0) {
     const daftarKec = unik(lokasi.map((l) => l.kecamatan));
@@ -117,6 +144,11 @@ export async function tentukanWilayahTugas(params: {
         pesan: "GAGAL: " + rapikanTeks(params.tempatTugas) + " tercatat di Kec. " + l.kecamatan +
           ", Kel. " + l.kelurahan + " -- di luar wilayah akun Anda (Kecamatan " + kecSesi + ").",
       };
+    }
+    // Akun tanpa kecamatan yang BUKAN Kemenag bebas (mis. GMM se-Kota): kecamatan pilihan harus cocok.
+    if (!kecSesi && !LAYANAN_KEMENAG_BEBAS.includes(peran)) {
+      const tolak = tolakBedaKecamatan();
+      if (tolak) return tolak;
     }
     let kecTugas: string;
     if (kecSesi) kecTugas = kecSesi;

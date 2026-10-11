@@ -1568,6 +1568,16 @@ function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
   }
   const kelTugas = kelAkun || kel;
   if (elKec && elKec.value !== kec) {
+    const dipilih = elKec.value.trim().toUpperCase();
+    // Kecamatan lokasi tugas SUDAH dipilih petugas dan berbeda dari kecamatan rumah ibadah. Hanya Kemenag
+    // bebas yang kecamatannya mengikuti rumah ibadah (aturan PDF); selain itu (UTAMA, GMM se-kota) ditolak,
+    // jangan diam-diam mengubah kecamatan yang sudah dipilih.
+    if (dipilih && !isRoleKemenagBebas(dataPengguna.role)) {
+      tampilkanToast('Rumah ibadah ini tercatat di Kec. ' + kec + (kel ? ', Kel. ' + kel : '') +
+        ', sedangkan Kecamatan Lokasi Tugas yang Anda pilih adalah ' + dipilih + '. Pilih rumah ibadah di ' +
+        dipilih + ', atau ubah Kecamatan Lokasi Tugas terlebih dahulu.', 'gagal', { durasi: 8000 });
+      return false;
+    }
     const adaOpsi = Array.from(elKec.options).some(function (o) { return o.value === kec; });
     if (!adaOpsi) {
       // Ejaan kecamatan di data rumah ibadah tidak dikenali -> jangan simpan dgn kecamatan yang salah.
@@ -1577,6 +1587,9 @@ function terapkanWilayahTugas(kecamatanRI, kelurahanRI) {
     wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
     elKec.value = kec;
     elKec.dispatchEvent(new Event('change'));
+    if (dipilih) {
+      tampilkanToast('Kecamatan Lokasi Tugas diubah dari ' + dipilih + ' ke ' + kec + ' mengikuti rumah ibadah yang dipilih.', 'info', { durasi: 6000 });
+    }
   }
   wilayahTugasDariRI = { kecamatan: kec, kelurahan: kelTugas };
   aturKelurahanTugas();
@@ -1725,6 +1738,8 @@ function isiTempatTugas(nama, alamat, kecamatan, kelurahan) {
   aturKelurahanTugas();
 
   if (typeof jalankanCekTempatTugas === 'function') jalankanCekTempatTugas();
+  // Pemanggil (pilihRI/pilihData) menutup pop up HANYA bila hasilnya true -- jangan dihilangkan.
+  return true;
 }
 
 // Modal Kecamatan
@@ -1789,6 +1804,19 @@ function renderTable(data) {
     selectKel.innerHTML = '<option value="">-- PILIH KELURAHAN --</option>';
     selectKel.disabled = true;
   }
+
+  // Arahkan filter ke kecamatan lokasi tugas yang sudah dipilih (mencegah salah pilih rumah ibadah).
+  const awal = kecamatanAwalPopup(kecList);
+  if (selectKec && awal) { selectKec.value = awal; updateOldModalKelurahan(); }
+}
+
+// Kecamatan awal filter pop up rumah ibadah = Kecamatan Lokasi Tugas yang sudah dipilih, bila ada di daftar.
+// Kemenag bebas dikecualikan: kecamatannya justru mengikuti rumah ibadah yang dipilih.
+function kecamatanAwalPopup(kecList) {
+  if (isRoleKemenagBebas(dataPengguna.role)) return '';
+  const el = document.getElementById('control-kecamatan');
+  const k = el ? el.value.trim().toUpperCase() : '';
+  return k && kecList.indexOf(k) !== -1 ? k : '';
 }
 
 function updateOldModalKelurahan() {
@@ -2051,6 +2079,11 @@ function renderKemenagTable(data, contentArea) {
 
   tableHtml += `</tbody></table></div>`;
   contentArea.innerHTML = filterHtml + tableHtml;
+
+  // Arahkan filter ke kecamatan lokasi tugas yang sudah dipilih (lihat kecamatanAwalPopup).
+  const awal = kecamatanAwalPopup(kecList);
+  const selectKecAwal = document.getElementById('kemenag-filter-kec');
+  if (awal && selectKecAwal) { selectKecAwal.value = awal; updateKemenagKelurahanFilter(); }
 }
 
 function updateKemenagKelurahanFilter() {
