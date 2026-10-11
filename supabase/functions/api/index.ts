@@ -30,6 +30,7 @@ import {
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
+import { returCari, returDaftarBulan, returRingkasan } from "./domains/retur.ts";
 import {
   konfirmasiUploadBerkas,
   mintaUrlUploadBerkas,
@@ -118,6 +119,9 @@ const ALLOWED: Record<string, Handler> = {
   simpanDataKeSheet,
   editDataPenerima,
   ambilDataDetail,
+  returRingkasan,
+  returDaftarBulan,
+  returCari,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
   ambilTahunTersedia,
