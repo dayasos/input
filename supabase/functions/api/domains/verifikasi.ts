@@ -292,6 +292,11 @@ export async function getDaftarBerkasTidakLengkapUntukWA(token: string, kelompok
     `;
 
     const layananKemenag = new Set(await daftarLayananKemenagUpper());
+    // Daftar Kemenag kosong (master belum terisi/rusak) -> SEMUA baris akan terhitung Kecamatan dan data Kemenag
+    // bisa ikut terkirim ke grup yang salah. Lebih aman gagal dengan pesan jelas.
+    if (kelompokBersih && layananKemenag.size === 0) {
+      return { sukses: false, pesan: "Daftar layanan Kemenag di master kosong. Hubungi pengembang." };
+    }
     const kelompokBaris = (r: BarisBerkasTidakLengkap) =>
       layananKemenag.has((r.layanan || "").toString().trim().toUpperCase()) ? "KEMENAG" : "KECAMATAN";
 

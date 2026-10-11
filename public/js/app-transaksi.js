@@ -3156,6 +3156,12 @@ function pasangTombolSalinWa(idTombol, kelompok, namaKelompok) {
       .withSuccessHandler(function (res) {
         pulihkanTombol(btn);
         if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
+        // Server versi lama mengabaikan `kelompok` dan mengembalikan SEMUA data (tanpa field kelompok). Tolak, supaya
+        // data layanan lain tidak ikut tersalin dan terkirim ke grup WA yang salah selama server belum diperbarui.
+        if (res.kelompok !== kelompok) {
+          tampilkanToast('Server belum diperbarui untuk fitur ini. Muat ulang halaman, atau hubungi pengembang bila berlanjut.', 'gagal', { durasi: 6000 });
+          return;
+        }
         if (!res.data || res.data.length === 0) {
           tampilkanToast('Tidak ada data layanan ' + namaKelompok + ' berstatus "Berkas Tidak Lengkap" saat ini.', 'info');
           return;
