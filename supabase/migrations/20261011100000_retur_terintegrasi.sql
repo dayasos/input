@@ -12,6 +12,13 @@
 --  * Semua tabel: RLS aktif tanpa policy (akses hanya lewat Edge Function, service role).
 -- ============================================================
 
+-- Nama bulan seragam dengan `pembayaran_batch.bulan`; domain supaya salah ketik ditolak di database.
+do $$ begin
+  create domain bulan_retur as text check (value in (
+    'JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI',
+    'JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'));
+exception when duplicate_object then null; end $$;
+
 -- ---------- Referensi ----------
 create table if not exists ref_jenis_perbaikan (
   kode    text primary key,
@@ -45,7 +52,7 @@ on conflict (kode) do nothing;
 create table if not exists retur_impor (
   id                  bigserial primary key,
   tahun               int not null,
-  bulan               text not null,
+  bulan               bulan_retur not null,
   nama_file           text,
   jumlah_baris        int not null default 0,
   jumlah_cocok        int not null default 0,
@@ -59,7 +66,7 @@ create table if not exists retur_impor (
 create table if not exists retur_daftar (
   id               bigserial primary key,
   tahun            int not null,
-  bulan            text not null,
+  bulan            bulan_retur not null,
   data_detail_id   bigint not null,
   impor_id         bigint references retur_impor(id) on delete set null,
 
@@ -91,7 +98,7 @@ create table if not exists retur_rek_tidak_ditemukan (
 create table if not exists retur_laporan (
   id               bigserial primary key,
   tahun            int not null,
-  bulan            text not null,
+  bulan            bulan_retur not null,
   data_detail_id   bigint not null,
 
   nik              text not null,
@@ -121,7 +128,7 @@ create index if not exists ix_retur_laporan_bulan on retur_laporan (tahun, bulan
 create table if not exists retur_proses (
   id               bigserial primary key,
   tahun            int not null,
-  bulan            text not null,
+  bulan            bulan_retur not null,
   data_detail_id   bigint not null,
   laporan_id       bigint references retur_laporan(id) on delete set null,
 
@@ -142,7 +149,7 @@ create table if not exists retur_proses (
 -- Append-only: tiap perubahan proses menambah satu baris (tidak pernah di-update/delete).
 create table if not exists retur_riwayat (
   id               bigserial primary key,
-  proses_id        bigint not null references retur_proses(id) on delete cascade,
+  proses_id        bigint not null references retur_proses(id) on delete restrict,
   waktu            timestamptz not null default now(),
   oleh_akun_id     uuid references akun(id),
   oleh_nama        text,   -- salinan beku nama operator (tampil di log, tetap terbaca bila akun dihapus)
@@ -153,11 +160,23 @@ create table if not exists retur_riwayat (
 );
 create index if not exists ix_retur_riwayat_proses on retur_riwayat (proses_id, waktu);
 
+-- Penegak append-only: riwayat tidak boleh diubah atau dihapus (FK ke retur_proses `restrict`, jadi
+-- proses yang sudah punya riwayat pun tidak bisa dihapus). Koreksi dilakukan dengan menambah baris baru.
+create or replace function retur_riwayat_tolak_ubah() returns trigger
+language plpgsql as $$
+begin
+  raise exception 'retur_riwayat bersifat append-only: % tidak diizinkan', tg_op;
+end $$;
+drop trigger if exists trg_retur_riwayat_append_only on retur_riwayat;
+create trigger trg_retur_riwayat_append_only
+  before update or delete on retur_riwayat
+  for each row execute function retur_riwayat_tolak_ubah();
+
 -- ---------- Dokumen untuk Bendahara (snapshot beku, per versi) ----------
 create table if not exists retur_bendahara_batch (
   id                  bigserial primary key,
   tahun               int not null,
-  bulan               text not null,
+  bulan               bulan_retur not null,
   nomor_perbaikan     int not null,
   dibuat_oleh_akun_id uuid references akun(id),
   dibuat_at           timestamptz not null default now(),

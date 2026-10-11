@@ -22,6 +22,11 @@ export const BULAN = [
 
 type SesiLogin = Awaited<ReturnType<typeof wajibSesi>>;
 
+// Pencarian: tarik maksimum BATAS_TARIK_CARI baris mentah, saring akses, tampilkan paling banyak BATAS_HASIL_CARI.
+// Satu tahun hanya ±ribuan baris retur, jadi batas tarik besar tetap murah.
+const BATAS_TARIK_CARI = 5000;
+const BATAS_HASIL_CARI = 200;
+
 // Status kerja yang ditampilkan untuk penerima yang ada di daftar retur tapi belum diproses.
 const STATUS_BELUM = "BELUM DIUSULKAN";
 
@@ -177,11 +182,15 @@ export async function returCari(token: string, tahun: number | undefined, kata: 
       from retur_daftar r
       join data_detail d on d.id = r.data_detail_id and d.tahun = r.tahun
       left join retur_proses p on p.tahun = r.tahun and p.bulan = r.bulan and p.data_detail_id = r.data_detail_id
-      where r.tahun = ${t} and (r.nik = ${q} or r.nama_rekening ilike ${pola})
+      where r.tahun = ${t} and (r.nik = ${q} or r.nama_rekening ilike ${pola} or d.nama ilike ${pola})
       order by r.nik, r.dibuat_at
-      limit 200
+      limit ${BATAS_TARIK_CARI}
     `;
-    const diizinkan = rows.filter((r) => boleh(r));
+    // Batas hasil dikenakan SESUDAH saringan akses (bukan di SQL): kalau dipotong dulu di SQL, baris milik
+    // sesi ini bisa tergeser keluar oleh ratusan baris kecamatan lain dan pencarian tampak kosong.
+    const semua = rows.filter((r) => boleh(r));
+    const terpotong = semua.length > BATAS_HASIL_CARI;
+    const diizinkan = semua.slice(0, BATAS_HASIL_CARI);
 
     const idProses = diizinkan.map((r) => r.proses_id).filter((x) => x != null).map(Number);
     const riwayat = idProses.length
@@ -203,6 +212,7 @@ export async function returCari(token: string, tahun: number | undefined, kata: 
     return {
       sukses: true,
       tahun: t,
+      terpotong,
       rows: diizinkan.map((r) => ({
         dataDetailId: Number(r.data_detail_id),
         bulan: r.bulan,
