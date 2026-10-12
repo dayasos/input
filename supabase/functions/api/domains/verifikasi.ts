@@ -9,6 +9,7 @@ import {
   resolveInstansiPengguna,
   subFilterGsmDari,
 } from "../_shared/akses.ts";
+import { arsipkanDataDetail, pastikanDataDetailTersinkron } from "./dataDetail.ts";
 
 // ---------------------------------------------------------------------------
 // Pengganti LockService di seluruh domain ini: bukan advisory lock, tapi UPDATE ... WHERE
@@ -64,6 +65,13 @@ export async function verifikasiSatuData(
     const namaVerifikator = (sesi.username || "UTAMA").toString().toUpperCase();
     const statusDiharapkan = (statusSebelumnyaDiharapkan || "").toString().trim();
 
+    // Baca status sebelumnya SEBELUM UPDATE — dipakai untuk menentukan apakah perlu
+    // menghapus baris dari data_detail (saat Memenuhi Syarat → status lain).
+    const cekStatusAwal = await sql`
+      select status_verifikasi from penerima where id = ${id} and tahun = ${TAHUN_AKTIF} limit 1
+    `;
+    const statusSebelumnya = cekStatusAwal[0]?.status_verifikasi ?? "";
+
     // "$8 = '' OR status_verifikasi = $8": kalau statusDiharapkan kosong (tidak dikirim), tidak
     // ada pengecekan status sama sekali (perilaku asli: cek konflik cuma jalan kalau statusDiharapkan
     // diisi) — persis logika `if (statusDiharapkan && statusSaatIni !== statusDiharapkan)`.
@@ -92,6 +100,19 @@ export async function verifikasiSatuData(
         pesan: 'Data ini sudah diverifikasi/diubah oleh admin lain (status terkini: "' + statusTerkini +
           '"). Muat ulang data sebelum menyimpan lagi.',
       };
+    }
+
+    // Update berhasil — jika status berubah DARI "Memenuhi Syarat" ke status lain,
+    // arsipkan dan hapus baris dari data_detail (non-blocking: tidak boleh gagalkan respons).
+    if (statusSebelumnya === "Memenuhi Syarat" && statusBaru !== "Memenuhi Syarat") {
+      arsipkanDataDetail(
+        [id],
+        statusBaru,           // alasan: status baru yang dipilih admin
+        TAHUN_AKTIF,
+        namaVerifikator,
+      ).catch((e) => {
+        console.error("verifikasiSatuData: arsipkanDataDetail gagal (non-blocking):", e);
+      });
     }
 
     return {
@@ -210,6 +231,12 @@ export async function tandaiSudahDiperbaiki(token: string, nomorBarisAsli: numbe
           '"). Muat ulang data sebelum menyimpan lagi.',
       };
     }
+
+    // Status kembali ke Memenuhi Syarat — sinkronkan data_detail secara non-blocking
+    // agar baris tersedia segera (tidak menunggu user buka tombol Data Detail).
+    pastikanDataDetailTersinkron(TAHUN_AKTIF).catch((e) => {
+      console.error("tandaiSudahDiperbaiki: pastikanDataDetailTersinkron gagal (non-blocking):", e);
+    });
 
     return { sukses: true, status: "Memenuhi Syarat", tanggal: formatTanggalWaktuWIB(waktuVerifikasi), verifikator: namaVerifikator };
   } catch (error) {
@@ -356,6 +383,15 @@ export async function cekBatasWaktuVerifikasi() {
 
     const jumlahBerubah = rowsBerubah.length;
     const sekarang = new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" });
+
+    // Jika ada data yang berubah, jalankan sweep data_detail sebagai jaring pengaman
+    // (status Berkas Tidak Lengkap seharusnya sudah tidak ada di data_detail, tapi
+    // cron ini berjalan tanpa melewati verifikasiSatuData — pastikan konsistensi tetap terjaga).
+    if (jumlahBerubah > 0) {
+      pastikanDataDetailTersinkron(TAHUN_AKTIF).catch((e) => {
+        console.error("cekBatasWaktuVerifikasi: pastikanDataDetailTersinkron gagal (non-blocking):", e);
+      });
+    }
 
     return {
       sukses: true,

@@ -1,13 +1,14 @@
 import { sql } from "../_shared/db.ts";
 import { wajibSesi } from "../_shared/sesi.ts";
-import { TAHUN_AKTIF } from "../_shared/config.ts";
+import { SS_ID_PENYIMPANAN, TAHUN_AKTIF } from "../_shared/config.ts";
 import {
   kelurahanTerkunciDari,
   lolosAksesBarisLihatData,
   resolveInstansiPengguna,
   subFilterGsmDari,
 } from "../_shared/akses.ts";
-import { formatTanggalDDMMYYYY, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
+import { ambilAccessTokenGoogleSheets } from "../../_shared/googleAuth.ts";
+import { formatTanggalDDMMYYYY, formatTanggalWaktuWIB, tentukanTglStatusDataDetail } from "../_shared/tanggal.ts";
 
 // ---------------------------------------------------------------------------
 // Fitur "Data Detail" — dibangun ulang 2026-09-15 sebagai fitur murni Supabase (pengganti
@@ -46,6 +47,224 @@ import { formatTanggalDDMMYYYY, tentukanTglStatusDataDetail } from "../_shared/t
 // proses Pembayaran karena buatBatchPembayaran() (pembayaran.ts) selalu hardcode ke TAHUN_AKTIF,
 // tidak pernah baca tahun yang sedang dilihat di sini.
 const STATUS_LOLOS_DATA_DETAIL = ["Memenuhi Syarat", "AKTIF"];
+
+const NAMA_SHEET_ARSIP = "Arsip Data Detail";
+
+const HEADER_ARSIP_DATA_DETAIL = [
+  "ID", "TAHUN", "NAMA", "NIK", "JENIS KELAMIN", "TEMPAT LAHIR", "TANGGAL LAHIR",
+  "ALAMAT", "LAYANAN", "TEMPAT TUGAS", "ALAMAT TUGAS", "KECAMATAN", "KELURAHAN",
+  "NAMA REKENING", "NOMOR REKENING", "KANTOR CABANG", "NO KONTAK", "STATUS BPJS", "UMUR",
+  "STATUS (DATA DETAIL)", "WAKTU_ARSIP", "ALASAN", "DIARSIP_OLEH",
+];
+
+// ---------------------------------------------------------------------------
+// arsipkanDataDetail: backup baris ke sheet "Arsip Data Detail" di Google
+// Sheets lalu hapus dari tabel data_detail. Bersifat best-effort — kegagalan
+// backup ke Sheets TIDAK mencegah DELETE di DB (konsisten dengan pola
+// backup-spreadsheet yang juga non-blocking untuk log). Bisa dipanggil
+// dengan 1 ID atau banyak sekaligus.
+// ---------------------------------------------------------------------------
+export async function arsipkanDataDetail(
+  penerimaIds: number[],
+  alasan: string,
+  tahun: number,
+  diarsipOleh = "SISTEM",
+): Promise<{ sukses: boolean; jumlahDihapus: number; pesan?: string }> {
+  if (!penerimaIds || penerimaIds.length === 0) return { sukses: true, jumlahDihapus: 0 };
+
+  try {
+    // 1. Baca baris data_detail yang akan diarsipkan
+    const rows = await sql`
+      select id, penerima_id, tahun, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
+             alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan,
+             nama_rekening, nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk,
+             umur, status
+      from data_detail
+      where tahun = ${tahun} and penerima_id = any(${penerimaIds}::bigint[])
+    `;
+
+    if (rows.length === 0) {
+      // Tidak ada di data_detail — tidak perlu arsip, tapi bukan error
+      return { sukses: true, jumlahDihapus: 0 };
+    }
+
+    const waktuArsip = formatTanggalWaktuWIB(new Date().toISOString());
+
+    // 2. Format baris untuk dikirim ke Google Sheets
+    const barisArsip = rows.map((r: Record<string, unknown>) => [
+      r.id ?? "",
+      r.tahun ?? "",
+      String(r.nama || ""),
+      r.nik ? "'" + String(r.nik) : "",
+      String(r.jenis_kelamin || ""),
+      String(r.tempat_lahir || ""),
+      formatTanggalDDMMYYYY(r.tanggal_lahir as string),
+      String(r.alamat || ""),
+      String(r.layanan || ""),
+      String(r.tempat_tugas || ""),
+      String(r.alamat_tugas || ""),
+      String(r.kecamatan || ""),
+      String(r.kelurahan || ""),
+      String(r.nama_rekening || ""),
+      r.nomor_rekening ? "'" + String(r.nomor_rekening) : "",
+      String(r.kantor_cabang || ""),
+      r.no_kontak ? "'" + String(r.no_kontak) : "",
+      String(r.status_bpjs_tk || ""),
+      r.umur ?? "",
+      String(r.status || "AKTIF"),
+      waktuArsip,
+      alasan,
+      diarsipOleh,
+    ]);
+
+    // 3. Kirim ke Google Sheets (best-effort — gagal tidak batalkan DELETE)
+    try {
+      const accessToken = await ambilAccessTokenGoogleSheets();
+      const spreadsheetId = SS_ID_PENYIMPANAN;
+
+      // Pastikan tab arsip tersedia (auto-create)
+      const metaRes = await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(title)`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      if (metaRes.ok) {
+        const meta = await metaRes.json();
+        const sheetsAda = new Set(
+          ((meta?.sheets || []) as Array<{ properties?: { title?: string } }>)
+            .map((s) => s.properties?.title),
+        );
+        if (!sheetsAda.has(NAMA_SHEET_ARSIP)) {
+          await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`,
+            {
+              method: "POST",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ requests: [{ addSheet: { properties: { title: NAMA_SHEET_ARSIP } } }] }),
+            },
+          );
+          // Tulis baris header di tab baru
+          await fetch(
+            `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(NAMA_SHEET_ARSIP + "!A1")}?valueInputOption=USER_ENTERED`,
+            {
+              method: "PUT",
+              headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ values: [HEADER_ARSIP_DATA_DETAIL] }),
+            },
+          );
+        }
+      }
+
+      // Append baris arsip ke sheet
+      await fetch(
+        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(NAMA_SHEET_ARSIP + "!A:W")}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ values: barisArsip }),
+        },
+      );
+    } catch (errSheet) {
+      // Non-blocking: gagal kirim ke Sheets tidak batalkan penghapusan di DB
+      console.error("dataDetail arsipkanDataDetail: gagal backup ke Google Sheets:", errSheet);
+    }
+
+    // 4. Catat ke tabel log_arsip_data_detail — satu batch INSERT, bukan loop per baris
+    // (best-effort: gagal tidak batalkan DELETE, tapi tabel ini mungkin belum ada
+    //  sebelum migrasi dijalankan — error akan muncul di console log saja).
+    try {
+      if (rows.length === 1) {
+        const r = rows[0];
+        await sql`
+          insert into log_arsip_data_detail (penerima_id, tahun, nik, nama, alasan, diarsip_oleh)
+          values (${r.penerima_id as number}, ${tahun}, ${r.nik as string}, ${r.nama as string}, ${alasan}, ${diarsipOleh})
+        `;
+      } else {
+        // Batch: bangun VALUES list secara eksplisit karena sql tag tidak mendukung
+        // array-of-tuples secara native — loop singkat masih lebih aman daripada string concat.
+        for (const r of rows) {
+          await sql`
+            insert into log_arsip_data_detail (penerima_id, tahun, nik, nama, alasan, diarsip_oleh)
+            values (${r.penerima_id as number}, ${tahun}, ${r.nik as string}, ${r.nama as string}, ${alasan}, ${diarsipOleh})
+          `;
+        }
+      }
+    } catch (errLog) {
+      console.error("dataDetail arsipkanDataDetail: gagal insert log_arsip_data_detail:", errLog);
+    }
+
+    // 5. Hapus dari data_detail
+    await sql`
+      delete from data_detail
+      where tahun = ${tahun} and penerima_id = any(${penerimaIds}::bigint[])
+    `;
+
+    return { sukses: true, jumlahDihapus: rows.length };
+  } catch (err) {
+    console.error("dataDetail arsipkanDataDetail: gagal:", err);
+    return { sukses: false, jumlahDihapus: 0, pesan: String(err) };
+  }
+}
+/**
+ * Pastikan setiap penerima yang sudah lolos verifikasi punya baris di `data_detail` (idempoten: ON CONFLICT DO NOTHING).
+ * Dulu logika ini hanya jalan saat seseorang membuka tombol "Data Detail", sehingga penerima yang baru diverifikasi tidak
+ * ada di `data_detail` sampai saat itu -- dan fitur lain yang membaca data_detail (Retur: cari NIK, impor rekening bank)
+ * tidak menemukannya. Sekarang dapat dipanggil dari mana saja; pengecekan awal (anti-join) murah (±22 ms).
+ */
+export async function pastikanDataDetailTersinkron(tahun: number): Promise<void> {
+  const tahunDiminta = Number(tahun) || TAHUN_AKTIF;
+
+  // === Sweep: hapus baris data_detail yang statusnya sudah tidak lolos ===
+  // Jaring pengaman untuk inkonsistensi lama (sebelum arsipkanDataDetail diterapkan)
+  // maupun kasus edge (mis. perubahan status di luar verifikasiSatuData).
+  // Hanya berjalan untuk tahun aktif — arsip (2026 dst.) statusnya memang 'AKTIF',
+  // tidak ada alur yang mengubahnya ke non-lolos, jadi aman di-skip.
+  if (tahunDiminta === TAHUN_AKTIF) {
+    const yangTidakLolos = await sql`
+      select d.penerima_id
+      from data_detail d
+      join penerima p on p.id = d.penerima_id and p.tahun = d.tahun
+      where d.tahun = ${tahunDiminta}
+        and p.status_verifikasi not in ${sql(STATUS_LOLOS_DATA_DETAIL)}
+    `;
+    if (yangTidakLolos.length > 0) {
+      const ids = yangTidakLolos.map((r: Record<string, unknown>) => Number(r.penerima_id));
+      await arsipkanDataDetail(
+        ids,
+        "Sinkronisasi otomatis — status tidak lagi Memenuhi Syarat",
+        tahunDiminta,
+        "SISTEM",
+      );
+    }
+  }
+
+  // === Insert: tambah baris yang belum ada di data_detail ===
+  const adaYangKurang = await sql`
+    select exists (
+      select 1 from penerima p
+      where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
+        and not exists (select 1 from data_detail d where d.tahun = p.tahun and d.penerima_id = p.id)
+    ) as ada
+  `;
+  if (adaYangKurang[0]?.ada) {
+    await sql`
+      insert into data_detail (
+        tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
+        alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
+        nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
+        kecamatan_domisili, kelurahan_domisili
+      )
+      select
+        p.tahun, p.id, p.nama, p.nik, p.jenis_kelamin, p.tempat_lahir, p.tanggal_lahir,
+        p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
+        p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur,
+        p.kecamatan_domisili, p.kelurahan_domisili
+      from penerima p
+      where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
+      on conflict (tahun, penerima_id) do nothing
+    `;
+  }
+}
+
 export async function ambilDataDetail(token: string, tahun?: number) {
   let sesi;
   try {
@@ -57,39 +276,8 @@ export async function ambilDataDetail(token: string, tahun?: number) {
   const tahunDiminta = Number(tahun) || TAHUN_AKTIF;
 
   try {
-    // Sinkron dulu: baris `penerima` yang sudah "Memenuhi Syarat" tapi belum ada di
-    // `data_detail` ditambahkan (idempoten lewat ON CONFLICT). Sengaja dilakukan di SATU
-    // tempat ini (bukan ditempel di tiap fungsi verifikasi seperti verifikasiSatuData/
-    // verifikasiMassalMemenuhiSyarat) supaya cuma ada satu jalur logika yang perlu dijaga.
-    // Pengecekan murah dulu: INSERT ... ON CONFLICT DO NOTHING atas SELURUH penerima tahun itu dulu
-    // dijalankan di setiap pembukaan pop up (±714 ms utk 12 ribu baris tahun 2026, hasilnya hampir
-    // selalu 0 baris baru). Anti-join ini (±22 ms) hanya mencari penerima lolos yang BELUM punya baris
-    // data_detail; INSERT hanya jalan bila memang ada -- hasil akhirnya identik.
-    const adaYangKurang = await sql`
-      select exists (
-        select 1 from penerima p
-        where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
-          and not exists (select 1 from data_detail d where d.tahun = p.tahun and d.penerima_id = p.id)
-      ) as ada
-    `;
-    if (adaYangKurang[0]?.ada) {
-      await sql`
-        insert into data_detail (
-          tahun, penerima_id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir,
-          alamat, layanan, tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening,
-          nomor_rekening, kantor_cabang, no_kontak, status_bpjs_tk, umur,
-          kecamatan_domisili, kelurahan_domisili
-        )
-        select
-          p.tahun, p.id, p.nama, p.nik, p.jenis_kelamin, p.tempat_lahir, p.tanggal_lahir,
-          p.alamat, p.layanan, p.tempat_tugas, p.alamat_tugas, p.kecamatan, p.kelurahan,
-          p.nama_rekening, p.nomor_rekening, p.kantor_cabang, p.no_kontak, p.status_bpjs_tk, p.umur,
-          p.kecamatan_domisili, p.kelurahan_domisili
-        from penerima p
-        where p.tahun = ${tahunDiminta} and p.status_verifikasi in ${sql(STATUS_LOLOS_DATA_DETAIL)}
-        on conflict (tahun, penerima_id) do nothing
-      `;
-    }
+    // Sinkron dulu (lihat pastikanDataDetailTersinkron di atas): penerima "Memenuhi Syarat" yang belum punya baris data_detail.
+    await pastikanDataDetailTersinkron(tahunDiminta);
 
     const namaKecamatanPengguna = sesi.kecamatan || "";
     const kelurahanTerkunci = kelurahanTerkunciDari(sesi);

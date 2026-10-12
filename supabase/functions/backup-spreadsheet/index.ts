@@ -453,10 +453,13 @@ Deno.serve(async (req: Request) => {
     const sheetKuota = "Kuota";
     const sheetLog = "Log_Backup";
 
-    // Pastikan seluruh tab tujuan tersedia di spreadsheet, auto-create jika belum ada
+    // Pastikan seluruh tab tujuan tersedia di spreadsheet, auto-create jika belum ada.
+    // "Arsip Data Detail" dibuat di sini sebagai jaring pengaman — tab ini diisi secara
+    // real-time oleh arsipkanDataDetail() (dataDetail.ts), bukan oleh backup rutin.
     await pastikanSheetTersedia(spreadsheetId, accessToken, [
       sheetPenerima,
       sheetDataDetail,
+      "Arsip Data Detail",
       sheetKuota,
       sheetLog,
     ], { [sheetPenerima]: HEADER_PENERIMA_41_KOLOM.length });
