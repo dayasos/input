@@ -241,7 +241,7 @@
                     var p = JSON.parse(s);
                     if (p && p.token) {
                       var nama = p.namaLengkap || p.username || '';
-                      var sub = 'Administratur : ' + escBootstrap(nama);
+                      var sub = (p.role === 'MUI' ? 'Instansi Rekomendasi : MUI Kota Medan &nbsp;·&nbsp; ' : 'Administratur : ') + escBootstrap(nama);
                       var uid = (p.userId || '').toUpperCase().trim();
                       if (uid.indexOf('KELURAHAN ') === 0) {
                         // Sufiks "_..." (pembeda nama kelurahan kembar) dibuang, sama seperti kelurahanDariUserId di app-core.js.

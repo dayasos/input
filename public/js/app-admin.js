@@ -2174,6 +2174,7 @@ function submitManual() {
 const PILIHAN_ROLE_PENGGUNA = [
   { nilai: 'UTAMA', label: 'Utama' },
   { nilai: 'KECAMATAN', label: 'Kecamatan' },
+  { nilai: 'MUI', label: 'MUI (Ustadz & Ustadzah)' },
   { nilai: 'GURU SEKOLAH BUDDHA', label: 'Guru Sekolah Buddha' },
   { nilai: 'GURU SEKOLAH HINDU', label: 'Guru Sekolah Hindu' },
   { nilai: 'GURU SEKOLAH KONG HU CHU', label: 'Guru Sekolah Kong Hu Chu' },
@@ -2352,7 +2353,7 @@ function renderTabelKelolaUser(list) {
 
   let html = '';
   list.forEach(function (u, idx) {
-    const roleBadgeColor = u.role === 'UTAMA' ? 'bg-purple-100 text-purple-700 border-purple-200' : (u.role === 'KECAMATAN' ? 'bg-sky-100 text-sky-700 border-sky-200' : 'bg-amber-100 text-amber-700 border-amber-200');
+    const roleBadgeColor = u.role === 'UTAMA' ? 'bg-purple-100 text-purple-700 border-purple-200' : (u.role === 'MUI' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : (u.role === 'KECAMATAN' ? 'bg-sky-100 text-sky-700 border-sky-200' : 'bg-amber-100 text-amber-700 border-amber-200'));
     html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
       <td class="px-3 py-2.5 text-xs text-slate-500 text-center">${idx + 1}</td>
       <td class="px-3 py-2.5 text-xs font-bold text-slate-800">${esc(u.username)}</td>

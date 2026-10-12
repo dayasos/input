@@ -14,6 +14,7 @@ const ROLE_PENGGUNA_VALID = new Set([
   "GURU SEKOLAH MINGGU",
   "PENATUA GEREJA",
   "GURU MAGHRIB MENGAJI",
+  "MUI",
 ]);
 // Role yang BOLEH punya kecamatan. KECAMATAN wajib; GURU MAGHRIB MENGAJI opsional — GMM tanpa
 // kecamatan berlaku se-Kota Medan (akun lama "BIMAS ISLAM").
@@ -63,12 +64,13 @@ async function userIdKelurahan(kecamatan: string, kelurahan: string): Promise<st
 async function userIdOtomatis(role: string, kecamatan: string, kelurahan: string): Promise<string | null> {
   if (role === "KECAMATAN") return kelurahan ? await userIdKelurahan(kecamatan, kelurahan) : "KECAMATAN " + kecamatan;
   if (role === "GURU MAGHRIB MENGAJI") return kecamatan ? "GMM " + kecamatan : "BIMAS ISLAM";
+  if (role === "MUI") return "MUI KOTA MEDAN";
   return null;
 }
 
 function userIdBerpolaOtomatis(userId: string): boolean {
   const u = String(userId || "").trim().toUpperCase();
-  return u.startsWith("KECAMATAN ") || u.startsWith(PREFIX_USER_ID_KELURAHAN) || u.startsWith("GMM ") || u === "BIMAS ISLAM";
+  return u.startsWith("KECAMATAN ") || u.startsWith(PREFIX_USER_ID_KELURAHAN) || u.startsWith("GMM ") || u === "BIMAS ISLAM" || u === "MUI KOTA MEDAN";
 }
 
 // Sesi login menyimpan salinan role/kecamatan/user_id saat login (lihat _shared/sesi.ts), jadi

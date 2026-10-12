@@ -114,6 +114,17 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
           order by nomor_urut
         `;
       }
+    } else if (instansiPengguna === "MUI") {
+      // MUI: hanya layanan Ustadz dan Ustadzah se-Kota Medan
+      rows = await sql`
+        select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
+               tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+        from penerima
+        where tahun = ${TAHUN_AKTIF}
+          and upper(layanan) in ('USTADZ', 'USTADZAH', 'USTADZ/USTADZAH')
+        order by nomor_urut
+      `;
     } else {
       return JSON.stringify({ sukses: false, pesan: "Peran tidak dikenali." });
     }
@@ -563,6 +574,10 @@ export async function simpanDataKeSheet(token: string, formObject: Record<string
     const peranSesi = (sesi.role || "").toString().trim().toUpperCase();
     const listLayananKemenag = await daftarLayananKemenagUpper();
 
+    if (peranSesi === "MUI") {
+      return { sukses: false, pesan: "Akses ditolak: Akun MUI hanya memiliki hak akses melihat data, tidak dapat menginput data." };
+    }
+
     if (peranSesi !== "UTAMA") {
       if (peranSesi === "KECAMATAN") {
         if (listLayananKemenag.includes(layanan)) {
@@ -824,6 +839,9 @@ export async function editDataPenerima(
 
     // ── Cek sakelar tutup (port Kode.gs baris 2618-2632) ──
     const peranSesi = (sesi.role || "").toString().trim().toUpperCase();
+    if (peranSesi === "MUI") {
+      return { sukses: false, pesan: "Akses ditolak: Akun MUI hanya memiliki hak akses melihat data, tidak dapat mengedit data." };
+    }
     const adalahKecKem = peranSesi === "KECAMATAN" || listLayananKemenag.includes(peranSesi);
     if (adalahKecKem) {
       const akses = await cekAksesInputUser(sesi.userId);

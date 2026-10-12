@@ -1,7 +1,7 @@
 import { getMasterLayanan } from "../domains/master.ts";
 import type { DataSesi } from "./sesi.ts";
 
-export type Instansi = "SUPERADMIN" | "KECAMATAN" | "KEMENAG";
+export type Instansi = "SUPERADMIN" | "KECAMATAN" | "KEMENAG" | "MUI";
 export type SubFilterGsm = "" | "KATOLIK" | "BUKAN_KATOLIK";
 
 // Port dari daftarLayananKemenagUpper_() di Kode.gs.
@@ -25,6 +25,7 @@ export async function resolveInstansiPengguna(
 ): Promise<{ instansiPengguna: Instansi | null; layananPengguna: string; listLayananKemenag: string[] }> {
   const listLayananKemenag = await daftarLayananKemenagUpper();
   if (role === "UTAMA") return { instansiPengguna: "SUPERADMIN", layananPengguna: "", listLayananKemenag };
+  if (role === "MUI") return { instansiPengguna: "MUI", layananPengguna: "", listLayananKemenag };
   if (role === "KECAMATAN") return { instansiPengguna: "KECAMATAN", layananPengguna: "", listLayananKemenag };
   if (listLayananKemenag.includes(role)) return { instansiPengguna: "KEMENAG", layananPengguna: role, listLayananKemenag };
   return { instansiPengguna: null, layananPengguna: "", listLayananKemenag };
@@ -95,6 +96,9 @@ export function lolosAksesBarisLihatData(params: {
     }
   } else if (instansiPengguna === "SUPERADMIN") {
     lolos = true;
+  } else if (instansiPengguna === "MUI") {
+    const lay = (layananSheet || "").toUpperCase();
+    lolos = lay === "USTADZ" || lay === "USTADZAH" || lay === "USTADZ/USTADZAH";
   }
 
   if (lolos && params.kelurahanTerkunci) {
