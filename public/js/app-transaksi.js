@@ -1317,8 +1317,10 @@ function inisialisasiMenuLihatData() {
   if (!pastikanLogin()) return;
   const btnVerifMassal = document.getElementById('btn-verifikasi-massal');
   if (btnVerifMassal) btnVerifMassal.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
-  const btnSalinWA = document.getElementById('btn-salin-wa-berkas');
-  if (btnSalinWA) btnSalinWA.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
+  ['btn-salin-wa-kecamatan', 'btn-salin-wa-kemenag'].forEach(function (idBtn) {
+    const btnSalinWA = document.getElementById(idBtn);
+    if (btnSalinWA) btnSalinWA.classList.toggle('hidden', dataPengguna.role !== "UTAMA");
+  });
   // Optimistic Instant Render: Coba pulihkan dari sessionStorage jika memori masih kosong
   if (!masterDataLihat || masterDataLihat.length === 0) {
     try {
@@ -3108,29 +3110,33 @@ function formatTanggalIndo(tglString) {
   return hariArr[d.getDay()] + ', ' + tgl2Digit + ' ' + bulanArr[d.getMonth()] + ' ' + d.getFullYear() + ' 00:00:00';
 }
 
-function susunTeksWhatsAppBerkasTidakLengkap(data) {
+// `kelompok`: 'KECAMATAN' (dikelompokkan per kecamatan) atau 'KEMENAG' (per layanan -- admin Kemenag
+// menangani berdasarkan layanan, dan satu layanan Kemenag tersebar di banyak kecamatan).
+function susunTeksWhatsAppBerkasTidakLengkap(data, kelompok) {
+  const untukKemenag = kelompok === 'KEMENAG';
   const now = new Date();
   const tglSekarang = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }) +
     ', ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
   const grup = {};
   data.forEach(function (d) {
-    const kec = d.kecamatan || 'TANPA KECAMATAN';
-    if (!grup[kec]) grup[kec] = [];
-    grup[kec].push(d);
+    const kunci = untukKemenag ? (d.layanan || 'TANPA LAYANAN') : (d.kecamatan || 'TANPA KECAMATAN');
+    if (!grup[kunci]) grup[kunci] = [];
+    grup[kunci].push(d);
   });
-  const namaKecamatan = Object.keys(grup).sort();
-  let teks = '📋 *DAFTAR BERKAS TIDAK LENGKAP*\n';
+  const namaGrup = Object.keys(grup).sort();
+  let teks = '📋 *DAFTAR BERKAS TIDAK LENGKAP — LAYANAN ' + (untukKemenag ? 'KEMENAG' : 'KECAMATAN') + '*\n';
   teks += '_Diperbarui: ' + tglSekarang + '_\n';
   teks += '_Total: ' + data.length + ' data_\n\n';
-  namaKecamatan.forEach(function (kec) {
-    const list = grup[kec];
+  namaGrup.forEach(function (nama) {
+    const list = grup[nama];
     teks += '━━━━━━━━━━━━━━━\n';
-    teks += '📍 *' + kec.toUpperCase() + '* (' + list.length + ' data)\n';
+    teks += '📍 *' + nama.toUpperCase() + '* (' + list.length + ' data)\n';
     teks += '━━━━━━━━━━━━━━━\n\n';
     list.forEach(function (d, idx) {
       teks += (idx + 1) + '. *' + d.nama + '* — NIK ' + d.nik + '\n';
+      if (untukKemenag) teks += '   Kecamatan: ' + (d.kecamatan || '-') + '\n';
       teks += '   Kelurahan: ' + (d.kelurahan || '-') + '\n';
-      teks += '   Layanan: ' + d.layanan + '\n';
+      if (!untukKemenag) teks += '   Layanan: ' + d.layanan + '\n';
       teks += '   Alasan: ' + (d.keterangan || '-') + '\n';
       teks += '   ⏰ Batas: ' + formatTanggalIndo(d.batasWaktu) + '\n\n';
     });
@@ -3140,31 +3146,42 @@ function susunTeksWhatsAppBerkasTidakLengkap(data) {
   return teks.trim();
 }
 
-document.getElementById('btn-salin-wa-berkas').addEventListener('click', function () {
-  if (!pastikanLogin()) return;
-  const btn = this;
-  setTombolMemuat(btn, "Menyiapkan...");
-  google.script.run
-    .withSuccessHandler(function (res) {
-      pulihkanTombol(btn);
-      if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
-      if (!res.data || res.data.length === 0) {
-        tampilkanToast('Tidak ada data berstatus "Berkas Tidak Lengkap" saat ini.', 'info');
-        return;
-      }
-      const teks = susunTeksWhatsAppBerkasTidakLengkap(res.data);
-      navigator.clipboard.writeText(teks).then(function () {
-        tampilkanToast('Tersalin ke clipboard! (' + res.data.length + ' data). Buka WhatsApp lalu tempel di chat/grup tujuan.', 'sukses', { durasi: 5000 });
-      }).catch(function () {
-        prompt('Browser tidak izinkan salin otomatis. Salin manual teks ini (Ctrl+A lalu Ctrl+C):', teks);
-      });
-    })
-    .withFailureHandler(function (err) {
-      pulihkanTombol(btn);
-      tampilkanToast(pesanErrorRamah(err), 'gagal');
-    })
-    .getDaftarBerkasTidakLengkapUntukWA(dataPengguna.token);
-});
+// Dua tombol, satu handler: tiap tombol meminta server menyaring kelompoknya (KECAMATAN / KEMENAG).
+function pasangTombolSalinWa(idTombol, kelompok, namaKelompok) {
+  document.getElementById(idTombol).addEventListener('click', function () {
+    if (!pastikanLogin()) return;
+    const btn = this;
+    setTombolMemuat(btn, "Menyiapkan...");
+    google.script.run
+      .withSuccessHandler(function (res) {
+        pulihkanTombol(btn);
+        if (!res.sukses) { tampilkanToast('Gagal: ' + res.pesan, 'gagal'); return; }
+        // Server versi lama mengabaikan `kelompok` dan mengembalikan SEMUA data (tanpa field kelompok). Tolak, supaya
+        // data layanan lain tidak ikut tersalin dan terkirim ke grup WA yang salah selama server belum diperbarui.
+        if (res.kelompok !== kelompok) {
+          tampilkanToast('Server belum diperbarui untuk fitur ini. Muat ulang halaman, atau hubungi pengembang bila berlanjut.', 'gagal', { durasi: 6000 });
+          return;
+        }
+        if (!res.data || res.data.length === 0) {
+          tampilkanToast('Tidak ada data layanan ' + namaKelompok + ' berstatus "Berkas Tidak Lengkap" saat ini.', 'info');
+          return;
+        }
+        const teks = susunTeksWhatsAppBerkasTidakLengkap(res.data, kelompok);
+        navigator.clipboard.writeText(teks).then(function () {
+          tampilkanToast('Tersalin ke clipboard! Layanan ' + namaKelompok + ' (' + res.data.length + ' data). Buka WhatsApp lalu tempel di chat/grup tujuan.', 'sukses', { durasi: 5000 });
+        }).catch(function () {
+          prompt('Browser tidak izinkan salin otomatis. Salin manual teks ini (Ctrl+A lalu Ctrl+C):', teks);
+        });
+      })
+      .withFailureHandler(function (err) {
+        pulihkanTombol(btn);
+        tampilkanToast(pesanErrorRamah(err), 'gagal');
+      })
+      .getDaftarBerkasTidakLengkapUntukWA(dataPengguna.token, kelompok);
+  });
+}
+pasangTombolSalinWa('btn-salin-wa-kecamatan', 'KECAMATAN', 'Kecamatan');
+pasangTombolSalinWa('btn-salin-wa-kemenag', 'KEMENAG', 'Kemenag');
 
 // Helper: unduh file dari base64 langsung ke komputer pengguna.
 function unduhFileBase64(base64, namaFile) {

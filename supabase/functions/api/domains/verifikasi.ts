@@ -3,6 +3,7 @@ import { wajibSesi } from "../_shared/sesi.ts";
 import { TAHUN_AKTIF } from "../_shared/config.ts";
 import { formatTanggalWaktuWIB } from "../_shared/tanggal.ts";
 import {
+  daftarLayananKemenagUpper,
   kelurahanTerkunciDari,
   lolosAksesBarisLihatData,
   resolveInstansiPengguna,
@@ -251,8 +252,13 @@ export async function verifikasiMassalMemenuhiSyarat(token: string) {
   }
 }
 
-// Port 1:1 dari getDaftarBerkasTidakLengkapUntukWA() (Kode.gs baris 3171-3218) — khusus UTAMA.
-export async function getDaftarBerkasTidakLengkapUntukWA(token: string) {
+// Port dari getDaftarBerkasTidakLengkapUntukWA() (Kode.gs baris 3171-3218) — khusus UTAMA.
+//
+// `kelompok` (2026-10-11): memisahkan broadcast WA untuk layanan KECAMATAN dan layanan KEMENAG
+// (dua grup WA berbeda). Penentu "Kemenag" = daftar layanan kategori KEMENAG di master (sama dengan
+// resolveInstansiPengguna/lolosAksesBarisLihatData), BUKAN daftar yang ditulis ulang di sini atau
+// di frontend. Tanpa `kelompok` (kosong) perilaku lama dipertahankan: semua layanan.
+export async function getDaftarBerkasTidakLengkapUntukWA(token: string, kelompok?: string) {
   let sesi;
   try {
     sesi = await wajibSesi(token);
@@ -261,6 +267,11 @@ export async function getDaftarBerkasTidakLengkapUntukWA(token: string) {
   }
   if ((sesi.role || "").toString().trim().toUpperCase() !== "UTAMA") {
     return { sukses: false, pesan: "Fitur ini khusus Admin Utama." };
+  }
+
+  const kelompokBersih = String(kelompok ?? "").trim().toUpperCase();
+  if (kelompokBersih !== "" && kelompokBersih !== "KECAMATAN" && kelompokBersih !== "KEMENAG") {
+    return { sukses: false, pesan: "Kelompok layanan tidak dikenali (harus KECAMATAN atau KEMENAG)." };
   }
 
   interface BarisBerkasTidakLengkap {
@@ -280,22 +291,34 @@ export async function getDaftarBerkasTidakLengkapUntukWA(token: string) {
       where tahun = ${TAHUN_AKTIF} and status_verifikasi = 'Berkas Tidak Lengkap'
     `;
 
-    const data = rows.map((r: BarisBerkasTidakLengkap) => ({
-      nama: (r.nama || "").toString().trim(),
-      nik: (r.nik || "").toString().replace(/'/g, "").trim(),
-      layanan: (r.layanan || "").toString().trim(),
-      kecamatan: (r.kecamatan || "").toString().trim(),
-      kelurahan: (r.kelurahan || "").toString().trim(),
-      keterangan: (r.keterangan_verifikasi || "").toString().trim(),
-      // Format "yyyy-MM-dd" (BUKAN dd-MM-yyyy seperti field tanggal lain) — dikonfirmasi dari
-      // Kode.gs baris 3210: Utilities.formatDate(..., "yyyy-MM-dd"). Kolom `date` murni (tanpa
-      // jam) jadi tidak perlu geser WIB seperti formatTanggalWaktuWIB.
-      batasWaktu: r.batas_waktu_perbaikan
-        ? new Date(r.batas_waktu_perbaikan).toISOString().slice(0, 10)
-        : "",
-    }));
+    const layananKemenag = new Set(await daftarLayananKemenagUpper());
+    // Daftar Kemenag kosong (master belum terisi/rusak) -> SEMUA baris akan terhitung Kecamatan dan data Kemenag
+    // bisa ikut terkirim ke grup yang salah. Lebih aman gagal dengan pesan jelas.
+    if (kelompokBersih && layananKemenag.size === 0) {
+      return { sukses: false, pesan: "Daftar layanan Kemenag di master kosong. Hubungi pengembang." };
+    }
+    const kelompokBaris = (r: BarisBerkasTidakLengkap) =>
+      layananKemenag.has((r.layanan || "").toString().trim().toUpperCase()) ? "KEMENAG" : "KECAMATAN";
 
-    return { sukses: true, data };
+    const data = rows
+      .filter((r: BarisBerkasTidakLengkap) => !kelompokBersih || kelompokBaris(r) === kelompokBersih)
+      .map((r: BarisBerkasTidakLengkap) => ({
+        kelompok: kelompokBaris(r),
+        nama: (r.nama || "").toString().trim(),
+        nik: (r.nik || "").toString().replace(/'/g, "").trim(),
+        layanan: (r.layanan || "").toString().trim(),
+        kecamatan: (r.kecamatan || "").toString().trim(),
+        kelurahan: (r.kelurahan || "").toString().trim(),
+        keterangan: (r.keterangan_verifikasi || "").toString().trim(),
+        // Format "yyyy-MM-dd" (BUKAN dd-MM-yyyy seperti field tanggal lain) — dikonfirmasi dari
+        // Kode.gs baris 3210: Utilities.formatDate(..., "yyyy-MM-dd"). Kolom `date` murni (tanpa
+        // jam) jadi tidak perlu geser WIB seperti formatTanggalWaktuWIB.
+        batasWaktu: r.batas_waktu_perbaikan
+          ? new Date(r.batas_waktu_perbaikan).toISOString().slice(0, 10)
+          : "",
+      }));
+
+    return { sukses: true, data, kelompok: kelompokBersih };
   } catch (error) {
     return { sukses: false, pesan: String(error) };
   }

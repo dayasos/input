@@ -1002,7 +1002,7 @@
             Total Data: Dimuat
           </div>
         </div>
-        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1">
+        <div class="flex items-center gap-2 flex-nowrap overflow-x-auto pb-1 md:flex-wrap md:overflow-visible">
           <!-- Dropdown Tahun -->
           <div
             class="flex items-center gap-1.5 bg-white border border-slate-300 rounded-xl px-3 py-1.5 shadow-sm text-xs shrink-0">
@@ -1100,15 +1100,26 @@
             </svg>
             <span>Verifikasi Semua</span>
           </button>
-          <button id="btn-salin-wa-berkas"
+          <!-- Dua broadcast terpisah (grup WA berbeda): layanan Kecamatan & layanan Kemenag. Khusus UTAMA. -->
+          <button id="btn-salin-wa-kecamatan"
             class="hidden bg-teal-600 hover:bg-teal-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
-            title="Salin daftar perbaikan berkas untuk WhatsApp">
+            title="Salin daftar perbaikan berkas layanan KECAMATAN untuk WhatsApp">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24"
               stroke="currentColor" stroke-width="2">
               <path stroke-linecap="round" stroke-linejoin="round"
                 d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
             </svg>
-            <span>Salin WA</span>
+            <span>Salin WA Kecamatan</span>
+          </button>
+          <button id="btn-salin-wa-kemenag"
+            class="hidden bg-sky-600 hover:bg-sky-700 active:scale-95 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 shrink-0"
+            title="Salin daftar perbaikan berkas layanan KEMENAG untuk WhatsApp">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+            <span>Salin WA Kemenag</span>
           </button>
         </div>
       </div>
@@ -3501,7 +3512,7 @@
   <!-- MODUL JAVASCRIPT DJPM 2027 (Standar Maksimal 3.000 Baris Kode per File)  -->
   <!-- ========================================================================= -->
   <script src="/js/app-core.js?v=20271010" defer></script>
-  <script src="/js/app-transaksi.js?v=20271010" defer></script>
+  <script src="/js/app-transaksi.js?v=20271011" defer></script>
   <script src="/js/app-admin.js?v=20271011" defer></script>
   <script src="/js/app-kelola-data.js?v=20271007" defer></script>
   <script src="/js/app-kelola-user.js?v=20270930" defer></script>
