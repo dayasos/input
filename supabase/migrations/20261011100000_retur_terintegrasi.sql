@@ -3,6 +3,11 @@
 -- Keputusan user 2026-10-11: Retur jadi bagian aplikasi Input, tanpa SSO, mulai bersih 2027.
 -- DRAFT LOKAL -- BELUM dijalankan di produksi.
 --
+-- TANPA FOREIGN KEY ke data_detail/penerima (sengaja, sama dengan pembayaran_baris): data_detail BISA dihapus oleh proses lain
+-- (sinkronSheet2026 menghapus baris yang statusnya tidak lagi lolos; kelolaData menghapus penerima). Dengan FK, penghapusan itu
+-- gagal dan membatalkan seluruh transaksi sinkron. `data_detail_id` hanya penunjuk informasional; identitas penerima disimpan
+-- sebagai SALINAN di tiap tabel (nik, nama, layanan, kecamatan, kelurahan, tempat_tugas) sehingga riwayat uang tetap utuh.
+--
 -- Prinsip:
 --  * `data_detail.status/tgl_status` tetap satu-satunya sumber status penerima.
 --  * Identitas penerima (nama, layanan, kecamatan, kelurahan, ...) tidak diketik ulang: tabel
@@ -63,6 +68,8 @@ create table if not exists retur_impor (
 
 -- Daftar penerima yang transfernya retur pada bulan tsb (= file "Retur Pembayaran Bulan X").
 -- Kolom identitas adalah salinan beku saat impor (dokumen untuk kecamatan).
+create index if not exists ix_retur_impor_bulan on retur_impor (tahun, bulan);
+
 create table if not exists retur_daftar (
   id               bigserial primary key,
   tahun            int not null,
@@ -78,11 +85,11 @@ create table if not exists retur_daftar (
   nomor_rekening   text,
   kecamatan        text,
   kelurahan        text,
+  tempat_tugas     text,
   no_kontak        text,
   dibuat_at        timestamptz not null default now(),
 
-  unique (tahun, bulan, data_detail_id),
-  foreign key (data_detail_id, tahun) references data_detail (id, tahun)
+  unique (tahun, bulan, data_detail_id)
 );
 create index if not exists ix_retur_daftar_nik on retur_daftar (tahun, nik);
 
@@ -95,6 +102,8 @@ create table if not exists retur_rek_tidak_ditemukan (
 );
 
 -- ---------- Laporan perbaikan rekening dari kecamatan/kelurahan/Kemenag ----------
+create index if not exists ix_retur_rek_tdk_impor on retur_rek_tidak_ditemukan (impor_id);
+
 create table if not exists retur_laporan (
   id               bigserial primary key,
   tahun            int not null,
@@ -106,6 +115,7 @@ create table if not exists retur_laporan (
   layanan          text not null,
   kecamatan        text,
   kelurahan        text,
+  tempat_tugas     text,
 
   jenis_perbaikan  text not null references ref_jenis_perbaikan(kode),
   rekening_lama    text,
@@ -118,9 +128,7 @@ create table if not exists retur_laporan (
   url_buku         text,
 
   dibuat_oleh_akun_id uuid references akun(id),
-  dibuat_at        timestamptz not null default now(),
-
-  foreign key (data_detail_id, tahun) references data_detail (id, tahun)
+  dibuat_at        timestamptz not null default now()
 );
 create index if not exists ix_retur_laporan_bulan on retur_laporan (tahun, bulan, data_detail_id, dibuat_at desc);
 
@@ -142,8 +150,7 @@ create table if not exists retur_proses (
   diubah_oleh_akun_id uuid references akun(id),
   diubah_at        timestamptz not null default now(),
 
-  unique (tahun, bulan, data_detail_id),
-  foreign key (data_detail_id, tahun) references data_detail (id, tahun)
+  unique (tahun, bulan, data_detail_id)
 );
 
 -- Append-only: tiap perubahan proses menambah satu baris (tidak pernah di-update/delete).
@@ -212,6 +219,7 @@ create table if not exists status_penerima_laporan (
   layanan          text not null,
   kecamatan        text,
   kelurahan        text,
+  tempat_tugas     text,
 
   jenis            text not null default 'NONAKTIF' check (jenis in ('NONAKTIF', 'AKTIVASI')),
   status_laporan   text not null,          -- salah satu ref_status_laporan.kode, atau 'AKTIF' utk AKTIVASI
@@ -223,9 +231,7 @@ create table if not exists status_penerima_laporan (
   jabatan          text,
 
   dibuat_oleh_akun_id uuid references akun(id),
-  dibuat_at        timestamptz not null default now(),
-
-  foreign key (data_detail_id, tahun) references data_detail (id, tahun)
+  dibuat_at        timestamptz not null default now()
 );
 create index if not exists ix_status_laporan_nik on status_penerima_laporan (tahun, nik, dibuat_at desc);
 

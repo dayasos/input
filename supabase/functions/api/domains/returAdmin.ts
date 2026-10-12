@@ -12,8 +12,11 @@ import { BULAN, bulanValid, returDaftarBulan, TEKS_BELUM_DIUSULKAN, tahunValid }
 //   A1 = nama bulan (mis. AGUSTUS) | baris 2 kosong | baris 3 = header "NO. REK" | "NAMA" | data mulai baris 4.
 // ---------------------------------------------------------------------------
 
-const MAKS_UKURAN_BASE64 = 4_000_000; // ±3 MB berkas asli; Excel rekening bulanan hanya beberapa KB
+// Batas dijaga di bawah batas badan permintaan proxy Vercel (4,5 MB; base64 = 4/3 ukuran berkas).
+const MAKS_UKURAN_BASE64 = 2_800_000; // ±2 MB berkas asli; Excel rekening bulanan hanya beberapa KB
 const MAKS_BARIS = 5000;
+const MAKS_NAMA = 200; // batas panjang teks dari berkas/klien yang disimpan ke database
+const MAKS_REKENING = 60;
 const WARNA_HEADER_DATA = "FF2F5597"; // biru tua, sama dengan file "Retur Pembayaran Bulan X" lama
 const WARNA_HEADER_GAGAL = "FFEA9999"; // merah muda, sama dengan "REKENING TIDAK DITEMUKAN" lama
 
@@ -45,12 +48,12 @@ function digitSaja(teks: string): string {
   return teks.replace(/[^0-9]/g, "");
 }
 
-interface BarisBank { rek: string; nama: string; barisExcel: number }
+interface BarisBank { rek: string; nama: string; barisExcel: number; tidakValid?: string }
 interface HasilBacaBank { bulan: string; baris: BarisBank[]; duplikatDalamFile: number; peringatan: string[] }
 
 export async function bacaExcelBank(base64: string): Promise<HasilBacaBank> {
   if (!base64 || typeof base64 !== "string") throw new Error("File Excel belum dipilih.");
-  if (base64.length > MAKS_UKURAN_BASE64) throw new Error("File terlalu besar (maksimal ±3 MB).");
+  if (base64.length > MAKS_UKURAN_BASE64) throw new Error("File terlalu besar (maksimal 2 MB).");
 
   let bytes: Uint8Array;
   try {
@@ -69,7 +72,6 @@ export async function bacaExcelBank(base64: string): Promise<HasilBacaBank> {
   }
   const ws = wb.worksheets[0];
   if (!ws) throw new Error("File Excel tidak memiliki sheet.");
-  if (ws.rowCount > MAKS_BARIS + 3) throw new Error(`Terlalu banyak baris (maksimal ${MAKS_BARIS}).`);
 
   const bulan = teksSel(ws.getCell("A1").value).toUpperCase();
   if (!(BULAN as readonly string[]).includes(bulan)) {
@@ -87,15 +89,27 @@ export async function bacaExcelBank(base64: string): Promise<HasilBacaBank> {
   const baris: BarisBank[] = [];
   const sudahAda = new Set<string>();
   let duplikatDalamFile = 0;
-  for (let r = 4; r <= ws.rowCount; r++) {
-    const rek = teksSel(ws.getCell(r, 1).value);
-    if (!rek) continue;
-    const nama = teksSel(ws.getCell(r, 2).value);
-    const kunci = digitSaja(rek) || rek.toUpperCase();
-    if (sudahAda.has(kunci)) { duplikatDalamFile++; continue; }
+  // eachRow(includeEmpty:false): hanya baris yang berisi. Berkas yang diformat sampai jutaan baris kosong tidak ikut dipindai.
+  // deno-lint-ignore no-explicit-any
+  ws.eachRow({ includeEmpty: false }, (row: any, nomor: number) => {
+    if (nomor < 4) return;
+    const mentah = row.getCell(1).value;
+    const rek = teksSel(mentah).slice(0, MAKS_REKENING);
+    if (!rek) return;
+    const nama = teksSel(row.getCell(2).value).slice(0, MAKS_NAMA);
+    // Excel hanya menyimpan 15 digit signifikan pada sel ANGKA: nomor 16 digit ke atas yang diketik sebagai angka sudah
+    // dibulatkan (digit terakhir jadi 0) dan bisa SALAH cocok dengan rekening penerima lain. Jangan dicocokkan.
+    const tidakValid = typeof mentah === "number" && digitSaja(rek).length >= 16
+      ? "Nomor rekening 16 digit ke atas tersimpan sebagai ANGKA di Excel (digit terakhir bisa berubah). Ubah kolom A menjadi format Teks lalu unggah ulang."
+      : undefined;
+    // Kunci duplikat dipisah untuk baris tidak valid: baris ANGKA yang rusak tidak boleh membuang baris TEKS yang valid
+    // dengan digit yang sama.
+    const kunci = (tidakValid ? "X:" : "") + (digitSaja(rek) || rek.toUpperCase());
+    if (sudahAda.has(kunci)) { duplikatDalamFile++; return; }
     sudahAda.add(kunci);
-    baris.push({ rek, nama, barisExcel: r });
-  }
+    if (baris.length >= MAKS_BARIS) throw new Error(`Terlalu banyak baris (maksimal ${MAKS_BARIS} nomor rekening).`);
+    baris.push({ rek, nama, barisExcel: nomor, tidakValid });
+  });
   if (baris.length === 0) throw new Error("Tidak ada nomor rekening pada file (data dimulai dari baris 4, kolom A).");
   return { bulan, baris, duplikatDalamFile, peringatan };
 }
@@ -119,12 +133,12 @@ export async function returImporBank(
     const baca = await bacaExcelBank(base64);
     const bulan = bulanValid(baca.bulan);
 
-    const normalisasi = baca.baris.map((b) => digitSaja(b.rek)).filter((x) => x !== "");
+    const normalisasi = baca.baris.filter((b) => !b.tidakValid).map((b) => digitSaja(b.rek)).filter((x) => x !== "");
     const unikNormalisasi = [...new Set(normalisasi)];
     // deno-lint-ignore no-explicit-any
     const ditemukan: Record<string, any>[] = unikNormalisasi.length === 0 ? [] : await sql`
       select id, nama_rekening, nik, jenis_kelamin, alamat, layanan, nomor_rekening, kecamatan, kelurahan,
-             no_kontak, status, regexp_replace(coalesce(nomor_rekening, ''), '[^0-9]', '', 'g') as rek_norm
+             tempat_tugas, no_kontak, status, regexp_replace(coalesce(nomor_rekening, ''), '[^0-9]', '', 'g') as rek_norm
       from data_detail
       where tahun = ${t}
         and regexp_replace(coalesce(nomor_rekening, ''), '[^0-9]', '', 'g') in ${sql(unikNormalisasi)}
@@ -141,14 +155,14 @@ export async function returImporBank(
     const tidakDitemukan: { no: number; nama: string; nomorRekening: string; keterangan: string }[] = [];
     let rekeningGanda = 0;
     for (const b of baca.baris) {
-      const kunci = digitSaja(b.rek);
+      const kunci = b.tidakValid ? "" : digitSaja(b.rek);
       const kandidat = kunci ? perRekening.get(kunci) : undefined;
       if (!kandidat || kandidat.length === 0) {
         tidakDitemukan.push({
           no: tidakDitemukan.length + 1,
           nama: b.nama,
           nomorRekening: b.rek,
-          keterangan: kunci ? "Tidak ditemukan di Data Detail" : "Nomor rekening tidak valid (bukan angka)",
+          keterangan: b.tidakValid ?? (kunci ? "Tidak ditemukan di Data Detail" : "Nomor rekening tidak valid (bukan angka)"),
         });
         continue;
       }
@@ -164,6 +178,7 @@ export async function returImporBank(
         nomorRekening: d.nomor_rekening ?? "",
         kecamatan: d.kecamatan ?? "",
         kelurahan: d.kelurahan ?? "",
+        tempatTugas: d.tempat_tugas ?? "",
         noKontak: (d.no_kontak || "-").toString().replace(/^'+/, "").trim() || "-",
         statusPenerima: d.status ?? "",
       });
@@ -200,16 +215,21 @@ export async function returImporBank(
       penerimaNonAktif: cocok.filter((c) => !statusAktif(c.statusPenerima)).length,
     };
 
+    const namaBerkas = String(namaFile || "").slice(0, MAKS_NAMA);
     const hasil = {
-      sukses: true, tahun: t, bulan, namaFile: namaFile || "", ringkasan,
+      sukses: true, tahun: t, bulan, namaFile: namaBerkas, ringkasan,
       peringatan: baca.peringatan, cocok: cocokBertanda, tidakDitemukan,
     };
-    if (!simpan) return { ...hasil, pratinjau: true, tersimpan: false };
+    // Hanya `true` (boolean) yang menyimpan; nilai lain (mis. teks "false" dari klien lain) dianggap pratinjau.
+    if (simpan !== true) return { ...hasil, pratinjau: true, tersimpan: false };
 
     // ---- simpan (satu transaksi) ----
     let tersimpanBaru = 0, tidakBaru = 0, imporId: number | null = null;
     // deno-lint-ignore no-explicit-any
     await sql.begin(async (trx: any) => {
+      // Serialkan penyimpanan untuk (tahun, bulan) yang sama: tanpa ini dua admin yang menyimpan bersamaan bisa sama-sama
+      // menganggap sebuah rekening "tidak ditemukan" itu baru dan menggandakannya.
+      await trx`select pg_advisory_xact_lock(hashtext(${"retur_impor:" + t + ":" + bulan}))`;
       const barisBaru = cocok.filter((c) => !sudahAda.has(Number(c.dataDetailId)));
       const rekSudahTercatat = await trx`
         select distinct g.nomor_rekening
@@ -222,7 +242,7 @@ export async function returImporBank(
       if (barisBaru.length === 0 && gagalBaru.length === 0) return; // tidak ada yang baru -> tidak membuat catatan impor
       const imp = await trx`
         insert into retur_impor (tahun, bulan, nama_file, jumlah_baris, jumlah_cocok, jumlah_tidak_cocok, diunggah_oleh_akun_id)
-        values (${t}, ${bulan}, ${namaFile || null}, ${baca.baris.length}, ${cocok.length}, ${tidakDitemukan.length}, ${sesi.akunId})
+        values (${t}, ${bulan}, ${namaBerkas || null}, ${baca.baris.length}, ${cocok.length}, ${tidakDitemukan.length}, ${sesi.akunId})
         returning id
       `;
       imporId = Number(imp[0].id);
@@ -232,12 +252,12 @@ export async function returImporBank(
           tahun: t, bulan, data_detail_id: c.dataDetailId, impor_id: imporId,
           nama_rekening: c.namaRekening, nik: c.nik, jenis_kelamin: c.jenisKelamin, alamat: c.alamat,
           layanan: c.layanan, nomor_rekening: c.nomorRekening, kecamatan: c.kecamatan,
-          kelurahan: c.kelurahan, no_kontak: c.noKontak,
+          kelurahan: c.kelurahan, tempat_tugas: c.tempatTugas, no_kontak: c.noKontak,
         }));
         const masuk = await trx`
           insert into retur_daftar ${trx(potong,
             "tahun", "bulan", "data_detail_id", "impor_id", "nama_rekening", "nik", "jenis_kelamin", "alamat",
-            "layanan", "nomor_rekening", "kecamatan", "kelurahan", "no_kontak")}
+            "layanan", "nomor_rekening", "kecamatan", "kelurahan", "tempat_tugas", "no_kontak")}
           on conflict (tahun, bulan, data_detail_id) do nothing
           returning id
         `;

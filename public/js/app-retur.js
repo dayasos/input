@@ -30,7 +30,8 @@
     view: 'ringkasan',
     berkas: null,
     hasilImpor: null,
-    seqEkspor: 0
+    seqEkspor: 0,
+    token: ''
   };
 
   function $(id) { return document.getElementById(id); }
@@ -39,6 +40,15 @@
     return String(val === null || val === undefined ? '' : val)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  // Pengguna berganti di tab yang sama (keluar lalu masuk sebagai akun lain): buang SEMUA isi panel & state milik sesi
+  // sebelumnya supaya data/menu admin akun lama tidak terlihat oleh akun baru.
+  function resetKarenaGantiSesi() {
+    S.seqRingkasan++; S.seqRincian++; S.seqCari++; S.seqEkspor++;
+    S.siap = false; S.tahun = '2027'; S.ringkasan = null; S.bulanAktif = ''; S.rincian = [];
+    S.filterStatus = ''; S.filterLayanan = ''; S.view = 'ringkasan'; S.berkas = null; S.hasilImpor = null;
+    panel.innerHTML = '';
+  }
+
   function adalahUtama() {
     return typeof dataPengguna !== 'undefined' && !!dataPengguna && String(dataPengguna.role || '').toUpperCase() === 'UTAMA';
   }
@@ -385,7 +395,7 @@
   // Halaman admin "Ekspor Data Retur" (khusus Admin Utama)
   // Unggah Excel rekening retur dari bank -> pratinjau -> simpan -> tabel data retur & rekening tidak ditemukan.
   // ---------------------------------------------------------------------------
-  var MAKS_BERKAS = 3 * 1024 * 1024;
+  var MAKS_BERKAS = 2 * 1024 * 1024; // di bawah batas badan permintaan proxy Vercel (base64 = 4/3 ukuran berkas)
 
   function chip(label, nilai, kelas) {
     return '<div class="rounded-lg border px-3 py-2 ' + (kelas || 'border-slate-200 bg-white') + '"><div class="text-[11px] text-slate-500">' + esc(label) + '</div><div class="text-base font-bold text-slate-800">' + esc(nilai) + '</div></div>';
@@ -407,7 +417,7 @@
               '<tr><td class="border border-slate-300 px-3 py-1 text-center font-semibold">NO. REK</td><td class="border border-slate-300 px-3 py-1 font-semibold">NAMA</td></tr>' +
               '<tr><td class="border border-slate-300 px-3 py-1 text-slate-500">1160000000001</td><td class="border border-slate-300 px-3 py-1 text-slate-500">...</td></tr>' +
             '</tbody></table>' +
-            '<ul class="mt-2 text-[11px] text-slate-500 list-disc pl-4 space-y-0.5"><li>Sel A1 = nama bulan</li><li>Baris 3 = judul kolom</li><li>Data dimulai baris 4</li><li>Format .xlsx, maksimal 3 MB</li></ul>' +
+            '<ul class="mt-2 text-[11px] text-slate-500 list-disc pl-4 space-y-0.5"><li>Sel A1 = nama bulan</li><li>Baris 3 = judul kolom</li><li>Data dimulai baris 4</li><li>Format .xlsx, maksimal 2 MB</li></ul>' +
           '</div>' +
           '<div class="flex-1 min-w-0">' +
             '<label for="rt-berkas" class="block text-xs font-semibold text-slate-600 mb-1">Pilih file Excel</label>' +
@@ -445,7 +455,7 @@
     var file = input && input.files && input.files[0];
     if (!file) { toast('Pilih file Excel dulu.', 'gagal'); return; }
     if (!/\.xlsx$/i.test(file.name)) { toast('File harus berformat .xlsx.', 'gagal'); return; }
-    if (file.size > MAKS_BERKAS) { toast('File terlalu besar (maksimal 3 MB).', 'gagal'); return; }
+    if (file.size > MAKS_BERKAS) { toast('File terlalu besar (maksimal 2 MB).', 'gagal'); return; }
     var btn = $('rt-baca');
     btn.disabled = true; btn.textContent = 'Membaca...';
     bacaBerkasBase64(file, function (b64) {
@@ -665,6 +675,8 @@
     if (refresh) refresh.classList.add('hidden');
     aktifkanTabRetur();
     try { window.panelAktif = 'retur'; } catch (_e) { }
+    if (S.token && S.token !== token()) resetKarenaGantiSesi();
+    S.token = token();
     if (!S.siap) {
       S.siap = true;
       renderKerangka();

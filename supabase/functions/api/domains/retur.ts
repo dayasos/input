@@ -9,7 +9,9 @@ import {
 } from "../_shared/akses.ts";
 
 // ---------------------------------------------------------------------------
-// Modul Retur (Fase 1: BACA SAJA). Pengganti dashboard aplikasi Retur lama (Apps Script).
+// Modul Retur (baca). Semua kolom identitas & wilayah berasal dari SALINAN di tabel retur (tanpa join ke data_detail --
+// data_detail bisa dihapus proses lain, dan hak akses dihitung dari keadaan penerima SAAT retur dicatat).
+// Fase 1: BACA SAJA. Pengganti dashboard aplikasi Retur lama (Apps Script).
 // Tidak ada login terpisah: memakai sesi Input. Hak akses baris = fungsi bersama
 // `lolosAksesBarisLihatData` (kecamatan / kelurahan terkunci / layanan Kemenag / sub-filter GSM),
 // sama persis dengan "Lihat Data" -- jangan menulis ulang aturan akses di sini.
@@ -91,11 +93,13 @@ export function teksStatusSetelahPerbaikan(
   if (!statusKerja) return TEKS_BELUM_DIUSULKAN;
   const tgl = waktuLog(diubahAt);
   const oleh = (petugas || "").toString().trim().toUpperCase();
+  // Tanpa nama petugas (riwayat belum ada/tak tercatat): jangan menulis "[tgl - : STATUS]".
+  const awal = oleh ? `[${tgl} - ${oleh}: ` : `[${tgl} - `;
   if (statusKerja === "KENDALA") return `[${tgl} - KENDALA: ${kendala || ""}]`;
   if (statusKerja === "PROSES PEMBAYARAN") {
-    return `[${tgl} - ${oleh}: PROSES PEMBAYARAN${nomorPerbaikan != null ? ` (Ke-${nomorPerbaikan})` : ""}]`;
+    return `${awal}PROSES PEMBAYARAN${nomorPerbaikan != null ? ` (Ke-${nomorPerbaikan})` : ""}]`;
   }
-  return `[${tgl} - ${oleh}: ${statusKerja}]`;
+  return `${awal}${statusKerja}]`;
 }
 
 function statusTampil(statusKerja: string | null, kendala: string | null): string {
@@ -115,10 +119,9 @@ export async function returRingkasan(token: string, tahun?: number) {
     const boleh = await buatPenyaringAkses(sesi);
 
     const rows = await sql`
-      select r.bulan, r.layanan, r.kecamatan, r.kelurahan, d.tempat_tugas,
+      select r.bulan, r.layanan, r.kecamatan, r.kelurahan, r.tempat_tugas,
              p.status_kerja, p.kendala
       from retur_daftar r
-      join data_detail d on d.id = r.data_detail_id and d.tahun = r.tahun
       left join retur_proses p on p.tahun = r.tahun and p.bulan = r.bulan and p.data_detail_id = r.data_detail_id
       where r.tahun = ${t}
     `;
@@ -156,11 +159,10 @@ export async function returDaftarBulan(token: string, tahun: number | undefined,
 
     const rows = await sql`
       select r.data_detail_id, r.nama_rekening, r.nik, r.jenis_kelamin, r.alamat, r.layanan,
-             r.nomor_rekening, r.kecamatan, r.kelurahan, r.no_kontak, d.tempat_tugas,
+             r.nomor_rekening, r.kecamatan, r.kelurahan, r.no_kontak, r.tempat_tugas,
              p.nomor_perbaikan, p.status_kerja, p.kendala, p.diubah_at,
              h.oleh_nama as oleh_terakhir
       from retur_daftar r
-      join data_detail d on d.id = r.data_detail_id and d.tahun = r.tahun
       left join retur_proses p on p.tahun = r.tahun and p.bulan = r.bulan and p.data_detail_id = r.data_detail_id
       left join lateral (
         select oleh_nama from retur_riwayat where proses_id = p.id order by waktu desc, id desc limit 1
@@ -212,12 +214,11 @@ export async function returCari(token: string, tahun: number | undefined, kata: 
 
     const rows = await sql`
       select r.data_detail_id, r.bulan, r.nama_rekening, r.nik, r.layanan, r.nomor_rekening,
-             r.kecamatan, r.kelurahan, d.tempat_tugas,
+             r.kecamatan, r.kelurahan, r.tempat_tugas,
              p.id as proses_id, p.nomor_perbaikan, p.status_kerja, p.kendala
       from retur_daftar r
-      join data_detail d on d.id = r.data_detail_id and d.tahun = r.tahun
       left join retur_proses p on p.tahun = r.tahun and p.bulan = r.bulan and p.data_detail_id = r.data_detail_id
-      where r.tahun = ${t} and (r.nik = ${q} or r.nama_rekening ilike ${pola} or d.nama ilike ${pola})
+      where r.tahun = ${t} and (r.nik = ${q} or r.nama_rekening ilike ${pola})
       order by r.nik, r.dibuat_at
       limit ${BATAS_TARIK_CARI}
     `;
