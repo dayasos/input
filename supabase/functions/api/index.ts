@@ -31,6 +31,7 @@ import {
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
 import { returCari, returDaftarBulan, returRingkasan } from "./domains/retur.ts";
+import { statusAktivasiKembali, statusCariPenerima, statusPilihan, statusRekap, statusSimpanLaporan, statusUnduhExcelRekap } from "./domains/statusPenerima.ts";
 import { returDaftarImpor, returImporBank, returUnduhExcelBulan, returUnduhExcelTidakDitemukan } from "./domains/returAdmin.ts";
 import {
   konfirmasiUploadBerkas,
@@ -127,6 +128,12 @@ const ALLOWED: Record<string, Handler> = {
   returDaftarImpor,
   returUnduhExcelBulan,
   returUnduhExcelTidakDitemukan,
+  statusPilihan,
+  statusCariPenerima,
+  statusSimpanLaporan,
+  statusAktivasiKembali,
+  statusRekap,
+  statusUnduhExcelRekap,
   mintaUrlUploadBerkas,
   konfirmasiUploadBerkas,
   ambilTahunTersedia,

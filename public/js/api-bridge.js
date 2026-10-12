@@ -257,6 +257,9 @@ const MUTATION_INVALIDATIONS = {
   laporkanPerbaikanBerkas: ['penerima', 'penerima_detail'],
   tandaiSudahDiperbaiki: ['penerima', 'penerima_detail', 'dashboard', 'data_detail'],
   verifikasiMassalMemenuhiSyarat: ['penerima', 'dashboard', 'data_detail'],
+  // Retur: laporan status/aktivasi kembali mengubah data_detail.status (dibaca Data Detail & Pembayaran).
+  statusSimpanLaporan: ['data_detail'],
+  statusAktivasiKembali: ['data_detail'],
   simpanKuota: ['kuota', 'dashboard'],
   setInputKecKem: ['setelan'],
   setSakelarUserByAdmin: ['setelan'],

@@ -47,6 +47,7 @@
     S.siap = false; S.tahun = '2027'; S.ringkasan = null; S.bulanAktif = ''; S.rincian = [];
     S.filterStatus = ''; S.filterLayanan = ''; S.view = 'ringkasan'; S.berkas = null; S.hasilImpor = null;
     panel.innerHTML = '';
+    if (window.rtStatus) window.rtStatus.reset();
   }
 
   function adalahUtama() {
@@ -98,12 +99,15 @@
           '</div>' +
         '</div>' +
       '</div>' +
-      (adalahUtama()
-        ? '<div id="rt-nav" class="flex flex-wrap gap-2 mb-5">' +
-            '<button type="button" data-view="ringkasan" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Ringkasan</button>' +
-            '<button type="button" data-view="ekspor" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Ekspor Data Retur <span class="text-[10px] font-normal opacity-70">(Admin)</span></button>' +
-          '</div>'
-        : '') +
+      '<div id="rt-nav" class="flex flex-wrap gap-2 mb-5">' +
+        '<button type="button" data-view="ringkasan" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Ringkasan</button>' +
+        '<button type="button" data-view="lapor" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Lapor Status Penerima</button>' +
+        '<button type="button" data-view="rekap" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Rekap Tidak Aktif</button>' +
+        (adalahUtama()
+          ? '<button type="button" data-view="aktivasi" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Aktivasi Kembali <span class="text-[10px] font-normal opacity-70">(Admin)</span></button>' +
+            '<button type="button" data-view="ekspor" class="rt-nav-btn h-9 px-4 rounded-lg text-sm font-semibold border">Ekspor Data Retur <span class="text-[10px] font-normal opacity-70">(Admin)</span></button>'
+          : '') +
+      '</div>' +
       '<div id="rt-view-ringkasan">' +
         '<form id="rt-form-cari" class="flex flex-col sm:flex-row gap-2 mb-5">' +
           '<input id="rt-cari" type="search" autocomplete="off" placeholder="Cari NIK atau nama (minimal 3 karakter)" class="h-10 flex-1 rounded-lg border border-slate-300 bg-white px-3 text-sm" />' +
@@ -114,7 +118,8 @@
         '<div id="rt-kartu" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6"></div>' +
         '<div id="rt-rincian"></div>' +
       '</div>' +
-      '<div id="rt-view-ekspor" class="hidden"></div>';
+      '<div id="rt-view-ekspor" class="hidden"></div>' +
+      '<div id="rt-view-status" class="hidden"></div>';
 
     var nav = $('rt-nav');
     if (nav) nav.addEventListener('click', function (e) {
@@ -131,6 +136,7 @@
       $('rt-rincian').innerHTML = '';
       var ve = $('rt-view-ekspor');
       if (ve) { ve.removeAttribute('data-siap'); ve.innerHTML = ''; S.berkas = null; S.hasilImpor = null; S.seqEkspor++; if (S.view === 'ekspor') tampilkanView('ekspor'); }
+      if (VIEW_STATUS.indexOf(S.view) !== -1) tampilkanView(S.view);
       muatRingkasan();
     });
     $('rt-muat-ulang').addEventListener('click', function () {
@@ -618,20 +624,32 @@
   // ---------------------------------------------------------------------------
   // Pergantian tampilan di dalam panel Retur: Ringkasan (semua peran) | Ekspor Data Retur (khusus Admin Utama)
   // ---------------------------------------------------------------------------
+  var VIEW_STATUS = ['lapor', 'rekap', 'aktivasi']; // dirender app-retur-status.js; hanya SATU yang ada di halaman (id elemen sama)
+
   function tampilkanView(nama) {
-    if (nama === 'ekspor' && !adalahUtama()) nama = 'ringkasan';
+    if ((nama === 'ekspor' || nama === 'aktivasi') && !adalahUtama()) nama = 'ringkasan';
+    if (VIEW_STATUS.indexOf(nama) !== -1 && !window.rtStatus) nama = 'ringkasan';
     S.view = nama;
-    var vr = $('rt-view-ringkasan'), ve = $('rt-view-ekspor');
+    var statusAktif = VIEW_STATUS.indexOf(nama) !== -1;
+    var vr = $('rt-view-ringkasan'), ve = $('rt-view-ekspor'), vs = $('rt-view-status');
     if (vr) vr.classList.toggle('hidden', nama !== 'ringkasan');
     if (ve) ve.classList.toggle('hidden', nama !== 'ekspor');
-    document.querySelectorAll('#rt-nav .rt-nav-btn').forEach(function (b) {
-      var aktif = b.getAttribute('data-view') === nama;
-      b.classList.toggle('bg-slate-800', aktif); b.classList.toggle('text-white', aktif); b.classList.toggle('border-slate-800', aktif);
-      b.classList.toggle('bg-white', !aktif); b.classList.toggle('text-slate-700', !aktif); b.classList.toggle('border-slate-300', !aktif);
+    if (vs) vs.classList.toggle('hidden', !statusAktif);
+    document.querySelectorAll('#rt-nav .rt-nav-btn').forEach(function (btn) {
+      var aktif = btn.getAttribute('data-view') === nama;
+      btn.classList.toggle('bg-slate-800', aktif); btn.classList.toggle('text-white', aktif); btn.classList.toggle('border-slate-800', aktif);
+      btn.classList.toggle('bg-white', !aktif); btn.classList.toggle('text-slate-700', !aktif); btn.classList.toggle('border-slate-300', !aktif);
     });
     if (nama === 'ekspor' && ve && !ve.getAttribute('data-siap')) {
       ve.setAttribute('data-siap', '1');
       renderEkspor();
+    }
+    // Halaman status selalu dirender ulang (data segar, dan id elemen tidak ganda).
+    if (statusAktif && vs) {
+      vs.innerHTML = '';
+      window.rtStatus.render(nama, vs, { tahun: function () { return S.tahun; } });
+    } else if (vs) {
+      vs.innerHTML = '';
     }
   }
 

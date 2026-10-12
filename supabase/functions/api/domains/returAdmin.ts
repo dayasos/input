@@ -309,7 +309,7 @@ export async function returDaftarImpor(token: string, tahun?: number) {
 // Unduh Excel
 // ---------------------------------------------------------------------------
 // deno-lint-ignore no-explicit-any
-async function susunExcelBase64(namaSheet: string, header: string[], baris: any[][], lebar: number[], warnaHeader: string, kolomTeks: number[]) {
+export async function susunExcelBase64(namaSheet: string, header: string[], baris: any[][], lebar: number[], warnaHeader: string, kolomTeks: number[]) {
   const ExcelJS = await muatExcelJS();
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet(namaSheet);

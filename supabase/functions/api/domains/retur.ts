@@ -33,7 +33,7 @@ const BATAS_HASIL_CARI = 200;
 const STATUS_BELUM = "BELUM DIUSULKAN";
 
 /** Pembuat penyaring baris sesuai hak akses sesi. `tempatTugas` dibutuhkan sub-filter GSM Katolik/Kristen. */
-async function buatPenyaringAkses(sesi: SesiLogin) {
+export async function buatPenyaringAkses(sesi: SesiLogin) {
   const { instansiPengguna, layananPengguna, listLayananKemenag } = await resolveInstansiPengguna(sesi.role);
   if (!instansiPengguna) throw new Error("Peran tidak dikenali.");
   const namaKecamatanPengguna = sesi.kecamatan || "";
