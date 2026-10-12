@@ -151,6 +151,16 @@ function saringKelurahanAkun(sesi: DataSesi, rows: BarisRumahIbadah[]): BarisRum
   });
 }
 
+// Daftar jenis yang dibaca pop up untuk satu layanan. Layanan "PENGURUS VIHARA/KLENTENG/KUIL" mencakup tiga jenis
+// ASLI (VIHARA, KLENTENG, KUIL). Jenis gabungan lama VIHARA_KLENTENG_KUIL TIDAK dipakai: isinya hanya salinan
+// vihara + kuil (tanpa satu pun klenteng) dan sejak normalisasi 2026-09-23 sudah tidak termasuk jenis yang diizinkan
+// bagi akun kecamatan -- dulu itu membuat pop up layanan ini KOSONG.
+function jenisListDariSheetName(sheetName: string | null): string[] {
+  if (sheetName === "db_vihara_klenteng_kuil") return ["VIHARA", "KLENTENG", "KUIL"];
+  const j = jenisDariSheetName(sheetName);
+  return j ? [j] : [];
+}
+
 // Port 1:1 dari getDataRumahIbadah() — bentuk hasil TETAP array-of-array [kecamatan, kelurahan,
 // nama, alamat] (bukan objek) karena index.html membaca lewat row[0]/row[1]/row[2]/row[3]
 // (lihat renderTable() di index.html) — mengubah bentuk ini akan merusak modal pilih rumah ibadah.
@@ -162,8 +172,8 @@ export async function getDataRumahIbadah(token: string, kategori: string) {
     return [] as string[][];
   }
 
-  const jenis = jenisDariSheetName(getSheetName(kategori));
-  if (!jenis || !jenisDiizinkanUntukSesi(sesi, jenis)) return [] as string[][];
+  const daftarJenis = jenisListDariSheetName(getSheetName(kategori));
+  if (daftarJenis.length === 0 || !daftarJenis.every((j) => jenisDiizinkanUntukSesi(sesi, j))) return [] as string[][];
 
   let rows: BarisRumahIbadah[];
   if (sesiTerikatKecamatan(sesi)) {
@@ -172,16 +182,24 @@ export async function getDataRumahIbadah(token: string, kategori: string) {
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
       from rumah_ibadah
-      where jenis = ${jenis} and upper(kecamatan) = ${kecamatan}
+      where jenis in ${sql(daftarJenis)} and upper(kecamatan) = ${kecamatan}
     `;
   } else {
     rows = await sql`
       select kecamatan, kelurahan, nama, alamat
       from rumah_ibadah
-      where jenis = ${jenis}
+      where jenis in ${sql(daftarJenis)}
     `;
   }
   rows = saringKelurahanAkun(sesi, rows);
+  // Satu rumah ibadah yang tercatat di dua jenis (nama + alamat sama) cukup tampil sekali.
+  const sudah = new Set<string>();
+  rows = rows.filter((r) => {
+    const kunci = [r.kecamatan, r.kelurahan, r.nama, r.alamat].map((x) => rapikanTeks(x)).join("|");
+    if (sudah.has(kunci)) return false;
+    sudah.add(kunci);
+    return true;
+  });
   return rows.map((r) => [
     String(r.kecamatan || ""),
     String(r.kelurahan || ""),
