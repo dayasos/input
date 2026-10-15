@@ -292,6 +292,8 @@ const MUTATION_INVALIDATIONS = {
   adminHapusBerkasMassal: ['penerima', 'penerima_detail', 'dashboard', 'riwayat'],
   adminHapusData: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
   adminHapusDataMassal: ['penerima', 'penerima_detail', 'dashboard', 'kuota', 'data_detail', 'riwayat'],
+  simpanCatatanRekomendasiMui: ['penerima', 'penerima_detail'],
+  simpanResponAdminMui: ['penerima', 'penerima_detail'],
 };
 
 // Mutasi SATU baris penerima: posisi argumen yang berisi id baris (args[0] selalu token). Id ini ikut
@@ -305,6 +307,8 @@ const MUTATION_ID_ARG = {
   editDataPenerima: 1,
   adminUbahData: 1,
   adminHapusData: 1,
+  simpanCatatanRekomendasiMui: 1,
+  simpanResponAdminMui: 1,
 };
 
 // Ambil hanya bilangan bulat positif, unik, maksimal 200 -- id berasal dari argumen lokal ATAU dari

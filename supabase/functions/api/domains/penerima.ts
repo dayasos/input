@@ -50,7 +50,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
       rows = await sql`
         select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+               status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
         from penerima
         where tahun = ${TAHUN_AKTIF}
         order by nomor_urut
@@ -62,7 +63,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
       rows = await sql`
         select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+               status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
         from penerima
         where tahun = ${TAHUN_AKTIF}
           and upper(kecamatan) = ${kecamatanFilter}
@@ -82,7 +84,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
           rows = await sql`
             select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                    tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+                   status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
             from penerima
             where tahun = ${TAHUN_AKTIF}
               and upper(layanan) = ${layananFilter}
@@ -93,7 +96,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
           rows = await sql`
             select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                    tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+                   kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+                   status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
             from penerima
             where tahun = ${TAHUN_AKTIF}
               and upper(layanan) = ${layananFilter}
@@ -105,7 +109,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
         rows = await sql`
           select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                  tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-                 kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+                 kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+                 status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
           from penerima
           where tahun = ${TAHUN_AKTIF}
             and upper(layanan) in (
@@ -119,7 +124,8 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
       rows = await sql`
         select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
                tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+               kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+               status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
         from penerima
         where tahun = ${TAHUN_AKTIF}
           and upper(layanan) in ('USTADZ', 'USTADZAH', 'USTADZ/USTADZAH')
@@ -181,6 +187,9 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
         // penanda truthy/falsy (row[19], lihat index.html baris 3706/3757) jadi formatnya tidak
         // kritikal DI FUNGSI INI, tapi disamakan supaya konsisten dgn dataLengkap[38] di bawah.
         formatTanggalWaktuWIB(row.tanggal_lapor_perbaikan),
+        row.status_rekomendasi_mui || "BELUM_DIPERIKSA",
+        row.catatan_rekomendasi_mui || "",
+        row.respon_admin_mui || "",
       ]);
     }
 
@@ -193,7 +202,7 @@ export async function ambilDataLihatDataHakAkses(token: string): Promise<string>
 // Ambil ULANG hanya beberapa baris daftar "Lihat Data" (dipakai sinkronisasi realtime: admin lain
 // mengubah status/data satu-dua baris -> klien cukup menarik baris itu saja, bukan seluruh ribuan
 // baris lewat ambilDataLihatDataHakAkses). Bentuk baris SAMA PERSIS dengan ambilDataLihatDataHakAkses
-// (20 kolom, urutan sama) supaya klien bisa langsung menimpa baris di tabelnya -- kalau kolom di
+// (23 kolom, urutan sama) supaya klien bisa langsung menimpa baris di tabelnya -- kalau kolom di
 // fungsi itu berubah, ubah juga `petakanBarisLihat` di bawah. Akses memakai helper yang sama dengan
 // ambilDetailPenerimaPerBaris (lolosAksesBarisLihatData) -- baris di luar hak akses TIDAK pernah
 // dikembalikan, dan id yang tidak ditemukan/tidak berhak dilaporkan di `hilang` (klien menghapusnya
@@ -222,6 +231,9 @@ function petakanBarisLihat(row: any): unknown[] {
     row.umur ?? "",
     row.status_verifikasi || "Proses Verifikasi",
     formatTanggalWaktuWIB(row.tanggal_lapor_perbaikan),
+    row.status_rekomendasi_mui || "BELUM_DIPERIKSA",
+    row.catatan_rekomendasi_mui || "",
+    row.respon_admin_mui || "",
   ];
 }
 
@@ -252,7 +264,8 @@ export async function ambilBarisLihatDataByIds(token: string, ids: unknown) {
     const rows = await sql`
       select id, nama, nik, jenis_kelamin, tempat_lahir, tanggal_lahir, alamat, layanan,
              tempat_tugas, alamat_tugas, kecamatan, kelurahan, nama_rekening, nomor_rekening,
-             kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan
+             kantor_cabang, no_kontak, status_bpjs_tk, umur, status_verifikasi, tanggal_lapor_perbaikan,
+             status_rekomendasi_mui, catatan_rekomendasi_mui, respon_admin_mui
       from penerima
       where tahun = ${TAHUN_AKTIF} and id in ${sql(daftarId)}
     `;
@@ -359,6 +372,15 @@ export async function ambilDetailPenerimaPerBaris(token: string, nomorBarisAsli:
     if (dataLengkap[15]) {
       dataLengkap[15] = (dataLengkap[15] as string).replace(/^'+/, "").trim();
     }
+
+    // Kolom verifikasi Rekomendasi MUI & jalur komunikasi Admin Utama (indeks 41..47, non-breaking):
+    dataLengkap[41] = row.status_rekomendasi_mui || "BELUM_DIPERIKSA";
+    dataLengkap[42] = row.catatan_rekomendasi_mui || "";
+    dataLengkap[43] = formatTanggalWaktuWIB(row.tgl_rekomendasi_mui);
+    dataLengkap[44] = row.petugas_rekomendasi_mui || "";
+    dataLengkap[45] = row.respon_admin_mui || "";
+    dataLengkap[46] = formatTanggalWaktuWIB(row.tgl_respon_admin_mui);
+    dataLengkap[47] = row.id;
 
     return JSON.stringify({ sukses: true, dataLengkap });
   } catch (error) {
@@ -1054,3 +1076,125 @@ export async function editDataPenerima(
     return { sukses: false, pesan: "Gagal mengedit data: " + String(e) };
   }
 }
+
+/**
+ * Simpan status dan catatan verifikasi rekomendasi MUI oleh akun MUI atau Admin Utama.
+ * Khusus untuk layanan Ustadz dan Ustadzah.
+ */
+export async function simpanCatatanRekomendasiMui(
+  token: string,
+  nomorBarisAsli: number,
+  statusRekomendasi: string,
+  catatan: string,
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  const role = (sesi.role || "").toString().trim().toUpperCase();
+  if (role !== "MUI" && role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: hanya akun MUI dan Admin Utama yang berhak memverifikasi rekomendasi MUI." };
+  }
+
+  const id = Number(nomorBarisAsli);
+  if (!id) return { sukses: false, pesan: "Nomor baris tidak valid." };
+
+  const statusValid = ["BELUM_DIPERIKSA", "SESUAI", "PERLU_KOREKSI"];
+  const statusBersih = (statusRekomendasi || "").toString().trim().toUpperCase();
+  if (!statusValid.includes(statusBersih)) {
+    return { sukses: false, pesan: "Status rekomendasi MUI tidak valid (harus BELUM_DIPERIKSA, SESUAI, atau PERLU_KOREKSI)." };
+  }
+
+  const catatanBersih = (catatan || "").toString().trim();
+  if (statusBersih === "PERLU_KOREKSI" && !catatanBersih) {
+    return { sukses: false, pesan: "Catatan verifikasi wajib diisi jika status Perlu Koreksi." };
+  }
+
+  try {
+    const cek = await sql`
+      select id, layanan from penerima where id = ${id} and tahun = ${TAHUN_AKTIF} limit 1
+    `;
+    if (cek.length === 0) return { sukses: false, pesan: "Data penerima tidak ditemukan." };
+    const lay = (cek[0].layanan || "").toString().toUpperCase();
+    if (!["USTADZ", "USTADZAH", "USTADZ/USTADZAH"].includes(lay)) {
+      return { sukses: false, pesan: "Verifikasi rekomendasi MUI hanya berlaku untuk layanan Ustadz atau Ustadzah." };
+    }
+
+    const namaPetugas = sesi.nama_lengkap || sesi.user_id || (role === "MUI" ? "MUI Kota Medan" : sesi.username || "Admin Utama");
+    const waktuSekarang = new Date();
+
+    await sql`
+      update penerima set
+        status_rekomendasi_mui = ${statusBersih},
+        catatan_rekomendasi_mui = ${catatanBersih},
+        tgl_rekomendasi_mui = ${waktuSekarang},
+        petugas_rekomendasi_mui = ${namaPetugas}
+      where id = ${id} and tahun = ${TAHUN_AKTIF}
+    `;
+
+    return {
+      sukses: true,
+      pesan: "Catatan verifikasi rekomendasi MUI berhasil disimpan.",
+      status: statusBersih,
+      catatan: catatanBersih,
+      petugas: namaPetugas,
+      tanggal: formatTanggalWaktuWIB(waktuSekarang),
+    };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+
+/**
+ * Simpan respon/tanggapan dari Admin Utama kepada akun MUI.
+ */
+export async function simpanResponAdminMui(
+  token: string,
+  nomorBarisAsli: number,
+  responAdmin: string,
+) {
+  let sesi;
+  try {
+    sesi = await wajibSesi(token);
+  } catch (e) {
+    return { sukses: false, pesan: e instanceof Error ? e.message : String(e) };
+  }
+
+  const role = (sesi.role || "").toString().trim().toUpperCase();
+  if (role !== "UTAMA") {
+    return { sukses: false, pesan: "Akses ditolak: tanggapan hanya dapat dikirim oleh Admin Utama." };
+  }
+
+  const id = Number(nomorBarisAsli);
+  if (!id) return { sukses: false, pesan: "Nomor baris tidak valid." };
+
+  const responBersih = (responAdmin || "").toString().trim();
+  if (!responBersih) {
+    return { sukses: false, pesan: "Tanggapan Admin Utama tidak boleh kosong." };
+  }
+
+  try {
+    const waktuSekarang = new Date();
+    const rows = await sql`
+      update penerima set
+        respon_admin_mui = ${responBersih},
+        tgl_respon_admin_mui = ${waktuSekarang}
+      where id = ${id} and tahun = ${TAHUN_AKTIF}
+      returning id
+    `;
+    if (rows.length === 0) return { sukses: false, pesan: "Data penerima tidak ditemukan." };
+
+    return {
+      sukses: true,
+      pesan: "Tanggapan Admin Utama berhasil dikirim ke akun MUI.",
+      respon: responBersih,
+      tanggal: formatTanggalWaktuWIB(waktuSekarang),
+    };
+  } catch (error) {
+    return { sukses: false, pesan: String(error) };
+  }
+}
+

@@ -19,12 +19,10 @@ function tetapkanUsiaValid() {
   if (modalUsia) modalUsia.classList.add('hidden');
   bukaKunciForm('USIA');
 }
-
 function tetapkanUsiaKurangSyarat() {
   if (modalUsia) modalUsia.classList.remove('hidden');
   kunciDariBlokSetelah('USIA', INDEKS_KUNCI_USIA, null);
 }
-
 if (inputTglLahir) {
   inputTglLahir.addEventListener('input', () => {
     if (!inputTglLahir.value) {
@@ -41,14 +39,12 @@ if (inputTglLahir) {
     if (usia < 18) tetapkanUsiaKurangSyarat(); else tetapkanUsiaValid();
   });
 }
-
 if (btnModalUsiaOk) {
   btnModalUsiaOk.addEventListener('click', () => {
     if (modalUsia) modalUsia.classList.add('hidden');
     if (inputTglLahir) inputTglLahir.focus();
   });
 }
-
 if (inputKontak) {
   inputKontak.addEventListener('input', (e) => {
     let val = e.target.value.replace(/[^0-9]/g, '');
@@ -56,7 +52,6 @@ if (inputKontak) {
     e.target.value = val;
   });
 }
-
 /// Pembaca EXIF GPS mandiri (tanpa library luar) — parsing header JPEG murni JavaScript.
 function bacaGpsDariFile(file) {
   return new Promise(function (resolve) {
@@ -132,13 +127,11 @@ function bacaGpsDariFile(file) {
     reader.readAsArrayBuffer(file.slice(0, 131072)); // cukup baca 128KB awal, data EXIF selalu di awal file
   });
 }
-
 // Koordinat Lokasi EXIF
 const KONFIG_KOORDINAT = {
   plank: { layananList: ["GURU MAGHRIB MENGAJI"], wrapperId: 'wrapper-foto-plank', idHidden: 'hidden-koordinat-link', idCek: 'status-koordinat-cek', idOk: 'status-koordinat-ok', idGagal: 'status-koordinat-gagal', idTeksOk: 'teks-koordinat-ok', idLinkOk: 'link-koordinat-ok', idInputManual: 'input-koordinat-manual', siap: false },
   ibadah: { layananList: ["GURU SEKOLAH MINGGU", "GURU SEKOLAH BUDDHA", "GURU SEKOLAH HINDU", "GURU SEKOLAH KONG HU CHU"], wrapperId: 'wrapper-foto-ibadah', idHidden: 'hidden-koordinat-link-ibadah', idCek: 'status-koordinat-cek-ibadah', idOk: 'status-koordinat-ok-ibadah', idGagal: 'status-koordinat-gagal-ibadah', idTeksOk: 'teks-koordinat-ok-ibadah', idLinkOk: 'link-koordinat-ok-ibadah', idInputManual: 'input-koordinat-manual-ibadah', siap: false }
 };
-
 function updateStatusTombolSimpan() {
   const btnSimpan = document.getElementById('btn-simpan-data');
   if (!btnSimpan) return;
@@ -161,7 +154,6 @@ function updateStatusTombolSimpan() {
   btnSimpan.classList.toggle('cursor-not-allowed', terkunci);
   btnSimpan.title = pesanKunci;
 }
-
 function resetStatusKoordinat(mode) {
   const cfg = KONFIG_KOORDINAT[mode];
   cfg.siap = false;
@@ -173,11 +165,9 @@ function resetStatusKoordinat(mode) {
   if (inputManual) inputManual.value = '';
   updateStatusTombolSimpan();
 }
-
 function resetSemuaStatusKoordinat() {
   Object.keys(KONFIG_KOORDINAT).forEach(resetStatusKoordinat);
 }
-
 function cekKoordinatManualDiisi(mode) {
   const cfg = KONFIG_KOORDINAT[mode];
   const val = document.getElementById(cfg.idInputManual).value.trim();
@@ -190,7 +180,6 @@ function cekKoordinatManualDiisi(mode) {
   }
   updateStatusTombolSimpan();
 }
-
 async function prosesKoordinatDariFoto(file, mode) {
   resetStatusKoordinat(mode);
   if (!file) return;
@@ -220,7 +209,6 @@ async function prosesKoordinatDariFoto(file, mode) {
   }
   updateStatusTombolSimpan();
 }
-
 filePlank.addEventListener('change', function (e) { prosesKoordinatDariFoto(e.target.files[0], 'plank'); });
 fileIbadah.addEventListener('change', function (e) { prosesKoordinatDariFoto(e.target.files[0], 'ibadah'); });
 
@@ -307,7 +295,6 @@ btnResetForm.addEventListener('click', () => {
     hapusDrafLokalForm();
   }, 50);
 });
-
 // =========================================================================
 // SISTEM DRAF OTOMATIS & RESTORE FORM INPUT
 // =========================================================================
@@ -358,7 +345,6 @@ function simpanDrafLokalForm() {
     }
   } catch (_e) { }
 }
-
 function hapusDrafLokalForm() {
   try {
     sessionStorage.removeItem(KUNCI_DRAF_STORAGE);
@@ -366,7 +352,6 @@ function hapusDrafLokalForm() {
     if (banner) banner.classList.add('hidden');
   } catch (_e) { }
 }
-
 function cekDanTampilkanBannerDraf() {
   try {
     const raw = sessionStorage.getItem(KUNCI_DRAF_STORAGE);
@@ -378,7 +363,6 @@ function cekDanTampilkanBannerDraf() {
     }
   } catch (_e) { }
 }
-
 function pulihkanDrafLokalForm() {
   try {
     const raw = sessionStorage.getItem(KUNCI_DRAF_STORAGE);
@@ -449,7 +433,6 @@ function pulihkanDrafLokalForm() {
     tampilkanToast('Gagal memulihkan draf: ' + (err ? err.message : err), 'gagal');
   }
 }
-
 // Inisialisasi tombol draf
 const btnPulihkanDraf = document.getElementById('btn-pulihkan-draf');
 if (btnPulihkanDraf) btnPulihkanDraf.addEventListener('click', pulihkanDrafLokalForm);
@@ -479,7 +462,6 @@ if (typeof formPembayaran !== 'undefined' && formPembayaran) {
     });
   });
 }
-
 setTimeout(cekDanTampilkanBannerDraf, 500);
 
 function kompresGambar(file, maxDim, kualitas) {
@@ -511,7 +493,6 @@ function kompresGambar(file, maxDim, kualitas) {
     img.src = url;
   });
 }
-
 // Helper Upload Berkas (Direct Binary Blob - bebas overhead Base64 & memory spike)
 async function prosesFileTerkompresi(file) {
   if (!file) return null;
@@ -520,12 +501,10 @@ async function prosesFileTerkompresi(file) {
   if (file.size > MAKS_BYTE) throw new Error('Ukuran berkas "' + file.name + '" melebihi 25 MB. Mohon perkecil ukuran file.');
   return { namaFile: file.name, mimeType: file.type || 'application/octet-stream', file: file, ukuranByte: file.size };
 }
-
 async function bacaFileTerkompresi(inputEl) {
   if (!inputEl || !inputEl.files || inputEl.files.length === 0) return null;
   return prosesFileTerkompresi(inputEl.files[0]);
 }
-
 function panggilAksiPromise(namaAksi) {
   const args = Array.prototype.slice.call(arguments, 1);
   return new Promise(function (resolve, reject) {
@@ -533,7 +512,6 @@ function panggilAksiPromise(namaAksi) {
     run[namaAksi].apply(run, args);
   });
 }
-
 // ---------------------------------------------------------------------------
 // Upload berkas ke Google Drive lewat microservice GAS (lihat gas/Kode.gs, v3).
 //   1. siapkanFolderDrive        -> SATU panggilan: folder pendaftar dicari/dibuat (satu-satunya
@@ -558,19 +536,16 @@ function kunciCacheUploadDrive(nik, layanan, k) {
   const L = (layanan || '').toString().trim().toUpperCase();
   return N + '::' + L + '::' + k;
 }
-
 // Tanda tangan berkas: nama+ukuran+lastModified+kecamatan (kecamatan ikut supaya cache tak salah
 // nyambung ke folder kecamatan lama kalau user mengubah kecamatan setelah upload sebagian).
 function sigBerkas(item, kecamatan) {
   return item ? `${item.namaFile}:${item.ukuranByte}:${item.file ? item.file.lastModified : ''}:${(kecamatan || '').toString().toUpperCase()}` : '';
 }
-
 function ambilCacheUploadSukses(nik, layanan, k, item, kecamatan) {
   const entri = cacheUploadSuksesDrive[kunciCacheUploadDrive(nik, layanan, k)];
   if (!entri || Date.now() - entri.waktu > EXPIRY_CACHE_UPLOAD_MS) return null;
   return entri.sig === sigBerkas(item, kecamatan) ? entri : null;
 }
-
 function simpanCacheUploadSukses(nik, layanan, k, item, link, folderId, kecamatan) {
   const now = Date.now();
   Object.keys(cacheUploadSuksesDrive).forEach(function (kk) {
@@ -578,7 +553,6 @@ function simpanCacheUploadSukses(nik, layanan, k, item, link, folderId, kecamata
   });
   cacheUploadSuksesDrive[kunciCacheUploadDrive(nik, layanan, k)] = { sig: sigBerkas(item, kecamatan), link: link, folderId: folderId, waktu: now };
 }
-
 // Dipanggil setelah submit/edit BENAR-BENAR tuntas tersimpan.
 function bersihkanCacheUploadUntukNik(nik, layanan) {
   const prefix = kunciCacheUploadDrive(nik, layanan, '');
@@ -586,7 +560,6 @@ function bersihkanCacheUploadUntukNik(nik, layanan) {
     if (kk.indexOf(prefix) === 0) delete cacheUploadSuksesDrive[kk];
   });
 }
-
 function bacaBlobSebagaiBase64(file) {
   return new Promise(function (resolve, reject) {
     const reader = new FileReader();
@@ -599,7 +572,6 @@ function bacaBlobSebagaiBase64(file) {
     reader.readAsDataURL(file);
   });
 }
-
 function tidurMs(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
 
 // POST ke GAS dgn timeout. Content-Type text/plain menghindari preflight CORS (GAS tak melayani OPTIONS).
@@ -636,7 +608,6 @@ async function panggilGas(aksi, args, timeoutMs) {
     clearTimeout(timer);
   }
 }
-
 async function panggilGasDenganRetry(aksi, args, timeoutMs) {
   let terakhir = null;
   for (let attempt = 0; attempt <= MAKS_RETRY_UPLOAD; attempt++) {
@@ -650,7 +621,6 @@ async function panggilGasDenganRetry(aksi, args, timeoutMs) {
   }
   throw terakhir || new Error('Tidak ada respons dari server Drive.');
 }
-
 async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
   const kunciList = Object.keys(berkasMap || {}).filter(function (k) { return berkasMap[k] && berkasMap[k].file; });
   if (kunciList.length === 0) return { sukses: true, link: {} };
@@ -687,7 +657,6 @@ async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
       labelTerpakai[lb] = true;
       labelUnik[k] = lb;
     });
-
     const link = {};
     let selesai = 0;
     const total = kunciList.length;
@@ -721,7 +690,6 @@ async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
         tampilProgres(Math.round(10 + (selesai / total) * 85), `Mengunggah Berkas (${selesai}/${total})`, `Selesai: ${label}`);
       }
     }
-
     tampilProgres(10, `Mengunggah Berkas (0/${total})`, 'Mengirim berkas ke Google Drive...');
     const pekerja = [];
     for (let i = 0; i < Math.min(LIMIT_PARALEL_UPLOAD, total); i++) pekerja.push(kerjakan());
@@ -730,7 +698,6 @@ async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
     if (gagal) {
       return { sukses: false, pesan: 'Gagal mengunggah "' + gagal.label + '": ' + pesanErrorRamah(gagal.err) + (selesai ? ' (' + selesai + ' berkas lain sudah terkirim, tidak perlu diunggah ulang.)' : '') };
     }
-
     link.idFolderBerkas = folderId;
     return { sukses: true, link: link };
   } catch (err) {
@@ -739,7 +706,6 @@ async function unggahBerkasKeDriveGAS(konteks, berkasMap) {
     selesaiProgres();
   }
 }
-
 async function kumpulkanDataForm() {
   function val(name) {
     const el = formPembayaran.querySelector('[name="' + name + '"]');
@@ -787,7 +753,6 @@ async function kumpulkanDataForm() {
   data.__berkas = berkas;
   return data;
 }
-
 function labelBerkasSimpanBaru(layanan) {
   const lay = (layanan || "").toString().toUpperCase().trim();
   return {
@@ -800,7 +765,6 @@ function labelBerkasSimpanBaru(layanan) {
     fileDomisiliRumahIbadah: "Domisili Rumah Ibadah"
   };
 }
-
 function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
   // Sertakan idempotency key agar server bisa mengenali retry dari pengiriman yang sama.
   if (idempotencyKeySimpan) dataObjek.idempotencyKey = idempotencyKeySimpan;
@@ -892,7 +856,6 @@ function panggilSimpanDataKeSheetSetelahUpload(dataObjek, pulihkanTombol) {
     tampilkanToast("Gagal mengunggah berkas: " + pesanErrorRamah(errUpload), 'gagal', { durasi: 6000 });
   });
 }
-
 function prosesValidasiDanSimpan() {
   const btnSimpan = document.getElementById('btn-simpan-data');
   if (btnSimpan) setTombolMemuat(btnSimpan, 'Memproses...');
@@ -973,7 +936,6 @@ function prosesValidasiDanSimpan() {
     })
     .validasiDataBaru(dataPengguna.token, inputNik.value, selectLayanan.value, inputTempatTugas.value, instansiAktif, inputNoRek.value, document.getElementById('control-kecamatan').value, document.getElementById('input-almt-tugas').value, document.getElementById('input-kelurahan-tugas').value);
 }
-
 // Cek Kesesuaian Nama Rekening
 const DAFTAR_GELAR_DIABAIKAN = [
   'DR', 'DRS', 'DRA', 'IR', 'PROF', 'H', 'HJ', 'KH', 'TGK', 'HC',
@@ -990,7 +952,6 @@ function normalisasiNama(nama) {
   });
   return kata.join(' ').trim();
 }
-
 function bangunHtmlHighlight(namaAsli, kataPembanding) {
   const kataAsli = namaAsli.toUpperCase().trim().split(/\s+/);
   const setPembanding = new Set(kataPembanding);
@@ -998,7 +959,6 @@ function bangunHtmlHighlight(namaAsli, kataPembanding) {
     return setPembanding.has(w) ? esc(w) : '<span class="bg-yellow-200 px-1 rounded">' + esc(w) + '</span>';
   }).join(' ');
 }
-
 let namaBerbedaDikonfirmasi = false;
 let catatanPerbedaanNamaTersimpan = "";
 
@@ -1022,12 +982,10 @@ function generateUUID() {
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
   });
 }
-
 function resetKonfirmasiNamaBeda() {
   namaBerbedaDikonfirmasi = false;
   catatanPerbedaanNamaTersimpan = "";
 }
-
 function cekKesesuaianNama() {
   const elNamaLengkap = document.getElementById('input-nama');
   const elNamaRekening = document.getElementById('input-nama-rek');
@@ -1049,17 +1007,14 @@ function cekKesesuaianNama() {
   document.getElementById('modal-nama-beda').classList.remove('hidden');
   return false;
 }
-
 document.getElementById('btn-perbaiki-nama').addEventListener('click', function () {
   document.getElementById('modal-nama-beda').classList.add('hidden');
   document.getElementById('input-nama-rek').focus();
 });
-
 document.getElementById('btn-konfirmasi-orang-sama').addEventListener('click', function () {
   document.getElementById('area-tombol-awal-beda').classList.add('hidden');
   document.getElementById('area-keterangan-beda').classList.remove('hidden');
 });
-
 document.getElementById('btn-lanjutkan-nama-beda').addEventListener('click', function () {
   const ket = document.getElementById('input-catatan-nama-beda').value.trim().toUpperCase();
   if (!ket) { tampilkanToast('Keterangan wajib diisi.', 'gagal'); return; }
@@ -1889,8 +1844,13 @@ function saringDanTampilkanTabel() {
     const lolosLay = !valLay || row[7] === valLay;
     const statusRowIni = row[18] || "Proses Verifikasi";
     const sudahLaporIni = !!row[19];
+    const statusMuiRow = (row[20] || "BELUM_DIPERIKSA").toString().toUpperCase();
     const lolosVerif = !valVerif
-      || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && sudahLaporIni) : statusRowIni === valVerif);
+      || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && sudahLaporIni)
+      : valVerif === "MUI: Perlu Koreksi" ? (statusMuiRow === "PERLU_KOREKSI")
+      : valVerif === "MUI: Sah" ? (statusMuiRow === "SESUAI")
+      : valVerif === "MUI: Belum Cek" ? (statusMuiRow === "BELUM_DIPERIKSA")
+      : statusRowIni === valVerif);
     const teksCari = row._cari || (String(row[1] || '') + ' ' + String(row[2] || '') + ' ' + String(row[15] || '') + ' ' + String(row[8] || '')).toLowerCase();
     const lolosCari = !kataKunci || teksCari.includes(kataKunci);
     if (lolosKec && lolosKel && lolosLay && lolosCari && lolosVerif) dataLolosSaring.push(row);
@@ -1920,7 +1880,7 @@ function saringDanTampilkanTabel() {
     <td class="px-4 py-3 whitespace-nowrap align-middle min-w-[150px]"><span class="bg-slate-100 text-slate-700 text-[11px] px-2.5 py-0.5 rounded-full font-medium inline-block">${esc(row[7]) || '-'}</span></td>
     <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(row[10]) || '-'}</td>
     <td class="px-4 py-3 text-xs text-slate-600 whitespace-nowrap align-middle min-w-[130px]">${esc(row[11]) || '-'}</td>
-    <td class="px-4 py-3 text-center whitespace-nowrap align-middle min-w-[160px]">${badgeStatusVerifikasi(row[18], row[19])}</td>
+    <td class="px-4 py-3 text-center whitespace-nowrap align-middle min-w-[160px]">${badgeStatusVerifikasi(row[18], row[19])}${badgeRekomendasiMui(row[7], row[20])}</td>
     <td class="w-24 px-4 py-3 text-center whitespace-nowrap align-middle">
       <div class="flex items-center justify-center">
         <button onclick="tampilkanDetailKeModalOnDemand(${row[0]})" class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 active:scale-95 text-sky-700 border border-sky-200/80 rounded-lg font-semibold text-xs transition shadow-2xs">
@@ -1954,6 +1914,22 @@ function badgeStatusVerifikasi(status, tanggalLapor) {
     return '<span class="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-amber-600 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>Berkas Kurang</span>';
   }
   return '<span class="inline-flex items-center gap-1 bg-slate-100 text-slate-600 border border-slate-200/80 text-[11px] font-semibold px-2.5 py-0.5 rounded-full shadow-xs"><svg class="w-3 h-3 text-slate-500 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>Proses Verifikasi</span>';
+}
+
+function badgeRekomendasiMui(layanan, statusMui) {
+  const lay = (layanan || "").toString().toUpperCase();
+  if (!["USTADZ", "USTADZAH", "USTADZ/USTADZAH"].includes(lay)) return "";
+  const s = (statusMui || "BELUM_DIPERIKSA").toString().toUpperCase();
+  if (s === "PERLU_KOREKSI") {
+    return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-300 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-2xs">⚠️ MUI: Perlu Koreksi</span></div>';
+  }
+  if (s === "SESUAI") {
+    return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-semibold px-2 py-0.5 rounded-md shadow-2xs">✓ Rekomendasi MUI Sah</span></div>';
+  }
+  if (typeof dataPengguna !== "undefined" && (dataPengguna.role === "MUI" || dataPengguna.role === "UTAMA")) {
+    return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 text-[10px] px-2 py-0.5 rounded-md">MUI: Belum Cek</span></div>';
+  }
+  return "";
 }
 
 // Pembayaran Bank Sumut
@@ -2398,6 +2374,86 @@ function halamanBerikutnya() {
         </div>
       </div>`;
     }
+    const isLayananMui = ["USTADZ", "USTADZAH", "USTADZ/USTADZAH"].includes((d[7] || "").toString().toUpperCase().trim());
+    const statusMui = d[41] || "BELUM_DIPERIKSA";
+    const catatanMui = d[42] || "";
+    const tglMui = d[43] || "";
+    const petugasMui = d[44] || "";
+    const responAdminMui = d[45] || "";
+    const tglResponAdminMui = d[46] || "";
+
+    if (isLayananMui) {
+      if (dataPengguna.role === "MUI") {
+        const badgeMuiHtml = statusMui === "SESUAI"
+          ? '<span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-0.5 rounded-full font-bold">✓ Rekomendasi Sah & Terdaftar</span>'
+          : statusMui === "PERLU_KOREKSI"
+          ? '<span class="bg-red-100 text-red-800 text-xs px-2.5 py-0.5 rounded-full font-bold">⚠️ Perlu Koreksi / Tidak Sesuai</span>'
+          : '<span class="bg-slate-100 text-slate-700 text-xs px-2.5 py-0.5 rounded-full font-medium">Belum Diperiksa</span>';
+        const linkRekom = d[24] && d[24].toString().startsWith("http")
+          ? `<a href="${d[24]}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition">📄 Buka Berkas Rekomendasi MUI ↗</a>`
+          : '<span class="text-xs text-red-600 font-semibold italic">Berkas Rekomendasi MUI belum diunggah</span>';
+        h += `<div class="mb-4 bg-emerald-50/90 border border-emerald-300 rounded-xl px-4 py-3.5 shadow-2xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <p class="text-xs font-bold text-emerald-950 uppercase tracking-wider">Verifikasi Rekomendasi MUI</p>
+            <div>${badgeMuiHtml}</div>
+          </div>
+          <div class="mb-3 flex flex-wrap items-center gap-2">
+            ${linkRekom}
+            ${d[18] && d[18].toString().startsWith("http") ? `<a href="${d[18]}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100 text-emerald-900 rounded-lg text-xs font-medium transition">KTP ↗</a>` : ''}
+            ${d[20] && d[20].toString().startsWith("http") ? `<a href="${d[20]}" target="_blank" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100 text-emerald-900 rounded-lg text-xs font-medium transition">Surat Permohonan ↗</a>` : ''}
+          </div>
+          ${responAdminMui ? `<div class="mb-3 bg-sky-50 border border-sky-200 rounded-lg p-2.5 text-xs text-sky-900">
+            <span class="font-bold text-sky-800">Tanggapan Admin Utama:</span> ${esc(responAdminMui)}
+            <span class="block text-[10px] text-sky-600 mt-0.5">${esc(tglResponAdminMui)}</span>
+          </div>` : ''}
+          <label class="block text-[11px] font-semibold text-emerald-900 mb-1">Status Keabsahan Dokumen:</label>
+          <select id="input-status-verif-mui" class="w-full text-xs p-2 border border-emerald-300 rounded-lg mb-2 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">
+            <option value="SESUAI" ${statusMui === "SESUAI" ? "selected" : ""}>Rekomendasi Sah & Terdaftar di MUI (Sesuai)</option>
+            <option value="PERLU_KOREKSI" ${statusMui === "PERLU_KOREKSI" ? "selected" : ""}>Perlu Koreksi (Salah / Tidak Terdaftar / Buram / Palsu)</option>
+            <option value="BELUM_DIPERIKSA" ${statusMui === "BELUM_DIPERIKSA" ? "selected" : ""}>Belum Diperiksa</option>
+          </select>
+          <label class="block text-[11px] font-semibold text-emerald-900 mb-1">Catatan untuk Admin Utama:</label>
+          <textarea id="input-catatan-verif-mui" rows="2" placeholder="Tuliskan catatan verifikasi keabsahan rekomendasi MUI ini (wajib jika Perlu Koreksi)..." class="w-full text-xs p-2 border border-emerald-300 rounded-lg mb-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">${esc(catatanMui)}</textarea>
+          <button id="btn-simpan-verif-mui" class="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-2xs">
+            Simpan Catatan & Verifikasi MUI
+          </button>
+        </div>`;
+      } else if (dataPengguna.role === "UTAMA") {
+        const badgeMuiHtml = statusMui === "SESUAI"
+          ? '<span class="bg-emerald-100 text-emerald-800 text-[11px] px-2.5 py-0.5 rounded-full font-bold">✓ Rekomendasi Sah MUI</span>'
+          : statusMui === "PERLU_KOREKSI"
+          ? '<span class="bg-red-100 text-red-800 text-[11px] px-2.5 py-0.5 rounded-full font-bold">⚠️ Perlu Koreksi MUI</span>'
+          : '<span class="bg-slate-100 text-slate-600 text-[11px] px-2.5 py-0.5 rounded-full font-medium">MUI: Belum Diperiksa</span>';
+        h += `<div class="mb-4 bg-amber-50/80 border border-amber-300/80 rounded-xl px-4 py-3 shadow-2xs">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <p class="text-xs font-bold text-amber-950 uppercase tracking-wider">Verifikasi Rekomendasi MUI</p>
+            <div>${badgeMuiHtml}</div>
+          </div>
+          ${catatanMui ? `<div class="mb-3 bg-white/90 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-950">
+            <p class="font-bold text-amber-900 mb-0.5">Catatan Verifikator MUI <span class="font-normal text-[10px] text-amber-700">(${esc(petugasMui || "MUI")} · ${esc(tglMui)})</span>:</p>
+            <p class="text-xs bg-amber-50/50 p-1.5 rounded border border-amber-100 italic">${esc(catatanMui)}</p>
+            <button id="btn-salin-catatan-mui" type="button" class="mt-2 text-[11px] bg-amber-700 hover:bg-amber-800 active:scale-95 text-white font-semibold px-2.5 py-1 rounded-md transition shadow-2xs">
+              📋 Salin Catatan MUI ke Alasan Verifikasi
+            </button>
+          </div>` : ''}
+          <div class="pt-2 border-t border-amber-200/80">
+            <label class="block text-[11px] font-semibold text-amber-900 mb-1">Tanggapan Admin Utama ke Akun MUI:</label>
+            <div class="flex gap-2">
+              <input type="text" id="input-respon-admin-mui" value="${esc(responAdminMui)}" placeholder="Tuliskan tanggapan ke MUI (cth: Sudah dikembalikan ke kelurahan)..." class="flex-1 text-xs p-2 border border-amber-300 rounded-lg bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-500/20">
+              <button id="btn-kirim-respon-mui" type="button" class="bg-amber-800 hover:bg-amber-900 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition shrink-0 shadow-2xs">Kirim ke MUI</button>
+            </div>
+            ${tglResponAdminMui ? `<p class="text-[10px] text-amber-700 mt-1">Terakhir dikirim: ${esc(tglResponAdminMui)}</p>` : ''}
+          </div>
+        </div>`;
+      } else if (statusMui === "PERLU_KOREKSI") {
+        h += `<div class="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 shadow-2xs">
+          <p class="text-xs font-bold text-red-900 flex items-center gap-1.5">
+            <span>⚠️ Catatan MUI: Berkas Rekomendasi Perlu Koreksi</span>
+          </p>
+          <p class="text-xs text-red-800 mt-1">${esc(catatanMui || "Rekomendasi MUI yang diunggah belum sesuai atau tidak terdaftar di MUI Kota Medan.")}</p>
+        </div>`;
+      }
+    }
     const catatanNamaBeda = d[37] || "";
     h += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-3.5">`;
     for (let i = 0; i < labelKolom.length; i++) {
@@ -2607,6 +2663,96 @@ function halamanBerikutnya() {
             tampilkanToast(pesanErrorRamah(err), 'gagal');
           })
           .tandaiSudahDiperbaiki(dataPengguna.token, nomorBarisAktif);
+      });
+    }
+
+    const btnSimpanMui = document.getElementById("btn-simpan-verif-mui");
+    if (btnSimpanMui) {
+      btnSimpanMui.addEventListener("click", function () {
+        const statusBaru = document.getElementById("input-status-verif-mui").value;
+        const catatanBaru = (document.getElementById("input-catatan-verif-mui").value || "").trim();
+        if (statusBaru === "PERLU_KOREKSI" && !catatanBaru) {
+          tampilkanToast("Catatan verifikasi wajib diisi jika status Perlu Koreksi.", "gagal");
+          return;
+        }
+        btnSimpanMui.disabled = true;
+        btnSimpanMui.innerText = "Menyimpan...";
+        google.script.run
+          .withSuccessHandler(function (res) {
+            btnSimpanMui.disabled = false;
+            btnSimpanMui.innerText = "Simpan Catatan & Verifikasi MUI";
+            if (!res.sukses) {
+              tampilkanToast(res.pesan || "Gagal menyimpan", "gagal");
+              return;
+            }
+            dataAktif[41] = statusBaru;
+            dataAktif[42] = catatanBaru;
+            dataAktif[43] = res.tanggal;
+            dataAktif[44] = res.petugas;
+            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] === nomorBarisAktif; });
+            if (idxRow !== -1) {
+              masterDataLihat[idxRow][20] = statusBaru;
+              masterDataLihat[idxRow][21] = catatanBaru;
+            }
+            renderBaca(dataAktif);
+            saringDanTampilkanTabel();
+            tampilkanToast("Catatan verifikasi rekomendasi MUI berhasil disimpan.", "sukses");
+          })
+          .withFailureHandler(function (err) {
+            btnSimpanMui.disabled = false;
+            btnSimpanMui.innerText = "Simpan Catatan & Verifikasi MUI";
+            tampilkanToast(pesanErrorRamah(err), "gagal");
+          })
+          .simpanCatatanRekomendasiMui(dataPengguna.token, nomorBarisAktif, statusBaru, catatanBaru);
+      });
+    }
+
+    const btnSalinMui = document.getElementById("btn-salin-catatan-mui");
+    if (btnSalinMui) {
+      btnSalinMui.addEventListener("click", function () {
+        const taKet = document.getElementById("input-keterangan-verifikasi");
+        if (taKet) {
+          const prefix = "[CATATAN REKOMENDASI MUI]: " + catatanMui;
+          taKet.value = taKet.value ? taKet.value + "\n" + prefix : prefix;
+          taKet.focus();
+          tampilkanToast("Catatan MUI disalin ke Keterangan Verifikasi.", "sukses");
+        }
+      });
+    }
+
+    const btnKirimResponMui = document.getElementById("btn-kirim-respon-mui");
+    if (btnKirimResponMui) {
+      btnKirimResponMui.addEventListener("click", function () {
+        const respon = (document.getElementById("input-respon-admin-mui")?.value || "").trim();
+        if (!respon) {
+          tampilkanToast("Tanggapan tidak boleh kosong.", "gagal");
+          return;
+        }
+        btnKirimResponMui.disabled = true;
+        btnKirimResponMui.innerText = "Mengirim...";
+        google.script.run
+          .withSuccessHandler(function (res) {
+            btnKirimResponMui.disabled = false;
+            btnKirimResponMui.innerText = "Kirim ke MUI";
+            if (!res.sukses) {
+              tampilkanToast(res.pesan || "Gagal mengirim tanggapan", "gagal");
+              return;
+            }
+            dataAktif[45] = respon;
+            dataAktif[46] = res.tanggal;
+            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] === nomorBarisAktif; });
+            if (idxRow !== -1) {
+              masterDataLihat[idxRow][22] = respon;
+            }
+            renderBaca(dataAktif);
+            tampilkanToast("Tanggapan berhasil dikirim ke akun MUI.", "sukses");
+          })
+          .withFailureHandler(function (err) {
+            btnKirimResponMui.disabled = false;
+            btnKirimResponMui.innerText = "Kirim ke MUI";
+            tampilkanToast(pesanErrorRamah(err), "gagal");
+          })
+          .simpanResponAdminMui(dataPengguna.token, nomorBarisAktif, respon);
       });
     }
     google.script.run
@@ -2897,7 +3043,13 @@ function ambilDataLolosFilter() {
     const lolosKel = !valKel || row[11] === valKel;
     const lolosLay = !valLay || row[7] === valLay;
     const statusRowIni = row[18] || "Proses Verifikasi";
-    const lolosVerif = !valVerif || statusRowIni === valVerif;
+    const statusMuiRow = (row[20] || "BELUM_DIPERIKSA").toString().toUpperCase();
+    const lolosVerif = !valVerif
+      || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && !!row[19])
+      : valVerif === "MUI: Perlu Koreksi" ? (statusMuiRow === "PERLU_KOREKSI")
+      : valVerif === "MUI: Sah" ? (statusMuiRow === "SESUAI")
+      : valVerif === "MUI: Belum Cek" ? (statusMuiRow === "BELUM_DIPERIKSA")
+      : statusRowIni === valVerif);
     const teksGabungan = (row[1] + " " + row[2] + " " + row[15] + " " + row[8]).toLowerCase();
     const lolosCari = !kataKunci || teksGabungan.includes(kataKunci);
     if (lolosKec && lolosKel && lolosLay && lolosCari && lolosVerif) {

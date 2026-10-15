@@ -27,6 +27,8 @@ import {
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
   editDataPenerima,
+  simpanCatatanRekomendasiMui,
+  simpanResponAdminMui,
 } from "./domains/penerima.ts";
 import { eksporDataKeSpreadsheet } from "./domains/ekspor.ts";
 import { ambilDataDetail } from "./domains/dataDetail.ts";
@@ -120,6 +122,8 @@ const ALLOWED: Record<string, Handler> = {
   ambilDetailPenerimaPerBaris,
   simpanDataKeSheet,
   editDataPenerima,
+  simpanCatatanRekomendasiMui,
+  simpanResponAdminMui,
   ambilDataDetail,
   returRingkasan,
   returDaftarBulan,
