@@ -2394,7 +2394,9 @@ function halamanBerikutnya() {
           : '<span class="text-xs text-red-600 font-semibold italic">Berkas Rekomendasi MUI belum diunggah</span>';
         h += `<div class="mb-4 bg-emerald-50/90 border border-emerald-300 rounded-xl px-4 py-3.5 shadow-2xs">
           <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-            <p class="text-xs font-bold text-emerald-950 uppercase tracking-wider">Verifikasi Rekomendasi MUI</p>
+            <p class="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+              <span>Komunikasi & Verifikasi Rekomendasi MUI</span>
+            </p>
             <div>${badgeMuiHtml}</div>
           </div>
           <div class="mb-3 flex flex-wrap items-center gap-2">
@@ -2413,9 +2415,11 @@ function halamanBerikutnya() {
             <option value="BELUM_DIPERIKSA" ${statusMui === "BELUM_DIPERIKSA" ? "selected" : ""}>Belum Diperiksa</option>
           </select>
           <label class="block text-[11px] font-semibold text-emerald-900 mb-1">Catatan untuk Admin Utama:</label>
-          <textarea id="input-catatan-verif-mui" rows="2" placeholder="Tuliskan catatan verifikasi keabsahan rekomendasi MUI ini (wajib jika Perlu Koreksi)..." class="w-full text-xs p-2 border border-emerald-300 rounded-lg mb-2.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">${esc(catatanMui)}</textarea>
-          <button id="btn-simpan-verif-mui" class="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-2xs">
-            Simpan Catatan & Verifikasi MUI
+          <textarea id="input-catatan-verif-mui" rows="2" placeholder="Tuliskan catatan verifikasi keabsahan rekomendasi MUI ini (wajib jika Perlu Koreksi)..." class="w-full text-xs p-2 border border-emerald-300 rounded-lg mb-1.5 bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20">${esc(catatanMui)}</textarea>
+          <p class="text-[10px] text-emerald-800/80 mb-2 italic">Catatan ini akan otomatis terkirim dan dibaca oleh Admin Utama Dinas Sosial.</p>
+          <button id="btn-simpan-verif-mui" class="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-2xs">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+            <span>Kirim Catatan ke Admin Utama</span>
           </button>
         </div>`;
       } else if (dataPengguna.role === "UTAMA") {
@@ -2676,13 +2680,13 @@ function halamanBerikutnya() {
           return;
         }
         btnSimpanMui.disabled = true;
-        btnSimpanMui.innerText = "Menyimpan...";
+        btnSimpanMui.innerText = "Mengirim Catatan...";
         google.script.run
           .withSuccessHandler(function (res) {
             btnSimpanMui.disabled = false;
-            btnSimpanMui.innerText = "Simpan Catatan & Verifikasi MUI";
+            btnSimpanMui.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg><span>Kirim Catatan ke Admin Utama</span>`;
             if (!res.sukses) {
-              tampilkanToast(res.pesan || "Gagal menyimpan", "gagal");
+              tampilkanToast(res.pesan || "Gagal mengirim catatan", "gagal");
               return;
             }
             dataAktif[41] = statusBaru;
@@ -2696,11 +2700,11 @@ function halamanBerikutnya() {
             }
             renderBaca(dataAktif);
             saringDanTampilkanTabel();
-            tampilkanToast("Catatan verifikasi rekomendasi MUI berhasil disimpan.", "sukses");
+            tampilkanToast("Catatan verifikasi berhasil dikirim ke Admin Utama.", "sukses");
           })
           .withFailureHandler(function (err) {
             btnSimpanMui.disabled = false;
-            btnSimpanMui.innerText = "Simpan Catatan & Verifikasi MUI";
+            btnSimpanMui.innerHTML = `<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg><span>Kirim Catatan ke Admin Utama</span>`;
             tampilkanToast(pesanErrorRamah(err), "gagal");
           })
           .simpanCatatanRekomendasiMui(dataPengguna.token, nomorBarisAktif, statusBaru, catatanBaru);
