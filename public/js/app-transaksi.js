@@ -2689,7 +2689,7 @@ function halamanBerikutnya() {
             dataAktif[42] = catatanBaru;
             dataAktif[43] = res.tanggal;
             dataAktif[44] = res.petugas;
-            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] === nomorBarisAktif; });
+            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] == nomorBarisAktif; });
             if (idxRow !== -1) {
               masterDataLihat[idxRow][20] = statusBaru;
               masterDataLihat[idxRow][21] = catatanBaru;
@@ -2740,7 +2740,7 @@ function halamanBerikutnya() {
             }
             dataAktif[45] = respon;
             dataAktif[46] = res.tanggal;
-            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] === nomorBarisAktif; });
+            const idxRow = masterDataLihat.findIndex(function (r) { return r[0] == nomorBarisAktif; });
             if (idxRow !== -1) {
               masterDataLihat[idxRow][22] = respon;
             }
