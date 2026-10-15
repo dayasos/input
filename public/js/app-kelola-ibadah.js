@@ -56,7 +56,7 @@
     stats: { total: 0, masjid: 0, gereja: 0, vihara: 0 }
   };
 
-  var CACHE_KEY = 'djpm_swr_kelola_ibadah_v1';
+  var CACHE_KEY = 'djpm_swr_kelola_ibadah_v2';
   var TTL_SEGAR_MS = 90 * 1000;
   var timerCari = null;
   var timerRealtime = null;
@@ -88,11 +88,14 @@
     var raw = String(jRaw || '').trim();
     if (!raw) return '-';
     var j = raw.toUpperCase().replace(/\s+/g, '_');
+    if (j === 'MASJID_MUSHOLLA') return 'Masjid & Musholla';
+    if (j === 'GEREJA_ALL') return 'Gereja Kristen & Katolik';
+    if (j === 'VIHARA_KLENTENG_KUIL') return 'Vihara, Klenteng & Kuil';
     var f = DAFTAR_JENIS.find(function (item) { return item.val === j; });
     if (f) return f.label;
     if (j === 'MUSHOLA') return 'Musholla';
     if (j === 'GEREJA_PROTESTAN') return 'Gereja Protestan';
-    if (j === 'VIHARA_KLENTENG_KUIL' || j === 'PGK' || j.indexOf('KLASIFIKASI') !== -1) return 'Perlu Klasifikasi';
+    if (j === 'PGK' || j.indexOf('KLASIFIKASI') !== -1) return 'Perlu Klasifikasi';
     return raw;
   }
 
@@ -153,9 +156,16 @@
   // Template Kerangka In-Page DOM
   // ---------------------------------------------------------------------------
   function renderKerangka() {
-    var optJenis = DAFTAR_JENIS.map(function (j) {
-      return '<option value="' + j.val + '">' + j.label + '</option>';
-    }).join('');
+    var optJenisFilter = '<optgroup label="Kelompok Rumah Ibadah">' +
+      '<option value="MASJID_MUSHOLLA">🕌 Masjid &amp; Musholla (Islam)</option>' +
+      '<option value="GEREJA_ALL">⛪ Gereja Kristen &amp; Katolik</option>' +
+      '<option value="VIHARA_KLENTENG_KUIL">🛕 Vihara, Klenteng &amp; Kuil</option>' +
+      '</optgroup>' +
+      '<optgroup label="Jenis Spesifik">' +
+      DAFTAR_JENIS.map(function (j) {
+        return '<option value="' + j.val + '">' + j.label + '</option>';
+      }).join('') +
+      '</optgroup>';
 
     var optKec = DAFTAR_KECAMATAN.map(function (k) {
       return '<option value="' + k + '">' + k + '</option>';
@@ -185,9 +195,9 @@
       '</div>' +
       '</div>' +
 
-      '<!-- 4 Stat Cards Ringkasan Rumah Ibadah -->' +
+      '<!-- 4 Stat Cards Ringkasan Rumah Ibadah (Dapat Diklik sebagai Pintasan Filter) -->' +
       '<div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 mb-5">' +
-      '<div class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">' +
+      '<div id="card-ki-stat-total" onclick="window.setFilterJenisKelolaIbadah(\'\')" class="bg-white border-2 border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer hover:border-emerald-400 hover:shadow-xs active:scale-[0.99] transition" title="Klik untuk menampilkan semua rumah ibadah">' +
       '<div class="min-w-0 pr-1.5">' +
       '<div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Total Terdaftar</div>' +
       '<div id="stat-ki-total" class="text-lg sm:text-xl font-black text-slate-800 mt-0.5 tracking-tight">0</div>' +
@@ -198,7 +208,7 @@
       '</div>' +
       '</div>' +
 
-      '<div class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">' +
+      '<div id="card-ki-stat-masjid" onclick="window.setFilterJenisKelolaIbadah(\'MASJID_MUSHOLLA\')" class="bg-white border-2 border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer hover:border-teal-400 hover:shadow-xs active:scale-[0.99] transition" title="Klik untuk menyaring Masjid &amp; Musholla">' +
       '<div class="min-w-0 pr-1.5">' +
       '<div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Masjid &amp; Musholla</div>' +
       '<div id="stat-ki-masjid" class="text-lg sm:text-xl font-black text-teal-700 mt-0.5 tracking-tight">0</div>' +
@@ -209,7 +219,7 @@
       '</div>' +
       '</div>' +
 
-      '<div class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">' +
+      '<div id="card-ki-stat-gereja" onclick="window.setFilterJenisKelolaIbadah(\'GEREJA_ALL\')" class="bg-white border-2 border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer hover:border-sky-400 hover:shadow-xs active:scale-[0.99] transition" title="Klik untuk menyaring Gereja Protestan &amp; Katolik">' +
       '<div class="min-w-0 pr-1.5">' +
       '<div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Gereja Kristen &amp; Katolik</div>' +
       '<div id="stat-ki-gereja" class="text-lg sm:text-xl font-black text-sky-700 mt-0.5 tracking-tight">0</div>' +
@@ -220,7 +230,7 @@
       '</div>' +
       '</div>' +
 
-      '<div class="bg-white border border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0">' +
+      '<div id="card-ki-stat-vihara" onclick="window.setFilterJenisKelolaIbadah(\'VIHARA_KLENTENG_KUIL\')" class="bg-white border-2 border-slate-200/80 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer hover:border-amber-400 hover:shadow-xs active:scale-[0.99] transition" title="Klik untuk menyaring Vihara, Klenteng &amp; Kuil">' +
       '<div class="min-w-0 pr-1.5">' +
       '<div class="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Vihara, Klenteng, Kuil</div>' +
       '<div id="stat-ki-vihara" class="text-lg sm:text-xl font-black text-amber-700 mt-0.5 tracking-tight">0</div>' +
@@ -258,7 +268,7 @@
       '<label for="filter-jenis-kelola-ri" class="block text-xs font-medium text-slate-600 mb-1">Filter Jenis</label>' +
       '<select id="filter-jenis-kelola-ri" class="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700 shadow-2xs transition">' +
       '<option value="">Semua Jenis</option>' +
-      optJenis +
+      optJenisFilter +
       '</select>' +
       '</div>' +
       '<div>' +
@@ -508,6 +518,15 @@
     muat(false);
   };
 
+  window.setFilterJenisKelolaIbadah = function (val) {
+    var targetVal = (S.jenis === val && val !== '') ? '' : val;
+    S.jenis = targetVal;
+    var selJenis = $('filter-jenis-kelola-ri');
+    if (selJenis) selJenis.value = targetVal;
+    S.page = 1;
+    muat(false);
+  };
+
   // ---------------------------------------------------------------------------
   // Status Memuat & Skeleton Loading
   // ---------------------------------------------------------------------------
@@ -619,22 +638,24 @@
   }
 
   function kalkulasiStatistik(res) {
-    if (!S.cari && !S.jenis && !S.kecamatan) {
-      S.stats.total = S.total;
+    if (res && res.stats) {
+      S.stats.total = Number(res.stats.total || 0);
+      S.stats.masjid = Number(res.stats.masjid || 0);
+      S.stats.gereja = Number(res.stats.gereja || 0);
+      S.stats.vihara = Number(res.stats.vihara || 0);
+      return;
     }
     var m = 0, g = 0, v = 0;
     (res.daftar || []).forEach(function (r) {
       var j = String(r.jenis || '').toUpperCase();
       if (j === 'MASJID' || j === 'MUSHOLLA' || j === 'MUSHOLA') m++;
       else if (j === 'GEREJA' || j === 'GEREJA_KATOLIK') g++;
-      else v++;
+      else if (j === 'VIHARA' || j === 'KLENTENG' || j === 'KUIL') v++;
     });
-    if (S.total > 0 && S.daftar.length > 0) {
-      var ratio = S.total / S.daftar.length;
-      S.stats.masjid = Math.round(m * ratio);
-      S.stats.gereja = Math.round(g * ratio);
-      S.stats.vihara = Math.max(0, S.total - S.stats.masjid - S.stats.gereja);
-    }
+    S.stats.total = S.total || (m + g + v);
+    S.stats.masjid = m;
+    S.stats.gereja = g;
+    S.stats.vihara = v;
   }
 
   function perbaruiStatCards() {
@@ -654,6 +675,23 @@
     if (elBadge) {
       elBadge.textContent = 'Total: ' + (S.total || 0).toLocaleString('id-ID') + ' Rumah Ibadah';
     }
+
+    // Sorot kartu statistik yang sedang aktif sebagai filter
+    var cTotal = $('card-ki-stat-total');
+    var cMasjid = $('card-ki-stat-masjid');
+    var cGereja = $('card-ki-stat-gereja');
+    var cVihara = $('card-ki-stat-vihara');
+
+    var j = String(S.jenis || '').toUpperCase();
+    var aktifMasjid = j === 'MASJID_MUSHOLLA' || j === 'MASJID' || j === 'MUSHOLLA';
+    var aktifGereja = j === 'GEREJA_ALL' || j === 'GEREJA' || j === 'GEREJA_KATOLIK';
+    var aktifVihara = j === 'VIHARA_KLENTENG_KUIL' || j === 'VIHARA' || j === 'KLENTENG' || j === 'KUIL';
+    var aktifTotal = !j;
+
+    if (cTotal) cTotal.className = 'bg-white border-2 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer transition active:scale-[0.99] ' + (aktifTotal ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-slate-200/80 hover:border-emerald-300');
+    if (cMasjid) cMasjid.className = 'bg-white border-2 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer transition active:scale-[0.99] ' + (aktifMasjid ? 'border-teal-500 ring-2 ring-teal-500/20 bg-teal-50/20' : 'border-slate-200/80 hover:border-teal-300');
+    if (cGereja) cGereja.className = 'bg-white border-2 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer transition active:scale-[0.99] ' + (aktifGereja ? 'border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/20' : 'border-slate-200/80 hover:border-sky-300');
+    if (cVihara) cVihara.className = 'bg-white border-2 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between min-w-0 cursor-pointer transition active:scale-[0.99] ' + (aktifVihara ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20' : 'border-slate-200/80 hover:border-amber-300');
   }
 
   // ---------------------------------------------------------------------------

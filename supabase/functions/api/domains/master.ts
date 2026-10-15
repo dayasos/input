@@ -10,6 +10,12 @@ const JENIS_RUMAH_IBADAH_VALID = [
   "MASJID", "MUSHOLLA", "GEREJA", "GEREJA_KATOLIK", "VIHARA", "KLENTENG", "KUIL",
 ];
 const JENIS_LEGACY_GABUNGAN = "VIHARA_KLENTENG_KUIL";
+const JENIS_FILTER_ADMIN = [
+  ...JENIS_RUMAH_IBADAH_VALID,
+  "MASJID_MUSHOLLA",
+  "GEREJA_ALL",
+  "VIHARA_KLENTENG_KUIL",
+];
 const JENIS_PER_ROLE: Record<string, string[]> = {
   UTAMA: JENIS_RUMAH_IBADAH_VALID,
   KECAMATAN: JENIS_RUMAH_IBADAH_VALID,
@@ -333,7 +339,7 @@ export async function ambilDaftarRumahIbadahAdmin(
   const limit = Math.min(100, Math.max(5, Number(params?.limit || 25)));
   const offset = (page - 1) * limit;
 
-  if (jenis && !JENIS_RUMAH_IBADAH_VALID.includes(jenis)) {
+  if (jenis && !JENIS_FILTER_ADMIN.includes(jenis)) {
     return { sukses: false, pesan: "Filter jenis rumah ibadah tidak valid." };
   }
   if (statusKlasifikasi && statusKlasifikasi !== "PERLU_KLASIFIKASI" && statusKlasifikasi !== "SELESAI") {
@@ -343,23 +349,66 @@ export async function ambilDaftarRumahIbadahAdmin(
   try {
     const cariPattern = cari ? `%${cari}%` : "";
 
-    const countResult = await sql`
-      select count(*)::int as total
+    // 1. Ringkasan statistik (Stats Cards) sesuai filter kecamatan dan pencarian
+    const [statsResult] = await sql`
+      select
+        count(*)::int as total,
+        count(*) filter (where jenis in ('MASJID', 'MUSHOLLA', 'MUSHOLA'))::int as masjid,
+        count(*) filter (where jenis in ('GEREJA', 'GEREJA_KATOLIK'))::int as gereja,
+        count(*) filter (where jenis in ('VIHARA', 'KLENTENG', 'KUIL', 'VIHARA_KLENTENG_KUIL'))::int as vihara
       from rumah_ibadah
       where 1=1
-        ${jenis ? sql`and jenis = ${jenis}` : sql``}
         ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
         ${statusKlasifikasi === "PERLU_KLASIFIKASI" ? sql`and jenis = ${JENIS_LEGACY_GABUNGAN}` : sql``}
         ${statusKlasifikasi === "SELESAI" ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'GEREJA', 'GEREJA_KATOLIK', 'VIHARA', 'KLENTENG', 'KUIL')` : sql``}
         ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
     `;
-    const total = Number(countResult[0]?.total || 0);
+
+    const stats = {
+      total: Number(statsResult?.total || 0),
+      masjid: Number(statsResult?.masjid || 0),
+      gereja: Number(statsResult?.gereja || 0),
+      vihara: Number(statsResult?.vihara || 0),
+    };
+
+    // 2. Filter jenis untuk query data baris dan paginasi
+    const sqlJenis = !jenis
+      ? sql``
+      : jenis === "MASJID_MUSHOLLA"
+      ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'MUSHOLA')`
+      : jenis === "GEREJA_ALL"
+      ? sql`and jenis in ('GEREJA', 'GEREJA_KATOLIK')`
+      : jenis === "VIHARA_KLENTENG_KUIL"
+      ? sql`and jenis in ('VIHARA', 'KLENTENG', 'KUIL', 'VIHARA_KLENTENG_KUIL')`
+      : sql`and jenis = ${jenis}`;
+
+    // 3. Tentukan total baris untuk paginasi (jika filter jenis aktif)
+    let total = stats.total;
+    if (jenis === "MASJID_MUSHOLLA") {
+      total = stats.masjid;
+    } else if (jenis === "GEREJA_ALL") {
+      total = stats.gereja;
+    } else if (jenis === "VIHARA_KLENTENG_KUIL") {
+      total = stats.vihara;
+    } else if (jenis) {
+      const [countSpecific] = await sql`
+        select count(*)::int as total
+        from rumah_ibadah
+        where 1=1
+          ${sqlJenis}
+          ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
+          ${statusKlasifikasi === "PERLU_KLASIFIKASI" ? sql`and jenis = ${JENIS_LEGACY_GABUNGAN}` : sql``}
+          ${statusKlasifikasi === "SELESAI" ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'GEREJA', 'GEREJA_KATOLIK', 'VIHARA', 'KLENTENG', 'KUIL')` : sql``}
+          ${cari ? sql`and (nama ilike ${cariPattern} or alamat ilike ${cariPattern} or kelurahan ilike ${cariPattern})` : sql``}
+      `;
+      total = Number(countSpecific?.total || 0);
+    }
 
     const rows = await sql`
       select id, jenis, kecamatan, kelurahan, nama, alamat
       from rumah_ibadah
       where 1=1
-        ${jenis ? sql`and jenis = ${jenis}` : sql``}
+        ${sqlJenis}
         ${kecamatan ? sql`and upper(kecamatan) = ${kecamatan}` : sql``}
         ${statusKlasifikasi === "PERLU_KLASIFIKASI" ? sql`and jenis = ${JENIS_LEGACY_GABUNGAN}` : sql``}
         ${statusKlasifikasi === "SELESAI" ? sql`and jenis in ('MASJID', 'MUSHOLLA', 'GEREJA', 'GEREJA_KATOLIK', 'VIHARA', 'KLENTENG', 'KUIL')` : sql``}
@@ -374,6 +423,7 @@ export async function ambilDaftarRumahIbadahAdmin(
       halaman: page,
       totalHalaman: Math.ceil(total / limit) || 1,
       limit,
+      stats,
       daftar: rows.map((r: { id: unknown; jenis: unknown; kecamatan: unknown; kelurahan: unknown; nama: unknown; alamat: unknown }) => ({
         id: Number(r.id),
         jenis: String(r.jenis || ""),
