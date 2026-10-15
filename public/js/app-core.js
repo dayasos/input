@@ -281,24 +281,24 @@ window.addEventListener('keydown', function (e) {
 let masterLayanan = {
   kecamatan: [
     "BILAL JENAZAH",
-    "PENGGALI KUBUR",
     "IMAM MASJID",
-    "GURU MAGHRIB MENGAJI",
+    "KHATIB JUMAT",
+    "NAZIR MASJID",
+    "NAZIR MUSHOLLA",
+    "PENGGALI KUBUR",
+    "PENGURUS GEREJA",
+    "PENGURUS VIHARA/KLENTENG/KUIL",
     "PETUGAS GEREJA KATOLIK",
-    "GURU SEKOLAH MINGGU",
-    "PENATUA GEREJA",
-    "GURU SEKOLAH BUDDHA",
-    "GURU SEKOLAH HINDU",
-    "USTADZ/USTADZAH",
-    "PENGURUS RUMAH IBADAH"
+    "USTADZ",
+    "USTADZAH"
   ],
   kemenag: [
+    "GURU MAGHRIB MENGAJI",
     "GURU SEKOLAH BUDDHA",
     "GURU SEKOLAH HINDU",
-    "GURU SEKOLAH KONG HU CHU",
     "GURU SEKOLAH MINGGU",
     "PENATUA GEREJA",
-    "GURU MAGHRIB MENGAJI"
+    "GURU SEKOLAH KONG HU CHU"
   ]
 };
 
@@ -1104,7 +1104,8 @@ function esc(val) {
 function renderAdminSubtitle(namaLengkap, kelurahanTerkunci) {
   const elSubtitle = document.getElementById('info-admin-subtitle');
   if (!elSubtitle) return;
-  let teks = 'Administratur : ' + esc(namaLengkap);
+  const isMui = typeof dataPengguna !== 'undefined' && dataPengguna.role === 'MUI';
+  let teks = (isMui ? 'Instansi Rekomendasi : MUI Kota Medan &nbsp;·&nbsp; ' : 'Administratur : ') + esc(namaLengkap);
   if (kelurahanTerkunci) {
     teks += ' &nbsp;·&nbsp; Kelurahan ' + esc(kelurahanTerkunci);
   }
@@ -1157,7 +1158,21 @@ const panelTools = document.getElementById('panel-tools');
 
 window.addEventListener('DOMContentLoaded', () => {
   google.script.run
-    .withSuccessHandler((data) => { masterLayanan = data; })
+    .withSuccessHandler((data) => {
+      if (data && Array.isArray(data.kecamatan) && data.kecamatan.length > 0) {
+        masterLayanan = data;
+        // Perbarui dropdown layanan secara dinamis jika instansi sudah aktif dan bukan peran kemenag tunggal
+        if (typeof instansiAktif !== 'undefined' && instansiAktif && typeof renderDropdownLayanan === 'function') {
+          if (!isRoleKemenag(dataPengguna.role)) {
+            const valSebelumnya = selectLayanan ? selectLayanan.value : '';
+            renderDropdownLayanan(instansiAktif);
+            if (valSebelumnya && selectLayanan) {
+              selectLayanan.value = valSebelumnya;
+            }
+          }
+        }
+      }
+    })
     .withFailureHandler((err) => { tampilkanToast("Gagal mengambil data master: " + pesanErrorRamah(err), "gagal", { durasi: 6000 }); })
     .getMasterLayanan();
 });
@@ -1176,6 +1191,10 @@ window.setTabTidakAktif = setTabTidakAktif;
 window.setTabAktif = setTabAktif;
 
 tabInput.addEventListener('click', () => {
+  if (dataPengguna.role === "MUI") {
+    tampilkanToast("Akses ditolak: Akun MUI hanya memiliki hak akses melihat data.", "info");
+    return;
+  }
   if (inputDitutupGlobal && dataPengguna.role !== "UTAMA") {
     tampilkanToast("Periode input telah ditutup. Anda hanya bisa melihat data.", "info");
     return;
@@ -1985,7 +2004,11 @@ function perbaruiTampilanKuotaInput(res, kec, lay) {
     badge.classList.add('flex');
     if (isPenuh) {
       badge.className = 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse';
-      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Kuota Penuh (' + terpakai + '/' + maks + ')</span>';
+      if (maks === 0) {
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Kuota Belum Diset</span>';
+      } else {
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-400"></span><span>Kuota Penuh (' + terpakai + '/' + maks + ')</span>';
+      }
     } else if (sisa <= 3) {
       badge.className = 'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40';
       badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-400"></span><span>Sisa ' + sisa + ' dari ' + maks + ' kuota</span>';
@@ -2000,7 +2023,12 @@ function perbaruiTampilanKuotaInput(res, kec, lay) {
     info.classList.add('flex');
     if (isPenuh) {
       info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-bold text-rose-600';
-      info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>Kuota layanan untuk ' + kec + ' telah terpenuhi (' + terpakai + '/' + maks + ')</span>';
+      if (maks === 0) {
+        const pesanTampil = res.pesan || ('Kuota layanan ' + lay + ' untuk ' + kec + ' belum diset.');
+        info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>' + esc(pesanTampil) + '</span>';
+      } else {
+        info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-rose-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><span>Kuota layanan untuk ' + kec + ' telah terpenuhi (' + terpakai + '/' + maks + ')</span>';
+      }
     } else {
       info.className = 'flex items-center gap-1.5 text-[11px] mt-1.5 font-semibold text-emerald-600';
       info.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Kuota tersedia: ' + sisa + ' dari ' + maks + ' (Terpakai: ' + terpakai + ')</span>';
