@@ -1845,11 +1845,13 @@ function saringDanTampilkanTabel() {
     const statusRowIni = row[18] || "Proses Verifikasi";
     const sudahLaporIni = !!row[19];
     const statusMuiRow = (row[20] || "BELUM_DIPERIKSA").toString().toUpperCase();
+    const layRow = (row[7] || "").toString().toUpperCase().trim();
+    const isLayananMui = layRow === "USTADZ" || layRow === "USTADZAH" || layRow === "USTADZ/USTADZAH";
     const lolosVerif = !valVerif
       || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && sudahLaporIni)
-      : valVerif === "MUI: Perlu Koreksi" ? (statusMuiRow === "PERLU_KOREKSI")
-      : valVerif === "MUI: Sah" ? (statusMuiRow === "SESUAI")
-      : valVerif === "MUI: Belum Cek" ? (statusMuiRow === "BELUM_DIPERIKSA")
+      : valVerif === "MUI: Perlu Koreksi" ? (isLayananMui && statusMuiRow === "PERLU_KOREKSI")
+      : valVerif === "MUI: Sah" ? (isLayananMui && statusMuiRow === "SESUAI")
+      : (valVerif === "MUI: Belum Cek" || valVerif === "MUI: Belum Diperiksa") ? (isLayananMui && statusMuiRow === "BELUM_DIPERIKSA")
       : statusRowIni === valVerif);
     const teksCari = row._cari || (String(row[1] || '') + ' ' + String(row[2] || '') + ' ' + String(row[15] || '') + ' ' + String(row[8] || '')).toLowerCase();
     const lolosCari = !kataKunci || teksCari.includes(kataKunci);
@@ -1927,7 +1929,7 @@ function badgeRekomendasiMui(layanan, statusMui) {
     return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-semibold px-2 py-0.5 rounded-md shadow-2xs">✓ Rekomendasi MUI Sah</span></div>';
   }
   if (typeof dataPengguna !== "undefined" && (dataPengguna.role === "MUI" || dataPengguna.role === "UTAMA")) {
-    return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 text-[10px] px-2 py-0.5 rounded-md">MUI: Belum Cek</span></div>';
+    return '<div class="mt-1"><span class="inline-flex items-center gap-1 bg-slate-100 text-slate-500 border border-slate-200 text-[10px] px-2 py-0.5 rounded-md">MUI: Belum Diperiksa</span></div>';
   }
   return "";
 }
@@ -3048,11 +3050,13 @@ function ambilDataLolosFilter() {
     const lolosLay = !valLay || row[7] === valLay;
     const statusRowIni = row[18] || "Proses Verifikasi";
     const statusMuiRow = (row[20] || "BELUM_DIPERIKSA").toString().toUpperCase();
+    const layRow = (row[7] || "").toString().toUpperCase().trim();
+    const isLayananMui = layRow === "USTADZ" || layRow === "USTADZAH" || layRow === "USTADZ/USTADZAH";
     const lolosVerif = !valVerif
       || (valVerif === "Sudah Dilaporkan" ? (statusRowIni === "Berkas Tidak Lengkap" && !!row[19])
-      : valVerif === "MUI: Perlu Koreksi" ? (statusMuiRow === "PERLU_KOREKSI")
-      : valVerif === "MUI: Sah" ? (statusMuiRow === "SESUAI")
-      : valVerif === "MUI: Belum Cek" ? (statusMuiRow === "BELUM_DIPERIKSA")
+      : valVerif === "MUI: Perlu Koreksi" ? (isLayananMui && statusMuiRow === "PERLU_KOREKSI")
+      : valVerif === "MUI: Sah" ? (isLayananMui && statusMuiRow === "SESUAI")
+      : (valVerif === "MUI: Belum Cek" || valVerif === "MUI: Belum Diperiksa") ? (isLayananMui && statusMuiRow === "BELUM_DIPERIKSA")
       : statusRowIni === valVerif);
     const teksGabungan = (row[1] + " " + row[2] + " " + row[15] + " " + row[8]).toLowerCase();
     const lolosCari = !kataKunci || teksGabungan.includes(kataKunci);
