@@ -1112,12 +1112,15 @@
 
     if (!yakin) return;
 
-    if (typeof tampilkanToast === 'function') {
-      tampilkanToast('Menghapus data "' + nama + '"...', 'proses');
-    }
+    var idToastProses = typeof tampilkanToast === 'function'
+      ? tampilkanToast('Menghapus data "' + nama + '"...', 'proses')
+      : null;
 
     google.script.run
       .withSuccessHandler(function (res) {
+        if (idToastProses && typeof tutupToast === 'function') {
+          tutupToast(idToastProses);
+        }
         if (res && res.sukses) {
           if (typeof tampilkanToast === 'function') tampilkanToast(res.pesan || 'Data berhasil dihapus.', 'sukses');
           muat(false);
@@ -1126,6 +1129,9 @@
         }
       })
       .withFailureHandler(function (err) {
+        if (idToastProses && typeof tutupToast === 'function') {
+          tutupToast(idToastProses);
+        }
         if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
       })
       .hapusRumahIbadah(token(), id);

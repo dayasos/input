@@ -104,7 +104,12 @@
   }
 
   function sedangBukaModal() {
-    var cek = function (id) { var el = $(id); return !!el && !el.classList.contains('hidden'); };
+    var cek = function (id) {
+      var el = $(id);
+      if (!el || el.classList.contains('hidden')) return false;
+      if (el.classList.contains('opacity-0') && el.classList.contains('pointer-events-none')) return false;
+      return true;
+    };
     return cek('modal-tambah-user') || cek('modal-edit-user') || cek('modal-reset-sandi-user') || cek('modal-konfirmasi-universal');
   }
 

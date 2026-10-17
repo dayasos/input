@@ -2659,29 +2659,59 @@ function segarkanDaftarAkunSetelahMutasi() {
 }
 
 function konfirmasiHapusUser(username) {
+  var target = String(username || '').trim();
+  if (!target) return;
+
+  if (typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.username) {
+    if (target.toLowerCase() === String(dataPengguna.username).toLowerCase()) {
+      if (typeof tampilkanToast === 'function') {
+        tampilkanToast('Anda tidak dapat menghapus akun Anda sendiri yang sedang aktif.', 'gagal');
+      }
+      return;
+    }
+  }
+
+  if (konfirmasiHapusUser._sedangProses) return;
+
   konfirmasiAksi({
     judul: "Hapus Akun Pengguna",
-    pesan: "Apakah Anda yakin ingin MENGHAPUS akun pengguna \"" + username + "\"?\n\nTindakan ini bersifat permanen dan tidak dapat dibatalkan!",
+    pesan: "Apakah Anda yakin ingin MENGHAPUS akun pengguna \"" + target + "\"?\n\nTindakan ini bersifat permanen dan tidak dapat dibatalkan!",
     tipe: "danger",
     teksBatal: "Batal",
     teksKonfirmasi: "Ya, Hapus Akun"
   }).then(function (setuju) {
     if (!setuju) return;
-    tampilkanToast('Menghapus akun ' + username + '...', 'proses');
+    konfirmasiHapusUser._sedangProses = true;
+
+    var idToastProses = typeof tampilkanToast === 'function'
+      ? tampilkanToast('Menghapus akun ' + target + '...', 'proses')
+      : null;
+
+    var bersihkanToastProses = function () {
+      konfirmasiHapusUser._sedangProses = false;
+      if (idToastProses && typeof tutupToast === 'function') {
+        tutupToast(idToastProses);
+      }
+      if (typeof tutupSemuaToastProses === 'function') {
+        tutupSemuaToastProses();
+      }
+    };
 
     google.script.run
       .withSuccessHandler(function (res) {
+        bersihkanToastProses();
         if (res && res.sukses) {
-          tampilkanToast(res.pesan, 'sukses');
+          if (typeof tampilkanToast === 'function') tampilkanToast(res.pesan || 'Akun berhasil dihapus.', 'sukses');
           segarkanDaftarAkunSetelahMutasi();
         } else {
-          tampilkanToast(res ? res.pesan : 'Gagal menghapus user.', 'gagal');
+          if (typeof tampilkanToast === 'function') tampilkanToast(res ? res.pesan : 'Gagal menghapus user.', 'gagal');
         }
       })
       .withFailureHandler(function (err) {
-        tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
+        bersihkanToastProses();
+        if (typeof tampilkanToast === 'function') tampilkanToast('Error: ' + (err && err.message ? err.message : err), 'gagal');
       })
-      .hapusUser(dataPengguna.token, username);
+      .hapusUser((typeof dataPengguna !== 'undefined' && dataPengguna && dataPengguna.token) || '', target);
   });
 }
 

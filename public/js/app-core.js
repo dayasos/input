@@ -421,6 +421,7 @@ function tampilkanToast(pesan, jenis, opsi) {
   const id = "toast-" + (++_toastCounter);
   const el = document.createElement("div");
   el.id = id;
+  el.setAttribute("data-jenis", jenis);
   el.className = "bg-white/95 backdrop-blur-md " + cfg.border + " border-l-4 text-slate-800 text-xs font-semibold rounded-xl shadow-xl ring-1 ring-black/5 px-4 py-3 pr-8 flex items-start gap-3 max-w-sm w-full relative pointer-events-auto opacity-0 translate-x-4 transition-all duration-300";
   const ikonHtml = '<span class="w-6 h-6 rounded-full ' + cfg.iconBg + ' flex items-center justify-center shrink-0 mt-0.5">' + cfg.ikonSvg + '</span>';
   el.innerHTML =
@@ -435,6 +436,10 @@ function tampilkanToast(pesan, jenis, opsi) {
 
   if (jenis !== "proses" && !opsi.tetap) {
     setTimeout(function () { tutupToast(id); }, opsi.durasi || 3500);
+  } else if (jenis === "proses" && !opsi.tetap) {
+    // Pengaman: bila proses jaringan terputus atau tidak kunjung usai tanpa handler,
+    // tutup otomatis setelah timeout aman (25 dtk) agar toast tidak macet selamanya.
+    setTimeout(function () { tutupToast(id); }, opsi.durasi || 25000);
   }
   return id;
 }
@@ -445,6 +450,19 @@ function tutupToast(id) {
   el.classList.add("opacity-0", "translate-x-4");
   setTimeout(function () { el.remove(); }, 300);
 }
+
+function tutupSemuaToastProses() {
+  const cont = document.getElementById("toast-container");
+  if (!cont) return;
+  const list = cont.querySelectorAll('[data-jenis="proses"]');
+  list.forEach(function (el) {
+    tutupToast(el.id);
+  });
+}
+
+window.tampilkanToast = tampilkanToast;
+window.tutupToast = tutupToast;
+window.tutupSemuaToastProses = tutupSemuaToastProses;
 
 // =========================================================================
 // SISTEM MODAL KONFIRMASI & DIALOG PESAN UNIVERSAL (Pengganti confirm & alert)
